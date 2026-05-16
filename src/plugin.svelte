@@ -280,11 +280,11 @@
     <div class="fg-form">
       <label>Project Name<input bind:value={reportMeta.projectName} placeholder="Site/Project Name" /></label>
       <label>Contract No.<input bind:value={reportMeta.contractNumber} placeholder="CONTRACT-001" /></label>
-      <label>Country / Jurisdiction<input bind:value={reportMeta.country} placeholder="Oman, UAE, Qatar…" /></label>
+      <label>Country / Jurisdiction<input bind:value={reportMeta.country} placeholder="e.g. Saudi Arabia, India, Australia…" /></label>
       <label>Client / Employer<input bind:value={reportMeta.clientName} placeholder="Client Name" /></label>
       <label>Main Contractor<input bind:value={reportMeta.contractorName} placeholder="Contractor Name" /></label>
       <label>HSE Manager<input bind:value={reportMeta.hseManagerName} placeholder="Name, Cert. No." /></label>
-      <label>Regulatory Reference<input bind:value={reportMeta.regulatoryRef} placeholder="e.g. Min. Decision 286/2008" /></label>
+      <label>Regulatory Reference<input bind:value={reportMeta.regulatoryRef} placeholder="e.g. Local HSE Regulation No." /></label>
       <label>Work Ban Start<input bind:value={reportMeta.banStart} placeholder="12:30" /></label>
       <label>Work Ban End<input bind:value={reportMeta.banEnd} placeholder="15:30" /></label>
       <label>Ban Months<input bind:value={reportMeta.banMonths} placeholder="June, July, August" /></label>
@@ -613,7 +613,7 @@
   let reportMeta = {
     projectName: '', contractNumber: '', country: '',
     clientName: '', contractorName: '', hseManagerName: '',
-    regulatoryRef: 'Ministerial Decision No. 286/2008',
+    regulatoryRef: '',
     banStart: '12:30', banEnd: '15:30', banMonths: 'June, July, August',
     fidic: 'UNDER REVIEW', delayDays: 0,
   };
