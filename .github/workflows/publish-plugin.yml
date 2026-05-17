@@ -17,6 +17,8 @@ jobs:
 
       - name: Build plugin
         run: npm run build
+        env:
+          SERVE: "false"
 
       - name: Publish to windy-plugins.com
         run: |
