@@ -6,11 +6,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies
         run: npm install
@@ -30,8 +30,9 @@ jobs:
           rm ./plugin.json && mv ./plugin2.json ./plugin.json
           echo "Creating archive..."
           tar cf ./plugin.tar --exclude='./plugin.tar' .
+          if [ -z "$WINDY_API_KEY" ]; then echo "ERROR: WINDY_API_KEY secret is not set" && exit 1; fi
           echo "Uploading to windy-plugins.com..."
-          curl -s --fail-with-body -XPOST 'https://node.windy.com/plugins/v1.0/upload' \
+          curl --fail-with-body -XPOST 'https://node.windy.com/plugins/v1.0/upload' \
             -H "x-windy-api-key: ${{ secrets.WINDY_API_KEY }}" \
             -F "plugin_archive=@./plugin.tar"
           rm ./plugin.tar
