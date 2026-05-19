@@ -6,10 +6,11 @@
   "description": "Real-time HSE safety monitor for field workers. Calculates Heat Index (WBGT), Wind & Rain alerts across all Windy models. Worst-case scenario engine, customizable thresholds, and ISO 7933-compliant weekly PDF reports.",
   "author": "FieldGuard HSE",
   "desktopUI": "rhpane",
-  "mobileUI": "fullscreen",
+  "mobileUI": "small",
+  "desktopWidth": 300,
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1778924983023,
-  "builtReadable": "2026-05-16T09:49:43.023Z"
+  "built": 1779199623034,
+  "builtReadable": "2026-05-19T14:07:03.034Z"
 }
