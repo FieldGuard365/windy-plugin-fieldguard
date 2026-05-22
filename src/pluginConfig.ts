@@ -2,7 +2,7 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-fieldguard',
-    version: '1.0.2',
+    version: '1.0.3',
     icon: '🛡️',
     title: 'FieldGuard — HSE Field Safety',
     description:
@@ -10,10 +10,10 @@ const config: ExternalPluginConfig = {
     author: 'FieldGuard HSE',
     desktopUI: 'rhpane',
     mobileUI: 'small',
-    desktopWidth: 300,
+    desktopWidth: 360,
     routerPath: '/fieldguard/:lat?/:lon?',
     listenToLocationChange: true,
-    hooks: ['menu', 'contextmenu'],
+    hooks: 'contextmenu',
 };
 
 export default config;
