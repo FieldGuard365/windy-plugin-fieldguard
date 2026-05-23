@@ -1,17 +1,18 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "2.1.1",
+  "version": "1.1.0",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Heat stress zones (ISO 7243/7933), wind & rain alerts, worst-case multi-model engine, ISO 7933 weekly reports.",
   "author": "FieldGuard HSE",
-  "desktopUI": "embedded",
+  "desktopUI": "rhpane",
   "mobileUI": "small",
+  "desktopWidth": 260,
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "addToContextmenu": true,
-  "built": 1779546904724,
-  "builtReadable": "2026-05-23T14:35:04.724Z",
+  "built": 1779553627591,
+  "builtReadable": "2026-05-23T16:27:07.591Z",
   "screenshot": "screenshot.jpg"
 };
 
