@@ -1023,4 +1023,36 @@
   .fg-gate-desc { font-size: 10px; color: var(--sl2); margin-bottom: 10px; }
   .fg-gate-btn { display: block; background: var(--amb); color: #0f1d42 !important; text-decoration: none; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; }
   .fg-disabled { opacity: 0.4; pointer-events: none; }
+
+  /* ── SHOW/HIDE BY PLATFORM ─────────────────────────────────
+     Windy sets id="device-mobile" on <html> for mobile/tablet.
+     Source: docs.windy-plugins.com/styles/section-media.html
+     
+     Built-in Windy classes (add directly to HTML elements):
+       .mobilehide       — hidden on mobile
+       .desktophide      — hidden on desktop
+       .mobiletablethide — hidden on mobile + tablet
+  ─────────────────────────────────────────────────────────── */
+
+  /* Mobile strip: hidden on desktop by default */
+  .plugin__mobile-header {
+    display: none !important;
+  }
+  /* Show on mobile/tablet via Windy's #device-mobile on <html> */
+  #device-mobile .plugin__mobile-header {
+    display: flex !important;
+  }
+
+  /* Desktop panel: hidden on mobile */
+  #device-mobile .plugin__content {
+    display: none !important;
+  }
+
+  /* Mobile detail dropdown: hidden on desktop */
+  .fg-mdet {
+    display: none;
+  }
+  #device-mobile .fg-mdet {
+    display: block;
+  }
 </style>
