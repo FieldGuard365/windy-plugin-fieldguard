@@ -1,6 +1,6 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Calculates Heat Index (WBGT), Wind & Rain alerts across all Windy models. Worst-case scenario engine, customizable thresholds, and ISO 7933-compliant weekly PDF reports.",
@@ -11,8 +11,9 @@ const __pluginConfig =  {
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1779525845133,
-  "builtReadable": "2026-05-23T08:44:05.133Z"
+  "built": 1779534289503,
+  "builtReadable": "2026-05-23T11:04:49.503Z",
+  "screenshot": "screenshot.jpg"
 };
 
 // transformCode: import { map } from '@windy/map';
