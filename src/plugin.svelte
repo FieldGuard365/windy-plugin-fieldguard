@@ -1,9 +1,9 @@
 <!-- FieldGuard v3.3 — rhpane desktop / small mobile, single template -->
 
-<section class="plugin__content fg">
+<div class="fg">
 
   <!-- ══ HEADER (desktop only — hidden on mobile via CSS) ══ -->
-  <div class="fg-head desktophide">
+  <div class="fg-head">
     <img class="fg-head-logo" src="./assets/logo-white.png"
       onerror="this.style.display='none';this.nextElementSibling.style.display='block'" alt=""/>
     <span class="fg-head-shield" style="display:none">🛡️</span>
@@ -17,7 +17,7 @@
   </div>
 
   <!-- ══ LOCATION BAR (desktop only) ══ -->
-  <div class="fg-loc desktophide">
+  <div class="fg-loc">
     <span>📍</span>
     <span class="fg-loc-name">{locationName||(lat.toFixed(3)+', '+lon.toFixed(3))}</span>
     <span class="fg-loc-r">
@@ -27,14 +27,70 @@
     </span>
   </div>
 
-  <!-- ══ PILL ROW — visible on BOTH desktop and mobile ══════
-       Desktop: sits below header, above detail
-       Mobile (small): this IS the entire visible UI
+  <!-- ══ SUMMARY ROW — visible on BOTH desktop and mobile ═══
+       Desktop: compact pill row above detail panel
+       Mobile (small): SoarCalc-style summary — full width bottom strip
   ══════════════════════════════════════════════════════════ -->
-  <div class="fg-pills">
+  <div class="fg-summary">
     {#if loading}
-      <div class="fg-pills-load"><div class="fg-spin"></div><span>Loading…</span></div>
+      <div class="fg-summary-load"><div class="fg-spin"></div><span>Loading…</span></div>
     {:else if heat}
+
+      <!-- Header line: plugin name + location + time -->
+      <div class="fg-summary-hd">
+        <span class="fg-summary-name">FieldGuard HSE</span>
+        <span class="fg-summary-loc">{locationName||(lat.toFixed(2)+', '+lon.toFixed(2))}</span>
+        <span class="fg-summary-time">{currentTime} {isNight?'🌙':'☀'}</span>
+      </div>
+
+      <!-- Data grid: 3 cols × 2 rows — matches SoarCalc layout -->
+      <div class="fg-summary-grid">
+        <div class="fg-sg" on:click={() => toggleCard('heat')}>
+          <span class="fg-sg-v" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span>
+          <span class="fg-sg-l">App.Temp</span>
+        </div>
+        <div class="fg-sg" on:click={() => toggleCard('wind')}>
+          <span class="fg-sg-v" style="color:{windResult?.riskColor}">{rawData?.windMs.toFixed(1)} m/s</span>
+          <span class="fg-sg-l">Wind</span>
+        </div>
+        <div class="fg-sg" on:click={() => toggleCard('rain')}>
+          <span class="fg-sg-v" style="color:{rainResult?.riskColor}">{rawData?.rainMmH.toFixed(1)} mm/h</span>
+          <span class="fg-sg-l">Rain</span>
+        </div>
+        <div class="fg-sg" on:click={() => toggleCard('heat')}>
+          <span class="fg-sg-v">{heat.wbgtAdjusted}°C</span>
+          <span class="fg-sg-l">WBGT+PPE</span>
+        </div>
+        <div class="fg-sg" on:click={() => toggleCard('solar')}>
+          <span class="fg-sg-v" style="color:{solarColor}">{isNight?'0':rawData?.solarWm2} W/m²</span>
+          <span class="fg-sg-l">Solar</span>
+        </div>
+        <div class="fg-sg" on:click={() => toggleCard('heat')}>
+          <span class="fg-sg-v" style="color:{heat.zoneInfo.color};font-weight:800">{heat.zoneInfo.riskLabel}</span>
+          <span class="fg-sg-l">Zone</span>
+        </div>
+      </div>
+
+      <!-- Tap for details + refresh -->
+      <div class="fg-summary-ft">
+        {#if heat.isBanPeriod}
+          <span class="fg-summary-ban">🚫 WORK BAN ACTIVE</span>
+        {:else}
+          <span class="fg-summary-tap" on:click={() => toggleCard('heat')}>Tap for details</span>
+        {/if}
+        <button class="fg-rfr" on:click={refreshData}>↻</button>
+      </div>
+
+    {:else}
+      <div class="fg-summary-load">
+        <button class="fg-pills-tap" on:click={refreshData}>⚡ Tap to load FieldGuard</button>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Desktop-only: pill row above detail (hidden on mobile) -->
+  <div class="fg-pills desktoponly">
+    {#if heat}
       <button class="fg-pill {activeCard==='heat'?'fg-pill-on':''}"
         style="--c:{heat.zoneInfo.color}" on:click={() => toggleCard('heat')}>
         <span class="fg-pill-ic">🌡</span>
@@ -60,11 +116,9 @@
         <span class="fg-pill-lb" style="color:{solarColor}">{solarLabel}</span>
       </button>
       {#if heat.isBanPeriod}
-        <div class="fg-pill-ban" title="Legal work ban active">🚫</div>
+        <div class="fg-pill-ban">🚫</div>
       {/if}
       <button class="fg-rfr" on:click={refreshData}>↻</button>
-    {:else}
-      <button class="fg-pills-tap" on:click={refreshData}>⚡ Tap to load FieldGuard</button>
     {/if}
   </div>
 
@@ -261,7 +315,7 @@
 
   </div><!-- end fg-desktop -->
 
-</section>
+</div>
 
 
 <script lang="ts">
@@ -285,7 +339,7 @@
   let locationName = '';
   let loading = false, error = '';
   let currentTime = '';
-  let activeCard: string | null = 'heat'; // open heat card by default
+  let activeCard: string | null = 'heat';
 
   // ── Weather state ──────────────────────────────────────────
   let rawData: WeatherInputs | null = null;
@@ -638,11 +692,35 @@
     --sl:#8a9cc8; --sl2:#4a6090;
   }
 
+  /* ── ROOT: embedded mode — plain div, we control position ──
+     SoarCalc pattern: position absolute, bottom-right corner,
+     above Windy's timeline and model bars (~160px from bottom)
+  ──────────────────────────────────────────────────────────── */
   .fg {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 12px; color: #e8edf8;
-    background: rgba(5,10,24,0.97);
-    min-height: 100%;
+    background: rgba(8,14,30,0.97);
+    /* Desktop: positioned bottom-right like SoarCalc */
+    position: absolute;
+    bottom: 160px;
+    right: 10px;
+    width: 300px;
+    border-radius: 6px;
+    border: 1px solid rgba(232,150,42,0.5);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    overflow: hidden;
+    z-index: 100;
+  }
+  /* Mobile: full width, no absolute positioning — Windy handles it */
+  #device-mobile .fg {
+    position: static;
+    width: 100%;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: 2px solid var(--amb);
+    border-bottom: none;
+    box-shadow: none;
   }
 
   /* ── HEADER ──────────────────────────────────────────────── */
@@ -823,7 +901,32 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .fg-dis    { opacity: 0.4; pointer-events: none; }
 
-  /* Windy built-in hide classes (used on .fg-head and .fg-loc) */
-  .desktophide { display: none; }
-  #device-mobile .desktophide { display: flex !important; }
+  /* ── MOBILE SUMMARY ROW (SoarCalc style) ─────────────────
+     Shown on mobile, hidden on desktop
+  ──────────────────────────────────────────────────────── */
+  .fg-summary { display: none; } /* hidden on desktop */
+  #device-mobile .fg-summary { display: block; padding: 6px 10px 4px; background: #0a0a18; border-top: 1px solid rgba(232,150,42,0.4); }
+
+  .fg-summary-hd { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .fg-summary-name { font-size: 10px; font-weight: 800; color: var(--amb); }
+  .fg-summary-loc  { font-size: 9px; color: var(--sl2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fg-summary-time { font-size: 9px; color: var(--sl); flex-shrink: 0; }
+
+  .fg-summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px 8px; margin-bottom: 5px; }
+  .fg-sg { display: flex; flex-direction: column; cursor: pointer; }
+  .fg-sg-v { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .fg-sg-l { font-size: 8px; color: var(--sl2); text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .fg-summary-ft { display: flex; align-items: center; justify-content: space-between; }
+  .fg-summary-tap { font-size: 10px; color: var(--amb); cursor: pointer; text-decoration: underline; }
+  .fg-summary-ban { font-size: 10px; color: #fcd34d; font-weight: 700; background: rgba(124,45,18,0.8); padding: 2px 8px; border-radius: 3px; }
+  .fg-summary-load { padding: 8px 0; }
+
+  /* Desktop pill row: shown on desktop, hidden on mobile */
+  .fg-pills.desktoponly { display: flex; }
+  #device-mobile .fg-pills.desktoponly { display: none; }
+
+  /* Hide header/loc on mobile small strip */
+  #device-mobile .fg-head { display: none !important; }
+  #device-mobile .fg-loc  { display: none !important; }
 </style>
