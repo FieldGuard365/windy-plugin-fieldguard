@@ -1,528 +1,267 @@
-<!-- ══ BOTTOM WIDGET BAR ═══════════════════════════════════════
-     This is the always-visible compact strip.
-     On mobile (mobileUI=small): shown at bottom by Windy as plugin__mobile-header
-     On desktop (box mode): shown as compact header of the floating box
-════════════════════════════════════════════════════════════════ -->
-<div class="plugin__mobile-header fg-bar">
+<!-- FieldGuard v3.0 — clean rebuild matching approved preview -->
 
+<!-- ══ MOBILE TOP STRIP (plugin__mobile-header for mobileUI=small) ══════════ -->
+<div class="plugin__mobile-header fg-mbar">
   {#if loading}
-    <div class="fg-bar-loading">
-      <div class="fg-bar-spin"></div>
-      <span>Loading…</span>
-    </div>
+    <div class="fg-mbar-load"><div class="fg-spin"></div><span>Loading…</span></div>
   {:else if heat}
-
-    <!-- 4 horizontal pills -->
-    <button class="fg-bar-pill {activeDetail==='heat'?'fg-bar-pill-active':''}"
-      style="--pc:{heat.zoneInfo.color}"
-      on:click={() => toggleDetail('heat')}>
-      <span class="fg-bar-pill-icon">🌡</span>
-      <span class="fg-bar-pill-val">{heat.apparentTempFinal === 999 ? 'NW' : heat.apparentTempFinal+'°'}</span>
-      <span class="fg-bar-pill-lbl" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
+    <button class="fg-mp {mActive==='heat'?'fg-mp-on':''}" style="--c:{heat.zoneInfo.color}" on:click={() => mToggle('heat')}>
+      <span class="fg-mp-ic">🌡</span>
+      <span class="fg-mp-vl">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span>
+      <span class="fg-mp-lb" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
     </button>
-
-    <button class="fg-bar-pill {activeDetail==='wind'?'fg-bar-pill-active':''}"
-      style="--pc:{windResult?.riskColor}"
-      on:click={() => toggleDetail('wind')}>
-      <span class="fg-bar-pill-icon">💨</span>
-      <span class="fg-bar-pill-val">{rawData?.windMs.toFixed(1)}<span class="fg-bar-unit">m/s</span></span>
-      <span class="fg-bar-pill-lbl" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
+    <button class="fg-mp {mActive==='wind'?'fg-mp-on':''}" style="--c:{windResult?.riskColor}" on:click={() => mToggle('wind')}>
+      <span class="fg-mp-ic">💨</span>
+      <span class="fg-mp-vl">{rawData?.windMs.toFixed(1)}<span class="fg-mp-u">m/s</span></span>
+      <span class="fg-mp-lb" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
     </button>
-
-    <button class="fg-bar-pill {activeDetail==='rain'?'fg-bar-pill-active':''}"
-      style="--pc:{rainResult?.riskColor}"
-      on:click={() => toggleDetail('rain')}>
-      <span class="fg-bar-pill-icon">🌧</span>
-      <span class="fg-bar-pill-val">{rawData?.rainMmH.toFixed(1)}<span class="fg-bar-unit">mm</span></span>
-      <span class="fg-bar-pill-lbl" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
+    <button class="fg-mp {mActive==='rain'?'fg-mp-on':''}" style="--c:{rainResult?.riskColor}" on:click={() => mToggle('rain')}>
+      <span class="fg-mp-ic">🌧</span>
+      <span class="fg-mp-vl">{rawData?.rainMmH.toFixed(1)}<span class="fg-mp-u">mm</span></span>
+      <span class="fg-mp-lb" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
     </button>
-
-    <button class="fg-bar-pill {activeDetail==='solar'?'fg-bar-pill-active':''}"
-      style="--pc:{solarColor}"
-      on:click={() => toggleDetail('solar')}>
-      <span class="fg-bar-pill-icon">{isNight ? '🌙' : '☀'}</span>
-      <span class="fg-bar-pill-val">{isNight ? '--' : rawData?.solarWm2}<span class="fg-bar-unit">{isNight ? '' : 'W'}</span></span>
-      <span class="fg-bar-pill-lbl" style="color:{solarColor}">{solarLabel}</span>
+    <button class="fg-mp {mActive==='solar'?'fg-mp-on':''}" style="--c:{solarColor}" on:click={() => mToggle('solar')}>
+      <span class="fg-mp-ic">{isNight?'🌙':'☀'}</span>
+      <span class="fg-mp-vl">{isNight?'--':rawData?.solarWm2}<span class="fg-mp-u">{isNight?'':'W'}</span></span>
+      <span class="fg-mp-lb" style="color:{solarColor}">{solarLabel}</span>
     </button>
-
-    {#if heat.isBanPeriod}
-      <div class="fg-bar-ban">🚫</div>
-    {/if}
-
-    <button class="fg-bar-refresh" on:click={refreshData}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
-        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-        <path d="M21 3v5h-5"/>
-        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-        <path d="M8 16H3v5"/>
-      </svg>
+    <button class="fg-mrf" on:click={refreshData} title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
     </button>
-
   {:else}
-    <button class="fg-bar-tap" on:click={refreshData}>⚡ Tap to load FieldGuard</button>
+    <button class="fg-mbar-tap" on:click={refreshData}>⚡ Tap to load FieldGuard</button>
   {/if}
-
 </div>
 
-<section class="plugin__content fg">
-
-  <!-- ══ DETAIL OVERLAY — shown when a bottom pill is tapped ══ -->
-  {#if activeDetail}
-    <div class="fg-overlay" on:click|self={() => activeDetail = null}>
-      <div class="fg-overlay-panel">
-
-        <!-- Close button -->
-        <button class="fg-overlay-close" on:click={() => activeDetail = null}>✕</button>
-
-        <!-- Location + time header -->
-        <div class="fg-overlay-loc">
-          📍 {locationName || (lat.toFixed(3)+', '+lon.toFixed(3))}
-          <span class="fg-overlay-time">{currentTime}</span>
-          {#if isNight}<span class="fg-night-badge">🌙 Night</span>
-          {:else}<span class="fg-day-badge">☀ Day</span>{/if}
-        </div>
-
-        <!-- Tab pills inside overlay -->
-        <div class="fg-overlay-tabs">
-          {#each TABS as t}
-            <button class="fg-overlay-tab {tab===t.id?'active':''}" on:click={() => tab=t.id}>
-              {t.icon} {t.label}
-            </button>
-          {/each}
-        </div>
-
-        <!-- Content based on active tab -->
-        {#if tab === 'dashboard'}
-
-          {#if heat.isBanPeriod}
-            <div class="fg-ban-bar">🚫 LEGAL WORK BAN ACTIVE · 12:30–15:30</div>
-          {/if}
-
-          <!-- 4 pill selectors inside overlay -->
-          <div class="fg-overlay-pills">
-            <button class="fg-ov-pill {activeDetail==='heat'?'active':''}"
-              style="--pc:{heat.zoneInfo.color}" on:click={() => activeDetail='heat'}>
-              🌡 <span style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
-            </button>
-            <button class="fg-ov-pill {activeDetail==='wind'?'active':''}"
-              style="--pc:{windResult?.riskColor}" on:click={() => activeDetail='wind'}>
-              💨 <span style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
-            </button>
-            <button class="fg-ov-pill {activeDetail==='rain'?'active':''}"
-              style="--pc:{rainResult?.riskColor}" on:click={() => activeDetail='rain'}>
-              🌧 <span style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
-            </button>
-            <button class="fg-ov-pill {activeDetail==='solar'?'active':''}"
-              style="--pc:{solarColor}" on:click={() => activeDetail='solar'}>
-              {isNight?'🌙':'☀'} <span style="color:{solarColor}">{solarLabel}</span>
-            </button>
-          </div>
-
-          <!-- Detail content -->
-          {#if activeDetail === 'heat'}
-            <div class="fg-detail-panel" style="border-color:{heat.zoneInfo.color}">
-              <div class="fg-dp-title" style="color:{heat.zoneInfo.color}">🌡 Heat Stress — {heat.zoneInfo.riskLabel}</div>
-              <div class="fg-dp-metrics">
-                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.tempC}°C</span><span class="fg-dp-l">Temp</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.humidity}%</span><span class="fg-dp-l">Humidity</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{heat.apparentTemp1}°C</span><span class="fg-dp-l">App.Temp A</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span><span class="fg-dp-l">App.Temp B</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtBase}°C</span><span class="fg-dp-l">WBGT</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtAdjusted}°C</span><span class="fg-dp-l">WBGT+PPE</span></div>
-              </div>
-              <div class="fg-dp-schedule">
-                <div class="fg-dp-row"><span class="fg-dp-rl">🕐 Light work</span><span class="fg-dp-rv">{heat.workRestSchedule.light}</span></div>
-                <div class="fg-dp-row"><span class="fg-dp-rl">💪 Heavy work</span><span class="fg-dp-rv">{heat.workRestSchedule.heavy}</span></div>
-                <div class="fg-dp-row"><span class="fg-dp-rl">💧 Hydration</span><span class="fg-dp-rv">{heat.hydration}</span></div>
-                <div class="fg-dp-row"><span class="fg-dp-rl">👁 Monitoring</span><span class="fg-dp-rv fg-dp-rv-sm">{heat.zoneInfo.monitoringSchedule}</span></div>
-              </div>
-              <div class="fg-dp-controls-title">⚠ Mandatory Controls</div>
-              {#each heat.zoneInfo.mandatoryControls as ctrl}
-                <div class="fg-dp-ctrl">▸ {ctrl}</div>
-              {/each}
-              <div class="fg-dp-ppe">PPE: {PPE_PROFILES[settings.ppeProfile].label} (+{PPE_PROFILES[settings.ppeProfile].adjustment}°C)</div>
-            </div>
-          {:else if activeDetail === 'wind'}
-            <div class="fg-detail-panel" style="border-color:{windResult?.riskColor}">
-              <div class="fg-dp-title" style="color:{windResult?.riskColor}">💨 Wind — {windResult?.riskLabel}</div>
-              <div class="fg-dp-metrics">
-                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.windMs.toFixed(1)}</span><span class="fg-dp-l">m/s</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{((rawData?.windMs??0)*3.6).toFixed(1)}</span><span class="fg-dp-l">km/h</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">Bft {windResult?.beaufort}</span><span class="fg-dp-l">{windResult?.beaufortDesc}</span></div>
-              </div>
-              <div class="fg-dp-threshold">Warn ≥ {settings.windWarnMs} m/s · Danger ≥ {settings.windDangerMs} m/s</div>
-            </div>
-          {:else if activeDetail === 'rain'}
-            <div class="fg-detail-panel" style="border-color:{rainResult?.riskColor}">
-              <div class="fg-dp-title" style="color:{rainResult?.riskColor}">🌧 Rain — {rainResult?.riskLabel}</div>
-              <div class="fg-dp-metrics">
-                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.rainMmH.toFixed(1)}</span><span class="fg-dp-l">mm/h</span></div>
-                <div class="fg-dp-m"><span class="fg-dp-v">{rainResult?.intensityLabel}</span><span class="fg-dp-l">Intensity</span></div>
-              </div>
-              <div class="fg-dp-threshold">Warn ≥ {settings.rainWarnMmh} mm/h · Danger ≥ {settings.rainDangerMmh} mm/h</div>
-            </div>
-          {:else if activeDetail === 'solar'}
-            <div class="fg-detail-panel" style="border-color:{solarColor}">
-              <div class="fg-dp-title" style="color:{solarColor}">{isNight ? '🌙 Night — No Solar' : '☀ Solar — '+solarLabel}</div>
-              {#if isNight}
-                <div class="fg-dp-night-msg">
-                  <div class="fg-dp-night-icon">🌙</div>
-                  <div>Solar radiation is <strong>zero</strong> at night. WBGT uses only temperature, humidity and wind.</div>
-                  <div class="fg-dp-night-sub">Sunrise: ~{sunriseTime} · Sunset: ~{sunsetTime}</div>
-                </div>
-              {:else}
-                <div class="fg-dp-metrics">
-                  <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.solarWm2}</span><span class="fg-dp-l">W/m²</span></div>
-                  <div class="fg-dp-m"><span class="fg-dp-v">UV ~{uvIndex}</span><span class="fg-dp-l">Index</span></div>
-                  <div class="fg-dp-m"><span class="fg-dp-v">{solarElevDeg}°</span><span class="fg-dp-l">Sun angle</span></div>
-                </div>
-                <div class="fg-dp-solar-bar">
-                  <div class="fg-dp-solar-track">
-                    <div class="fg-dp-solar-fill" style="width:{solarPct}%;background:{solarColor}"></div>
-                    <div class="fg-dp-solar-sun" style="left:{solarPct}%">☀</div>
-                  </div>
-                  <div class="fg-dp-solar-labels"><span>Dawn</span><span>Solar Noon</span><span>Dusk</span></div>
-                </div>
-                <div class="fg-dp-schedule">
-                  <div class="fg-dp-row"><span class="fg-dp-rl">Sunrise</span><span class="fg-dp-rv">{sunriseTime}</span></div>
-                  <div class="fg-dp-row"><span class="fg-dp-rl">Solar noon</span><span class="fg-dp-rv">{solarNoonTime}</span></div>
-                  <div class="fg-dp-row"><span class="fg-dp-rl">Sunset</span><span class="fg-dp-rv">{sunsetTime}</span></div>
-                  <div class="fg-dp-row"><span class="fg-dp-rl">WBGT solar contribution</span><span class="fg-dp-rv">+{wbgtSolarContrib}°C</span></div>
-                </div>
-              {/if}
-              <div class="fg-dp-threshold">0–200 Low · 200–600 Moderate · 600–900 High · &gt;900 Extreme (W/m²)</div>
-            </div>
-          {/if}
-
-          <!-- Model row at bottom of overlay -->
-          <div class="fg-model-row">
-            <select class="fg-model-select" bind:value={selectedModel} on:change={refreshData}>
-              {#each MODELS as m}<option value={m.key}>{m.label}</option>{/each}
-            </select>
-            <label class="fg-worst-toggle {!license.valid?'fg-toggle-disabled':''}">
-              <input type="checkbox" bind:checked={worstCaseMode} on:change={refreshData} disabled={!license.valid}/>
-              <span>Worst-case ⚡</span>
-              {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}
-            </label>
-          </div>
-
-        {:else if tab === 'sos'}
-          {#if !license.valid}
-            <div class="fg-gate"><div class="fg-gate-icon">🚨</div><div class="fg-gate-title">SOS — Pro Feature</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
-          {:else}
-            <div class="fg-section-hd">🚨 Emergency Response</div>
-            <div class="fg-emg-card">
-              <div class="fg-emg-warn">⚠ Heat Stress Is Life-Threatening</div>
-              <div class="fg-emg-section-hd">🔴 SYMPTOMS (every 2 hours)</div>
-              <div class="fg-emg-symptoms">{#each HEAT_STRESS_SYMPTOMS as s}<span class="fg-emg-symptom">● {s}</span>{/each}</div>
-              <div class="fg-emg-section-hd">🚑 RESPONSE STEPS</div>
-              {#each EMERGENCY_RESPONSE as step, i}
-                <div class="fg-emg-step {step.includes('SEVERE')?'fg-emg-critical':''}">
-                  <span class="fg-emg-n">{i+1}</span> {step}
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-        {:else if tab === 'report'}
-          {#if !license.valid}
-            <div class="fg-gate"><div class="fg-gate-icon">📄</div><div class="fg-gate-title">Reports — Pro Feature</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
-          {:else}
-            <div class="fg-section-hd">📄 ISO 7933 Weekly Report</div>
-            <div class="fg-form-grid">
-              <label>Project<input bind:value={reportMeta.projectName} placeholder="Project Name"/></label>
-              <label>Country<input bind:value={reportMeta.country} placeholder="Oman, UAE…"/></label>
-              <label>Client<input bind:value={reportMeta.clientName}/></label>
-              <label>Contractor<input bind:value={reportMeta.contractorName}/></label>
-              <label>HSE Manager<input bind:value={reportMeta.hseManagerName}/></label>
-              <label>FIDIC<select bind:value={reportMeta.fidic}><option>ELIGIBLE</option><option>NOT ELIGIBLE</option><option>UNDER REVIEW</option></select></label>
-            </div>
-            <button class="fg-action-btn" on:click={generateReport}>📋 Generate Report</button>
-            {#if reportText}
-              <div class="fg-report-box">
-                <div class="fg-report-toolbar"><span>Report ready</span><button class="fg-mini-btn" on:click={copyReport}>📋 Copy</button><button class="fg-mini-btn" on:click={downloadReport}>⬇ .txt</button></div>
-                <pre class="fg-report-pre">{reportText}</pre>
-              </div>
-            {/if}
-          {/if}
-
-        {:else if tab === 'settings'}
-          <div class="fg-setting-group fg-license-group">
-            <div class="fg-setting-hd">🔑 License</div>
-            {#if license.valid}
-              <div class="fg-license-active"><span class="fg-license-badge">✓ PRO</span><span class="fg-license-info">{license.tier?.toUpperCase()} · expires {license.expires?.slice(0,10)}</span><button class="fg-deact-btn" on:click={deactivateLicense}>Deactivate</button></div>
-            {:else}
-              <div class="fg-license-free-box"><div class="fg-free-tag">FREE TIER</div><div class="fg-free-list">⚡ Multi-model worst-case<br/>📄 ISO 7933 reports<br/>🚨 SOS emergency tab<br/>🎛 Custom thresholds</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Get Pro</a></div>
-              <div class="fg-key-row"><input class="fg-key-input" bind:value={licenseKeyInput} placeholder="Paste license key…" disabled={licenseLoading}/><button class="fg-key-btn" on:click={activateLicense} disabled={licenseLoading||!licenseKeyInput.trim()}>{licenseLoading?'…':'Activate'}</button></div>
-              {#if licenseError}<div class="fg-key-error">⚠ {licenseError}</div>{/if}
-            {/if}
-          </div>
-          <div class="fg-setting-group">
-            <div class="fg-setting-hd">👷 PPE Profile</div>
-            {#each Object.entries(PPE_PROFILES) as [key, prof]}
-              <label class="fg-radio-row"><input type="radio" bind:group={settings.ppeProfile} value={key} on:change={saveSettings}/><span>{prof.label}</span><span class="fg-adj-chip">+{prof.adjustment}°C</span></label>
-            {/each}
-          </div>
-          {#if license.valid}
-          <div class="fg-setting-group">
-            <div class="fg-setting-hd">🌡 WBGT · 💨 Wind · 🌧 Rain Thresholds</div>
-            <label class="fg-slider-label">WBGT Warn (°C)<div class="fg-slider-row"><input type="range" min="28" max="38" step="0.5" bind:value={settings.wbgtWarnC} on:change={saveSettings}/><span>{settings.wbgtWarnC}°C</span></div></label>
-            <label class="fg-slider-label">WBGT Danger (°C)<div class="fg-slider-row"><input type="range" min="30" max="42" step="0.5" bind:value={settings.wbgtDangerC} on:change={saveSettings}/><span>{settings.wbgtDangerC}°C</span></div></label>
-            <label class="fg-slider-label">Wind Warn (m/s)<div class="fg-slider-row"><input type="range" min="5" max="25" step="0.5" bind:value={settings.windWarnMs} on:change={saveSettings}/><span>{settings.windWarnMs} m/s</span></div></label>
-            <label class="fg-slider-label">Wind Danger (m/s)<div class="fg-slider-row"><input type="range" min="10" max="35" step="0.5" bind:value={settings.windDangerMs} on:change={saveSettings}/><span>{settings.windDangerMs} m/s</span></div></label>
-            <label class="fg-slider-label">Rain Warn (mm/h)<div class="fg-slider-row"><input type="range" min="1" max="25" step="0.5" bind:value={settings.rainWarnMmh} on:change={saveSettings}/><span>{settings.rainWarnMmh} mm/h</span></div></label>
-            <label class="fg-slider-label">Rain Danger (mm/h)<div class="fg-slider-row"><input type="range" min="5" max="60" step="1" bind:value={settings.rainDangerMmh} on:change={saveSettings}/><span>{settings.rainDangerMmh} mm/h</span></div></label>
-            <button class="fg-action-btn fg-action-btn-sec" on:click={resetSettings}>↩ Reset Defaults</button>
-          </div>
-          {/if}
-          <div class="fg-setting-group">
-            <div class="fg-setting-hd">🔔 Alerts</div>
-            <label class="fg-toggle-row"><input type="checkbox" bind:checked={settings.soundAlerts} on:change={saveSettings}/>Browser notifications</label>
-            <label class="fg-toggle-row {!license.valid?'fg-locked':''}"><input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!license.valid}/>Auto-refresh 15 min {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}</label>
-          </div>
-        {/if}
-
+<!-- Mobile detail dropdown (below bar) -->
+{#if mActive}
+  <div class="fg-mdet">
+    {#if mActive === 'heat' && heat}
+      <div class="fg-det-title" style="color:{heat.zoneInfo.color}">🌡 Heat Stress — {heat.zoneInfo.riskLabel}</div>
+      <div class="fg-det-grid">
+        <div class="fg-dc"><span class="fg-dv">{rawData?.tempC}°C</span><span class="fg-dl">Temp</span></div>
+        <div class="fg-dc"><span class="fg-dv">{rawData?.humidity}%</span><span class="fg-dl">Humidity</span></div>
+        <div class="fg-dc"><span class="fg-dv">{heat.apparentTemp1}°C</span><span class="fg-dl">App.T A</span></div>
+        <div class="fg-dc"><span class="fg-dv" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span><span class="fg-dl">App.T B</span></div>
+        <div class="fg-dc"><span class="fg-dv">{heat.wbgtBase}°C</span><span class="fg-dl">WBGT</span></div>
+        <div class="fg-dc"><span class="fg-dv">{heat.wbgtAdjusted}°C</span><span class="fg-dl">WBGT+PPE</span></div>
       </div>
-    </div>
-  {/if}
-
-  <!-- ══ HEADER ══════════════════════════════════════════════ -->
-  <div class="fg-header">
-    <img class="fg-logo" src="./assets/logo-white.png" 
-         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-         alt="FieldGuard" />
-    <div class="fg-logo-fallback" style="display:none">🛡️</div>
-    <div class="fg-header-text">
-      <span class="fg-title">FieldGuard</span>
-      <span class="fg-subtitle">Real-time Heat & Weather Safety</span>
-    </div>
-    <div class="fg-header-right">
-      <button class="fg-icon-btn" on:click={refreshData} title="Refresh">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-      </button>
-      <button class="fg-icon-btn {tab==='settings'?'active':''}" on:click={() => tab = tab==='settings'?'dashboard':'settings'} title="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14M12 2v2M12 20v2M2 12H4M20 12h2"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- ══ LOCATION BAR ════════════════════════════════════════ -->
-  <div class="fg-loc-bar">
-    <span class="fg-loc-pin">📍</span>
-    <span class="fg-loc-name">{locationName || (lat.toFixed(3)+', '+lon.toFixed(3))}</span>
-    <span class="fg-loc-time">{currentTime}</span>
-    {#if isNight}
-      <span class="fg-night-badge">🌙 Night</span>
-    {:else}
-      <span class="fg-day-badge">☀ Day</span>
+      <div class="fg-ds">
+        <div class="fg-dr"><span class="fg-drl">🕐 Light work</span><span class="fg-drv">{heat.workRestSchedule.light}</span></div>
+        <div class="fg-dr"><span class="fg-drl">💪 Heavy work</span><span class="fg-drv">{heat.workRestSchedule.heavy}</span></div>
+        <div class="fg-dr"><span class="fg-drl">💧 Hydration</span><span class="fg-drv">{heat.hydration}</span></div>
+      </div>
+      <div class="fg-dct">⚠ Mandatory Controls</div>
+      {#each heat.zoneInfo.mandatoryControls as c}<div class="fg-dci">▸ {c}</div>{/each}
+    {:else if mActive === 'wind' && windResult}
+      <div class="fg-det-title" style="color:{windResult.riskColor}">💨 Wind — {windResult.riskLabel}</div>
+      <div class="fg-det-grid">
+        <div class="fg-dc"><span class="fg-dv">{rawData?.windMs.toFixed(1)}</span><span class="fg-dl">m/s</span></div>
+        <div class="fg-dc"><span class="fg-dv">{((rawData?.windMs??0)*3.6).toFixed(1)}</span><span class="fg-dl">km/h</span></div>
+        <div class="fg-dc"><span class="fg-dv">Bft {windResult.beaufort}</span><span class="fg-dl">{windResult.beaufortDesc}</span></div>
+      </div>
+      <div class="fg-dthr">Warn ≥ {settings.windWarnMs} m/s · Danger ≥ {settings.windDangerMs} m/s</div>
+    {:else if mActive === 'rain' && rainResult}
+      <div class="fg-det-title" style="color:{rainResult.riskColor}">🌧 Rain — {rainResult.riskLabel}</div>
+      <div class="fg-det-grid">
+        <div class="fg-dc"><span class="fg-dv">{rawData?.rainMmH.toFixed(1)}</span><span class="fg-dl">mm/h</span></div>
+        <div class="fg-dc"><span class="fg-dv">{rainResult.intensityLabel}</span><span class="fg-dl">Intensity</span></div>
+      </div>
+      <div class="fg-dthr">Warn ≥ {settings.rainWarnMmh} mm/h · Danger ≥ {settings.rainDangerMmh} mm/h</div>
+    {:else if mActive === 'solar'}
+      <div class="fg-det-title" style="color:{solarColor}">{isNight?'🌙 Night — No Solar':'☀ Solar — '+solarLabel}</div>
+      {#if isNight}
+        <div class="fg-night-msg">
+          <div style="font-size:24px">🌙</div>
+          <div>Solar radiation is <strong>zero</strong> at night. WBGT uses only temp, humidity and wind.</div>
+          <div style="color:#4a6090">Sunrise: ~{sunriseTime} · Sunset: ~{sunsetTime}</div>
+        </div>
+      {:else}
+        <div class="fg-det-grid">
+          <div class="fg-dc"><span class="fg-dv">{rawData?.solarWm2}</span><span class="fg-dl">W/m²</span></div>
+          <div class="fg-dc"><span class="fg-dv">UV ~{uvIndex}</span><span class="fg-dl">Index</span></div>
+          <div class="fg-dc"><span class="fg-dv">{solarElevDeg}°</span><span class="fg-dl">Sun angle</span></div>
+        </div>
+        <div class="fg-ds">
+          <div class="fg-dr"><span class="fg-drl">Sunrise</span><span class="fg-drv">{sunriseTime}</span></div>
+          <div class="fg-dr"><span class="fg-drl">Solar noon</span><span class="fg-drv">{solarNoonTime}</span></div>
+          <div class="fg-dr"><span class="fg-drl">Sunset</span><span class="fg-drv">{sunsetTime}</span></div>
+          <div class="fg-dr"><span class="fg-drl">WBGT solar contribution</span><span class="fg-drv">+{wbgtSolarContrib}°C</span></div>
+        </div>
+      {/if}
     {/if}
+    <button class="fg-mdet-close" on:click={() => mActive = null}>✕ Close</button>
+  </div>
+{/if}
+
+<!-- ══ DESKTOP PANEL (plugin__content — box mode, top-left, no bg) ══════════ -->
+<section class="plugin__content fg-panel">
+
+  <!-- Header -->
+  <div class="fg-ph">
+    <img class="fg-ph-logo" src="./assets/logo-white.png"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="FieldGuard"/>
+    <div class="fg-ph-shield" style="display:none">🛡️</div>
+    <div class="fg-ph-txt">
+      <span class="fg-ph-title">FieldGuard</span>
+      <span class="fg-ph-sub">Real-time Heat & Weather Safety</span>
+    </div>
+    <button class="fg-ph-btn" on:click={refreshData} title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+    </button>
+    <button class="fg-ph-btn" title="Location">◎</button>
   </div>
 
-  <!-- ══ TAB BAR ═════════════════════════════════════════════ -->
-  <div class="fg-tabs">
+  <!-- Location bar -->
+  <div class="fg-ploc">
+    <span>📍</span>
+    <span class="fg-ploc-name">{locationName||(lat.toFixed(3)+', '+lon.toFixed(3))}</span>
+    <span class="fg-ploc-r">
+      <span class="fg-ploc-time">{currentTime}</span>
+      {#if isNight}<span class="fg-nbadge">🌙 Night</span>
+      {:else}<span class="fg-dbadge">☀ Day</span>{/if}
+    </span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="fg-ptabs">
     {#each TABS as t}
-      <button class="fg-tab {tab===t.id?'active':''}" on:click={() => tab=t.id}>
-        <span class="fg-tab-icon">{t.icon}</span>
-        <span class="fg-tab-label">{t.label}</span>
+      <button class="fg-ptab {tab===t.id?'fg-ptab-on':''}" on:click={() => tab=t.id}>
+        <span>{t.icon}</span><span>{t.label}</span>
       </button>
     {/each}
   </div>
 
-  <!-- ══ DASHBOARD ═══════════════════════════════════════════ -->
+  <!-- ── LIVE TAB ── -->
   {#if tab === 'dashboard'}
-
     {#if loading}
-      <div class="fg-loading">
-        <div class="fg-spinner"></div>
-        <span>Reading {worstCaseMode ? 'all models' : selectedModel}…</span>
-      </div>
+      <div class="fg-pload"><div class="fg-spin"></div><span>Reading {worstCaseMode?'all models':selectedModel}…</span></div>
     {:else if error}
-      <div class="fg-error">{error}</div>
+      <div class="fg-perr">{error}</div>
     {:else if heat}
 
-      <!-- BAN ALERT -->
       {#if heat.isBanPeriod}
-        <div class="fg-ban-bar">
-          🚫 LEGAL WORK BAN ACTIVE &nbsp;·&nbsp; 12:30–15:30
-        </div>
+        <div class="fg-ban">🚫 LEGAL WORK BAN · 12:30–15:30</div>
       {/if}
 
-      <!-- ── COMPACT STATUS BUTTONS ─────────────────────────── -->
-      <div class="fg-status-grid">
-
-        <!-- HEAT button -->
-        <button
-          class="fg-status-btn {expandedCard==='heat'?'expanded':''}"
-          style="--zone-color:{heat.zoneInfo.color};--zone-bg:{heat.zoneInfo.bgColor}"
-          on:click={() => toggleCard('heat')}
-        >
-          <div class="fg-sb-icon">🌡</div>
-          <div class="fg-sb-zone" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</div>
-          <div class="fg-sb-val">{heat.apparentTempFinal === 999 ? 'NO WORK' : heat.apparentTempFinal+'°C'}</div>
-          <div class="fg-sb-label">Apparent Temp</div>
-          <div class="fg-sb-chevron">{expandedCard==='heat'?'▲':'▼'}</div>
+      <!-- 2×2 status grid -->
+      <div class="fg-pgrid">
+        <button class="fg-psb {dActive==='heat'?'fg-psb-on':''}" style="--c:{heat.zoneInfo.color}" on:click={() => dToggle('heat')}>
+          <span class="fg-psb-ic">🌡</span>
+          <span class="fg-psb-zo" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
+          <span class="fg-psb-vl">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span>
+          <span class="fg-psb-lb">Apparent Temp</span>
+          <span class="fg-psb-ch">{dActive==='heat'?'▲':'▼'}</span>
         </button>
-
-        <!-- WIND button -->
-        <button
-          class="fg-status-btn {expandedCard==='wind'?'expanded':''}"
-          style="--zone-color:{windResult?.riskColor};--zone-bg:#0f1d42"
-          on:click={() => toggleCard('wind')}
-        >
-          <div class="fg-sb-icon">💨</div>
-          <div class="fg-sb-zone" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</div>
-          <div class="fg-sb-val">{rawData?.windMs.toFixed(1)} m/s</div>
-          <div class="fg-sb-label">Bft {windResult?.beaufort}</div>
-          <div class="fg-sb-chevron">{expandedCard==='wind'?'▲':'▼'}</div>
+        <button class="fg-psb {dActive==='wind'?'fg-psb-on':''}" style="--c:{windResult?.riskColor}" on:click={() => dToggle('wind')}>
+          <span class="fg-psb-ic">💨</span>
+          <span class="fg-psb-zo" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
+          <span class="fg-psb-vl">{rawData?.windMs.toFixed(1)} m/s</span>
+          <span class="fg-psb-lb">Bft {windResult?.beaufort}</span>
+          <span class="fg-psb-ch">{dActive==='wind'?'▲':'▼'}</span>
         </button>
-
-        <!-- RAIN button -->
-        <button
-          class="fg-status-btn {expandedCard==='rain'?'expanded':''}"
-          style="--zone-color:{rainResult?.riskColor};--zone-bg:#0f1d42"
-          on:click={() => toggleCard('rain')}
-        >
-          <div class="fg-sb-icon">🌧</div>
-          <div class="fg-sb-zone" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</div>
-          <div class="fg-sb-val">{rawData?.rainMmH.toFixed(1)} mm/h</div>
-          <div class="fg-sb-label">{rainResult?.intensityLabel}</div>
-          <div class="fg-sb-chevron">{expandedCard==='rain'?'▲':'▼'}</div>
+        <button class="fg-psb {dActive==='rain'?'fg-psb-on':''}" style="--c:{rainResult?.riskColor}" on:click={() => dToggle('rain')}>
+          <span class="fg-psb-ic">🌧</span>
+          <span class="fg-psb-zo" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
+          <span class="fg-psb-vl">{rawData?.rainMmH.toFixed(1)} mm/h</span>
+          <span class="fg-psb-lb">{rainResult?.intensityLabel}</span>
+          <span class="fg-psb-ch">{dActive==='rain'?'▲':'▼'}</span>
         </button>
-
-        <!-- SOLAR / RADIATION button -->
-        <button
-          class="fg-status-btn {expandedCard==='solar'?'expanded':''}"
-          style="--zone-color:{solarColor};--zone-bg:#0f1d42"
-          on:click={() => toggleCard('solar')}
-        >
-          <div class="fg-sb-icon">{isNight ? '🌙' : '☀'}</div>
-          <div class="fg-sb-zone" style="color:{solarColor}">{solarLabel}</div>
-          <div class="fg-sb-val">{rawData?.solarWm2} W/m²</div>
-          <div class="fg-sb-label">{isNight ? 'Night — no solar' : 'UV Index ~'+uvIndex}</div>
-          <div class="fg-sb-chevron">{expandedCard==='solar'?'▲':'▼'}</div>
+        <button class="fg-psb {dActive==='solar'?'fg-psb-on':''}" style="--c:{solarColor}" on:click={() => dToggle('solar')}>
+          <span class="fg-psb-ic">{isNight?'🌙':'☀'}</span>
+          <span class="fg-psb-zo" style="color:{solarColor}">{solarLabel}</span>
+          <span class="fg-psb-vl">{isNight?'0':rawData?.solarWm2} W/m²</span>
+          <span class="fg-psb-lb">{isNight?'Night':'UV ~'+uvIndex}</span>
+          <span class="fg-psb-ch">{dActive==='solar'?'▲':'▼'}</span>
         </button>
-
       </div>
 
-      <!-- ── EXPANDED DETAIL PANELS ─────────────────────────── -->
-
-      {#if expandedCard === 'heat'}
-        <div class="fg-detail-panel" style="border-color:{heat.zoneInfo.color}">
-          <div class="fg-dp-title" style="color:{heat.zoneInfo.color}">
-            🌡 Heat Stress — {heat.zoneInfo.riskLabel}
+      <!-- Detail panel (inline under grid) -->
+      {#if dActive === 'heat'}
+        <div class="fg-pdet" style="border-color:{heat.zoneInfo.color}">
+          <div class="fg-det-title" style="color:{heat.zoneInfo.color}">🌡 Heat Stress — {heat.zoneInfo.riskLabel}</div>
+          <div class="fg-det-grid">
+            <div class="fg-dc"><span class="fg-dv">{rawData?.tempC}°C</span><span class="fg-dl">Temp</span></div>
+            <div class="fg-dc"><span class="fg-dv">{rawData?.humidity}%</span><span class="fg-dl">Humidity</span></div>
+            <div class="fg-dc"><span class="fg-dv">{heat.apparentTemp1}°C</span><span class="fg-dl">App.T A</span></div>
+            <div class="fg-dc"><span class="fg-dv" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span><span class="fg-dl">App.T B</span></div>
+            <div class="fg-dc"><span class="fg-dv">{heat.wbgtBase}°C</span><span class="fg-dl">WBGT</span></div>
+            <div class="fg-dc"><span class="fg-dv">{heat.wbgtAdjusted}°C</span><span class="fg-dl">WBGT+PPE</span></div>
           </div>
-          <div class="fg-dp-metrics">
-            <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.tempC}°C</span><span class="fg-dp-l">Temp</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.humidity}%</span><span class="fg-dp-l">Humidity</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{heat.apparentTemp1}°C</span><span class="fg-dp-l">App.Temp A</span></div>
-            <div class="fg-dp-m" style="color:{heat.zoneInfo.color}"><span class="fg-dp-v" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span><span class="fg-dp-l">App.Temp B</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtBase}°C</span><span class="fg-dp-l">WBGT</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtAdjusted}°C</span><span class="fg-dp-l">WBGT+PPE</span></div>
+          <div class="fg-ds">
+            <div class="fg-dr"><span class="fg-drl">🕐 Light work</span><span class="fg-drv">{heat.workRestSchedule.light}</span></div>
+            <div class="fg-dr"><span class="fg-drl">💪 Heavy work</span><span class="fg-drv">{heat.workRestSchedule.heavy}</span></div>
+            <div class="fg-dr"><span class="fg-drl">💧 Hydration</span><span class="fg-drv">{heat.hydration}</span></div>
+            <div class="fg-dr"><span class="fg-drl">👁 Monitoring</span><span class="fg-drv fg-drv-sm">{heat.zoneInfo.monitoringSchedule}</span></div>
           </div>
-          <div class="fg-dp-schedule">
-            <div class="fg-dp-row"><span class="fg-dp-rl">🕐 Light work</span><span class="fg-dp-rv">{heat.workRestSchedule.light}</span></div>
-            <div class="fg-dp-row"><span class="fg-dp-rl">💪 Heavy work</span><span class="fg-dp-rv">{heat.workRestSchedule.heavy}</span></div>
-            <div class="fg-dp-row"><span class="fg-dp-rl">💧 Hydration</span><span class="fg-dp-rv">{heat.hydration}</span></div>
-            <div class="fg-dp-row"><span class="fg-dp-rl">👁 Monitoring</span><span class="fg-dp-rv fg-dp-rv-sm">{heat.zoneInfo.monitoringSchedule}</span></div>
-          </div>
-          <div class="fg-dp-controls-title">⚠ Mandatory Controls</div>
-          {#each heat.zoneInfo.mandatoryControls as ctrl}
-            <div class="fg-dp-ctrl">▸ {ctrl}</div>
-          {/each}
-          <div class="fg-dp-ppe">PPE: {PPE_PROFILES[settings.ppeProfile].label} (+{PPE_PROFILES[settings.ppeProfile].adjustment}°C)</div>
+          <div class="fg-dct">⚠ Mandatory Controls</div>
+          {#each heat.zoneInfo.mandatoryControls as c}<div class="fg-dci">▸ {c}</div>{/each}
+          <div class="fg-dppe">PPE: {PPE_PROFILES[settings.ppeProfile].label} (+{PPE_PROFILES[settings.ppeProfile].adjustment}°C)</div>
         </div>
-      {/if}
-
-      {#if expandedCard === 'wind'}
-        <div class="fg-detail-panel" style="border-color:{windResult?.riskColor}">
-          <div class="fg-dp-title" style="color:{windResult?.riskColor}">
-            💨 Wind — {windResult?.riskLabel}
+      {:else if dActive === 'wind'}
+        <div class="fg-pdet" style="border-color:{windResult?.riskColor}">
+          <div class="fg-det-title" style="color:{windResult?.riskColor}">💨 Wind — {windResult?.riskLabel}</div>
+          <div class="fg-det-grid">
+            <div class="fg-dc"><span class="fg-dv">{rawData?.windMs.toFixed(1)}</span><span class="fg-dl">m/s</span></div>
+            <div class="fg-dc"><span class="fg-dv">{((rawData?.windMs??0)*3.6).toFixed(1)}</span><span class="fg-dl">km/h</span></div>
+            <div class="fg-dc"><span class="fg-dv">Bft {windResult?.beaufort}</span><span class="fg-dl">{windResult?.beaufortDesc}</span></div>
           </div>
-          <div class="fg-dp-metrics">
-            <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.windMs.toFixed(1)}</span><span class="fg-dp-l">m/s</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{((rawData?.windMs??0)*3.6).toFixed(1)}</span><span class="fg-dp-l">km/h</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">Bft {windResult?.beaufort}</span><span class="fg-dp-l">{windResult?.beaufortDesc}</span></div>
-          </div>
-          <div class="fg-dp-threshold">
-            Warn ≥ {settings.windWarnMs} m/s &nbsp;·&nbsp; Danger ≥ {settings.windDangerMs} m/s
-          </div>
+          <div class="fg-dthr">Warn ≥ {settings.windWarnMs} m/s · Danger ≥ {settings.windDangerMs} m/s</div>
         </div>
-      {/if}
-
-      {#if expandedCard === 'rain'}
-        <div class="fg-detail-panel" style="border-color:{rainResult?.riskColor}">
-          <div class="fg-dp-title" style="color:{rainResult?.riskColor}">
-            🌧 Rain — {rainResult?.riskLabel}
+      {:else if dActive === 'rain'}
+        <div class="fg-pdet" style="border-color:{rainResult?.riskColor}">
+          <div class="fg-det-title" style="color:{rainResult?.riskColor}">🌧 Rain — {rainResult?.riskLabel}</div>
+          <div class="fg-det-grid">
+            <div class="fg-dc"><span class="fg-dv">{rawData?.rainMmH.toFixed(1)}</span><span class="fg-dl">mm/h</span></div>
+            <div class="fg-dc"><span class="fg-dv">{rainResult?.intensityLabel}</span><span class="fg-dl">Intensity</span></div>
           </div>
-          <div class="fg-dp-metrics">
-            <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.rainMmH.toFixed(1)}</span><span class="fg-dp-l">mm/h</span></div>
-            <div class="fg-dp-m"><span class="fg-dp-v">{rainResult?.intensityLabel}</span><span class="fg-dp-l">Intensity</span></div>
-          </div>
-          <div class="fg-dp-threshold">
-            Warn ≥ {settings.rainWarnMmh} mm/h &nbsp;·&nbsp; Danger ≥ {settings.rainDangerMmh} mm/h
-          </div>
+          <div class="fg-dthr">Warn ≥ {settings.rainWarnMmh} mm/h · Danger ≥ {settings.rainDangerMmh} mm/h</div>
         </div>
-      {/if}
-
-      {#if expandedCard === 'solar'}
-        <div class="fg-detail-panel" style="border-color:{solarColor}">
-          <div class="fg-dp-title" style="color:{solarColor}">
-            {isNight ? '🌙 Night — No Solar Radiation' : '☀ Solar Radiation — '+solarLabel}
-          </div>
+      {:else if dActive === 'solar'}
+        <div class="fg-pdet" style="border-color:{solarColor}">
+          <div class="fg-det-title" style="color:{solarColor}">{isNight?'🌙 Night — No Solar':'☀ Solar — '+solarLabel}</div>
           {#if isNight}
-            <div class="fg-dp-night-msg">
-              <div class="fg-dp-night-icon">🌙</div>
-              <div>Solar radiation is <strong>zero</strong> during night hours.</div>
-              <div>WBGT calculation uses <strong>nocturnal formula</strong> — only temperature, humidity and wind contribute to heat stress.</div>
-              <div class="fg-dp-night-sub">Sunrise: ~{sunriseTime} &nbsp;·&nbsp; Sunset: ~{sunsetTime}</div>
+            <div class="fg-night-msg">
+              <div style="font-size:22px;margin-bottom:4px">🌙</div>
+              <div>Solar radiation is <strong>zero</strong> at night.</div>
+              <div style="color:#4a6090;font-size:9px;margin-top:3px">Sunrise: ~{sunriseTime} · Sunset: ~{sunsetTime}</div>
             </div>
           {:else}
-            <div class="fg-dp-metrics">
-              <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.solarWm2}</span><span class="fg-dp-l">W/m²</span></div>
-              <div class="fg-dp-m"><span class="fg-dp-v">UV ~{uvIndex}</span><span class="fg-dp-l">Index</span></div>
-              <div class="fg-dp-m"><span class="fg-dp-v">{solarElevDeg}°</span><span class="fg-dp-l">Sun angle</span></div>
+            <div class="fg-det-grid">
+              <div class="fg-dc"><span class="fg-dv">{rawData?.solarWm2}</span><span class="fg-dl">W/m²</span></div>
+              <div class="fg-dc"><span class="fg-dv">UV ~{uvIndex}</span><span class="fg-dl">Index</span></div>
+              <div class="fg-dc"><span class="fg-dv">{solarElevDeg}°</span><span class="fg-dl">Sun angle</span></div>
             </div>
-            <div class="fg-dp-solar-bar">
-              <div class="fg-dp-solar-track">
-                <div class="fg-dp-solar-fill" style="width:{solarPct}%;background:{solarColor}"></div>
-                <div class="fg-dp-solar-sun" style="left:{solarPct}%">☀</div>
-              </div>
-              <div class="fg-dp-solar-labels"><span>Dawn</span><span>Solar Noon</span><span>Dusk</span></div>
-            </div>
-            <div class="fg-dp-schedule">
-              <div class="fg-dp-row"><span class="fg-dp-rl">Sunrise</span><span class="fg-dp-rv">{sunriseTime}</span></div>
-              <div class="fg-dp-row"><span class="fg-dp-rl">Solar noon</span><span class="fg-dp-rv">{solarNoonTime}</span></div>
-              <div class="fg-dp-row"><span class="fg-dp-rl">Sunset</span><span class="fg-dp-rv">{sunsetTime}</span></div>
-              <div class="fg-dp-row"><span class="fg-dp-rl">Contribution to WBGT</span><span class="fg-dp-rv">+{wbgtSolarContrib}°C</span></div>
+            <div class="fg-ds">
+              <div class="fg-dr"><span class="fg-drl">Sunrise</span><span class="fg-drv">{sunriseTime}</span></div>
+              <div class="fg-dr"><span class="fg-drl">Solar noon</span><span class="fg-drv">{solarNoonTime}</span></div>
+              <div class="fg-dr"><span class="fg-drl">Sunset</span><span class="fg-drv">{sunsetTime}</span></div>
+              <div class="fg-dr"><span class="fg-drl">WBGT solar +</span><span class="fg-drv">+{wbgtSolarContrib}°C</span></div>
             </div>
           {/if}
-          <div class="fg-dp-threshold">
-            0–200 W/m² Low &nbsp;·&nbsp; 200–600 W/m² Moderate &nbsp;·&nbsp; 600–900 W/m² High &nbsp;·&nbsp; &gt;900 W/m² Extreme
-          </div>
         </div>
       {/if}
 
-      <!-- ── MODEL ROW ──────────────────────────────────────── -->
-      <div class="fg-model-row">
-        <select class="fg-model-select" bind:value={selectedModel} on:change={refreshData}>
+      <!-- Model row -->
+      <div class="fg-pmr">
+        <select class="fg-pmr-sel" bind:value={selectedModel} on:change={refreshData}>
           {#each MODELS as m}<option value={m.key}>{m.label}</option>{/each}
         </select>
-        <label class="fg-worst-toggle {!license.valid?'fg-toggle-disabled':''}">
-          <input type="checkbox" bind:checked={worstCaseMode} on:change={refreshData} disabled={!license.valid} />
-          <span>Worst-case ⚡</span>
-          {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}
+        <label class="fg-pmr-wc {!license.valid?'fg-disabled':''}">
+          <input type="checkbox" bind:checked={worstCaseMode} on:change={refreshData} disabled={!license.valid}/>
+          Worst-case ⚡
+          {#if !license.valid}<span class="fg-proch">PRO</span>{/if}
         </label>
       </div>
 
-      <!-- ── MODEL COMPARISON (Pro) ─────────────────────────── -->
+      <!-- Model comparison table (pro) -->
       {#if worstCaseMode && modelResults.length > 1}
-        <div class="fg-model-table-wrap">
-          <div class="fg-model-table-title">📊 Model Comparison</div>
-          <table class="fg-model-table">
+        <div class="fg-ptbl">
+          <table class="fg-tbl">
             <thead><tr><th>Model</th><th>Zone</th><th>App.T</th><th>Wind</th></tr></thead>
             <tbody>
               {#each modelResults as mr}
-                <tr class="{mr.isWorst?'fg-best-row':''}">
+                <tr class="{mr.isWorst?'fg-tbl-best':''}">
                   <td>{mr.modelLabel}{mr.isWorst?' ⚡':''}</td>
                   <td style="color:{mr.heat.zoneInfo.color}">{mr.heat.zoneInfo.riskLabel}</td>
                   <td style="color:{mr.heat.zoneInfo.color}">{mr.heat.apparentTempFinal===999?'NW':mr.heat.apparentTempFinal+'°C'}</td>
@@ -533,203 +272,129 @@
           </table>
         </div>
       {/if}
-
     {/if}
 
-  <!-- ══ SOS TAB ═════════════════════════════════════════════ -->
+  <!-- ── SOS TAB ── -->
   {:else if tab === 'sos'}
     {#if !license.valid}
-      <div class="fg-gate">
-        <div class="fg-gate-icon">🚨</div>
-        <div class="fg-gate-title">SOS Emergency Response</div>
-        <div class="fg-gate-desc">Emergency steps, symptom checklist and alert history — FieldGuard Pro</div>
-        <a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a>
-      </div>
+      <div class="fg-gate"><div class="fg-gate-ic">🚨</div><div class="fg-gate-ti">SOS — Pro Feature</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
     {:else}
-      <div class="fg-section-hd">🚨 Emergency Response</div>
-      <div class="fg-emg-card">
-        <div class="fg-emg-warn">⚠ Heat Stress Is Life-Threatening</div>
-        <div class="fg-emg-sub">The body starts shutting down and cannot recover without help.</div>
-        <div class="fg-emg-section-hd">🔴 SYMPTOMS (monitor every 2 hours)</div>
-        <div class="fg-emg-symptoms">
-          {#each HEAT_STRESS_SYMPTOMS as s}
-            <span class="fg-emg-symptom">● {s}</span>
-          {/each}
+      <div class="fg-psec">🚨 Emergency Response</div>
+      <div class="fg-pemg">
+        <div class="fg-pemg-warn">⚠ Heat Stress Is Life-Threatening</div>
+        <div class="fg-pemg-sub">The body starts shutting down and cannot recover without help.</div>
+        <div class="fg-pemg-hd">🔴 Symptoms (monitor every 2 hours)</div>
+        <div class="fg-pemg-syms">
+          {#each HEAT_STRESS_SYMPTOMS as s}<span class="fg-sym">{s}</span>{/each}
         </div>
-        <div class="fg-emg-section-hd">🚑 RESPONSE STEPS</div>
+        <div class="fg-pemg-hd">🚑 Response Steps</div>
         {#each EMERGENCY_RESPONSE as step, i}
-          <div class="fg-emg-step {step.includes('SEVERE')?'fg-emg-critical':''}">
-            <span class="fg-emg-n">{i+1}</span> {step}
+          <div class="fg-pemg-step {step.includes('SEVERE')?'fg-pemg-crit':''}">
+            <span class="fg-pemg-n">{i+1}</span> {step}
           </div>
         {/each}
       </div>
-      <div class="fg-section-hd" style="margin-top:8px">📋 Alert Log</div>
-      {#if alertLog.length === 0}
+      <div class="fg-psec" style="margin-top:6px">📋 Alert Log</div>
+      {#if alertLog.length===0}
         <div class="fg-empty">No alerts this session.</div>
       {:else}
         {#each [...alertLog].reverse().slice(0,15) as a}
-          <div class="fg-alert-row" style="border-left-color:{a.color}">
-            <div class="fg-alert-type">{a.type}</div>
-            <div class="fg-alert-msg">{a.message}</div>
-            <div class="fg-alert-time">{a.time}</div>
+          <div class="fg-alog" style="border-left-color:{a.color}">
+            <div class="fg-alog-t">{a.type}</div>
+            <div class="fg-alog-m">{a.message}</div>
+            <div class="fg-alog-tm">{a.time}</div>
           </div>
         {/each}
       {/if}
     {/if}
 
-  <!-- ══ REPORT TAB ══════════════════════════════════════════ -->
+  <!-- ── REPORT TAB ── -->
   {:else if tab === 'report'}
     {#if !license.valid}
-      <div class="fg-gate">
-        <div class="fg-gate-icon">📄</div>
-        <div class="fg-gate-title">ISO 7933 Weekly Report</div>
-        <div class="fg-gate-desc">Generate ISO 7933 / FIDIC Clause 8.4 HSE audit reports with PPE-adjusted WBGT logs and Morning Gap analysis.</div>
-        <a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a>
-      </div>
+      <div class="fg-gate"><div class="fg-gate-ic">📄</div><div class="fg-gate-ti">Reports — Pro Feature</div><div class="fg-gate-desc">ISO 7933 weekly audit reports with FIDIC 8.4 evidence</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
     {:else}
-      <div class="fg-section-hd">📄 ISO 7933 Weekly Report</div>
-      <div class="fg-form-grid">
-        <label>Project Name<input bind:value={reportMeta.projectName} placeholder="Site/Project Name" /></label>
-        <label>Contract No.<input bind:value={reportMeta.contractNumber} placeholder="CONTRACT-001" /></label>
-        <label>Country<input bind:value={reportMeta.country} placeholder="Oman, UAE, Qatar…" /></label>
-        <label>Client<input bind:value={reportMeta.clientName} placeholder="Client Name" /></label>
-        <label>Contractor<input bind:value={reportMeta.contractorName} placeholder="Contractor Name" /></label>
-        <label>HSE Manager<input bind:value={reportMeta.hseManagerName} placeholder="Name, Cert. No." /></label>
-        <label>Regulatory Ref<input bind:value={reportMeta.regulatoryRef} /></label>
-        <label>Ban Start<input bind:value={reportMeta.banStart} placeholder="12:30" /></label>
-        <label>Ban End<input bind:value={reportMeta.banEnd} placeholder="15:30" /></label>
-        <label>Ban Months<input bind:value={reportMeta.banMonths} /></label>
-        <label>FIDIC
-          <select bind:value={reportMeta.fidic}>
-            <option>ELIGIBLE</option><option>NOT ELIGIBLE</option><option>UNDER REVIEW</option>
-          </select>
-        </label>
-        <label>Delay Days<input type="number" bind:value={reportMeta.delayDays} min="0" /></label>
+      <div class="fg-psec">📄 ISO 7933 Weekly Report</div>
+      <div class="fg-prform">
+        <label>Project Name<input bind:value={reportMeta.projectName} placeholder="Site/Project"/></label>
+        <label>Contract No.<input bind:value={reportMeta.contractNumber} placeholder="CONTRACT-001"/></label>
+        <label>Country<input bind:value={reportMeta.country} placeholder="Oman, UAE…"/></label>
+        <label>Client<input bind:value={reportMeta.clientName}/></label>
+        <label>Contractor<input bind:value={reportMeta.contractorName}/></label>
+        <label>HSE Manager<input bind:value={reportMeta.hseManagerName}/></label>
+        <label>Regulatory Ref<input bind:value={reportMeta.regulatoryRef}/></label>
+        <label>Ban Start<input bind:value={reportMeta.banStart} placeholder="12:30"/></label>
+        <label>Ban End<input bind:value={reportMeta.banEnd} placeholder="15:30"/></label>
+        <label>FIDIC<select bind:value={reportMeta.fidic}><option>ELIGIBLE</option><option>NOT ELIGIBLE</option><option>UNDER REVIEW</option></select></label>
       </div>
-      <button class="fg-action-btn" on:click={generateReport}>📋 Generate Report</button>
+      <button class="fg-pbtn" on:click={generateReport}>📋 Generate ISO 7933 Report</button>
       {#if reportText}
-        <div class="fg-report-box">
-          <div class="fg-report-toolbar">
+        <div class="fg-prep">
+          <div class="fg-prep-bar">
             <span>Report ready</span>
-            <button class="fg-mini-btn" on:click={copyReport}>📋 Copy</button>
-            <button class="fg-mini-btn" on:click={downloadReport}>⬇ .txt</button>
+            <button class="fg-prep-btn" on:click={copyReport}>📋 Copy</button>
+            <button class="fg-prep-btn" on:click={downloadReport}>⬇ .txt</button>
           </div>
-          <pre class="fg-report-pre">{reportText}</pre>
+          <pre class="fg-prep-txt">{reportText}</pre>
         </div>
       {/if}
     {/if}
 
-  <!-- ══ SETTINGS TAB ════════════════════════════════════════ -->
+  <!-- ── CONFIG TAB ── -->
   {:else if tab === 'settings'}
-
-    <!-- LICENSE -->
-    <div class="fg-setting-group fg-license-group">
-      <div class="fg-setting-hd">🔑 License</div>
+    <!-- License -->
+    <div class="fg-pgrp fg-lic-grp">
+      <div class="fg-pgrp-hd">🔑 License</div>
       {#if license.valid}
-        <div class="fg-license-active">
-          <span class="fg-license-badge">✓ PRO</span>
-          <span class="fg-license-info">{license.tier?.toUpperCase()} · expires {license.expires?.slice(0,10)}</span>
-          <button class="fg-deact-btn" on:click={deactivateLicense}>Deactivate</button>
+        <div class="fg-lic-act">
+          <span class="fg-lic-badge">✓ PRO</span>
+          <span class="fg-lic-info">{license.tier?.toUpperCase()} · expires {license.expires?.slice(0,10)}</span>
+          <button class="fg-lic-deact" on:click={deactivateLicense}>Deactivate</button>
         </div>
       {:else}
-        <div class="fg-license-free-box">
-          <div class="fg-free-tag">FREE TIER</div>
-          <div class="fg-free-list">
-            ⚡ Multi-model worst-case engine<br/>
-            📄 ISO 7933 weekly report generator<br/>
-            🚨 SOS emergency tab<br/>
-            🎛 Custom thresholds &amp; auto-refresh
-          </div>
-          <a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Get Pro — fieldguard-hse.com</a>
+        <div class="fg-lic-free">
+          <div class="fg-lic-free-tag">FREE TIER</div>
+          <div class="fg-lic-free-list">⚡ Multi-model worst-case engine<br/>📄 ISO 7933 weekly reports<br/>🚨 SOS emergency tab<br/>🎛 Custom thresholds · 🔄 Auto-refresh</div>
+          <a class="fg-pbtn fg-pbtn-amber" href="https://fieldguard-hse.com" target="_blank">Get Pro — fieldguard-hse.com</a>
         </div>
-        <div class="fg-key-row">
-          <input class="fg-key-input" bind:value={licenseKeyInput} placeholder="Paste license key…" disabled={licenseLoading} />
-          <button class="fg-key-btn" on:click={activateLicense} disabled={licenseLoading || !licenseKeyInput.trim()}>
-            {licenseLoading ? '…' : 'Activate'}
-          </button>
+        <div class="fg-lic-row">
+          <input class="fg-lic-input" bind:value={licenseKeyInput} placeholder="Paste license key…" disabled={licenseLoading}/>
+          <button class="fg-lic-act-btn" on:click={activateLicense} disabled={licenseLoading||!licenseKeyInput.trim()}>{licenseLoading?'…':'Activate'}</button>
         </div>
-        {#if licenseError}<div class="fg-key-error">⚠ {licenseError}</div>{/if}
+        {#if licenseError}<div class="fg-lic-err">⚠ {licenseError}</div>{/if}
       {/if}
     </div>
-
-    <!-- PPE (free) -->
-    <div class="fg-setting-group">
-      <div class="fg-setting-hd">👷 PPE Profile (ISO 7933)</div>
+    <!-- PPE -->
+    <div class="fg-pgrp">
+      <div class="fg-pgrp-hd">👷 PPE Profile (ISO 7933)</div>
       {#each Object.entries(PPE_PROFILES) as [key, prof]}
-        <label class="fg-radio-row">
-          <input type="radio" bind:group={settings.ppeProfile} value={key} on:change={saveSettings} />
-          <span>{prof.label}</span>
-          <span class="fg-adj-chip">+{prof.adjustment}°C</span>
-        </label>
+        <label class="fg-radio"><input type="radio" bind:group={settings.ppeProfile} value={key} on:change={saveSettings}/><span>{prof.label}</span><span class="fg-adjch">+{prof.adjustment}°C</span></label>
       {/each}
     </div>
-
-    <!-- WBGT (pro) -->
-    <div class="fg-setting-group {!license.valid?'fg-locked':''}">
-      <div class="fg-setting-hd">🌡 WBGT Thresholds {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}</div>
-      {#if license.valid}
-        <label class="fg-slider-label">Warning (°C)
-          <div class="fg-slider-row"><input type="range" min="28" max="38" step="0.5" bind:value={settings.wbgtWarnC} on:change={saveSettings}/><span>{settings.wbgtWarnC}°C</span></div>
-        </label>
-        <label class="fg-slider-label">Danger (°C)
-          <div class="fg-slider-row"><input type="range" min="30" max="42" step="0.5" bind:value={settings.wbgtDangerC} on:change={saveSettings}/><span>{settings.wbgtDangerC}°C</span></div>
-        </label>
-      {:else}
-        <div class="fg-gate-msg">Activate Pro to unlock</div>
-      {/if}
-    </div>
-
-    <!-- WIND (pro) -->
-    <div class="fg-setting-group {!license.valid?'fg-locked':''}">
-      <div class="fg-setting-hd">💨 Wind Thresholds {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}</div>
-      {#if license.valid}
-        <label class="fg-slider-label">Warning (m/s)
-          <div class="fg-slider-row"><input type="range" min="5" max="25" step="0.5" bind:value={settings.windWarnMs} on:change={saveSettings}/><span>{settings.windWarnMs} m/s</span></div>
-        </label>
-        <label class="fg-slider-label">Danger (m/s)
-          <div class="fg-slider-row"><input type="range" min="10" max="35" step="0.5" bind:value={settings.windDangerMs} on:change={saveSettings}/><span>{settings.windDangerMs} m/s</span></div>
-        </label>
-      {:else}
-        <div class="fg-gate-msg">Activate Pro to unlock</div>
-      {/if}
-    </div>
-
-    <!-- RAIN (pro) -->
-    <div class="fg-setting-group {!license.valid?'fg-locked':''}">
-      <div class="fg-setting-hd">🌧 Rain Thresholds {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}</div>
-      {#if license.valid}
-        <label class="fg-slider-label">Warning (mm/h)
-          <div class="fg-slider-row"><input type="range" min="1" max="25" step="0.5" bind:value={settings.rainWarnMmh} on:change={saveSettings}/><span>{settings.rainWarnMmh} mm/h</span></div>
-        </label>
-        <label class="fg-slider-label">Danger (mm/h)
-          <div class="fg-slider-row"><input type="range" min="5" max="60" step="1" bind:value={settings.rainDangerMmh} on:change={saveSettings}/><span>{settings.rainDangerMmh} mm/h</span></div>
-        </label>
-      {:else}
-        <div class="fg-gate-msg">Activate Pro to unlock</div>
-      {/if}
-    </div>
-
-    <!-- ALERTS -->
-    <div class="fg-setting-group">
-      <div class="fg-setting-hd">🔔 Alerts</div>
-      <label class="fg-toggle-row">
-        <input type="checkbox" bind:checked={settings.soundAlerts} on:change={saveSettings}/>
-        Browser notifications for danger zones
-      </label>
-      <label class="fg-toggle-row {!license.valid?'fg-locked':''}">
-        <input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!license.valid}/>
-        Auto-refresh every 15 min
-        {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}
-      </label>
-    </div>
-
+    <!-- Thresholds (pro) -->
     {#if license.valid}
-      <button class="fg-action-btn fg-action-btn-sec" on:click={resetSettings}>↩ Reset Defaults</button>
+    <div class="fg-pgrp">
+      <div class="fg-pgrp-hd">🌡 WBGT Thresholds</div>
+      <label class="fg-slbl">Warning (°C)<div class="fg-srow"><input type="range" min="28" max="38" step="0.5" bind:value={settings.wbgtWarnC} on:change={saveSettings}/><span>{settings.wbgtWarnC}°C</span></div></label>
+      <label class="fg-slbl">Danger (°C)<div class="fg-srow"><input type="range" min="30" max="42" step="0.5" bind:value={settings.wbgtDangerC} on:change={saveSettings}/><span>{settings.wbgtDangerC}°C</span></div></label>
+      <div class="fg-pgrp-hd" style="margin-top:8px">💨 Wind Thresholds</div>
+      <label class="fg-slbl">Warning (m/s)<div class="fg-srow"><input type="range" min="5" max="25" step="0.5" bind:value={settings.windWarnMs} on:change={saveSettings}/><span>{settings.windWarnMs} m/s</span></div></label>
+      <label class="fg-slbl">Danger (m/s)<div class="fg-srow"><input type="range" min="10" max="35" step="0.5" bind:value={settings.windDangerMs} on:change={saveSettings}/><span>{settings.windDangerMs} m/s</span></div></label>
+      <div class="fg-pgrp-hd" style="margin-top:8px">🌧 Rain Thresholds</div>
+      <label class="fg-slbl">Warning (mm/h)<div class="fg-srow"><input type="range" min="1" max="25" step="0.5" bind:value={settings.rainWarnMmh} on:change={saveSettings}/><span>{settings.rainWarnMmh} mm/h</span></div></label>
+      <label class="fg-slbl">Danger (mm/h)<div class="fg-srow"><input type="range" min="5" max="60" step="1" bind:value={settings.rainDangerMmh} on:change={saveSettings}/><span>{settings.rainDangerMmh} mm/h</span></div></label>
+      <button class="fg-pbtn fg-pbtn-sec" style="margin-top:6px" on:click={resetSettings}>↩ Reset Defaults</button>
+    </div>
     {/if}
-
+    <!-- Alerts -->
+    <div class="fg-pgrp">
+      <div class="fg-pgrp-hd">🔔 Alerts</div>
+      <label class="fg-tog"><input type="checkbox" bind:checked={settings.soundAlerts} on:change={saveSettings}/>Browser notifications for danger zones</label>
+      <label class="fg-tog {!license.valid?'fg-disabled':''}"><input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!license.valid}/>Auto-refresh every 15 min {#if !license.valid}<span class="fg-proch">PRO</span>{/if}</label>
+    </div>
   {/if}
 
 </section>
+
 
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
@@ -752,8 +417,8 @@
   let locationName = '';
   let loading = false, error = '';
   let currentTime = '';
-  let expandedCard: string | null = 'heat'; // used in desktop full panel
-  let activeDetail: string | null = null; // used in bottom bar pill taps
+  let dActive: string | null = 'heat'; // used in desktop full panel
+  let mActive: string | null = null; // used in bottom bar pill taps
 
   // ── Weather state ──────────────────────────────────────────
   let rawData: WeatherInputs | null = null;
@@ -851,29 +516,12 @@
     else               { solarColor = '#7c3aed'; solarLabel = 'EXTREME'; }
   }
 
-  function toggleCard(id: string) {
-    expandedCard = expandedCard === id ? null : id;
+  function dToggle(id: string) {
+    dActive = dActive === id ? null : id;
   }
 
-  // For the bottom bar pills — toggles the overlay detail panel
-  function toggleDetail(id: string) {
-    activeDetail = activeDetail === id ? null : id;
-    // Also sync with main panel expanded card
-    expandedCard = activeDetail;
-  }
-
-  // Called from mobile widget bar pills — switches to full panel view
-  // and opens the relevant expanded card
-  function openFullPanel(cardId: string) {
-    tab = 'dashboard';
-    expandedCard = cardId;
-    // On mobile small mode, Windy expands the plugin to full when user taps
-    // We also emit rqstOpen to ensure the full panel opens
-    try {
-      import('@windy/broadcast').then(({ default: bcast }) => {
-        bcast.emit('rqstOpen', 'fieldguard');
-      });
-    } catch {}
+  function mToggle(id: string) {
+    mActive = mActive === id ? null : id;
   }
 
   // ── License ────────────────────────────────────────────────
@@ -1117,502 +765,262 @@
 </script>
 
 <style>
-  /* ── Brand tokens ─────────────────────────────────────────
-     Navy deep : #0f1d42   Navy mid: #1a2b5e   Navy light: #2d4080
-     Amber:      #e8962a   White:    #ffffff    Slate:      #8a9cc8
-  ─────────────────────────────────────────────────────────── */
-  .fg {
+  /* ════════════════════════════════════════════════════════
+     FieldGuard v3.0 — matches approved preview exactly
+     Brand: Navy #0a1228 / #111e3a / #1a2d55
+            Amber #e8962a  Slate #8a9cc8 / #4a6090
+  ════════════════════════════════════════════════════════ */
+  :root {
+    --amb: #e8962a; --n1: #050a18; --n2: #0a1228;
+    --n3: #111e3a; --n4: #1a2d55; --sl: #8a9cc8; --sl2: #4a6090;
+  }
+
+  /* ── MOBILE TOP STRIP ──────────────────────────────────── */
+  .fg-mbar {
+    background: rgba(5,10,24,0.88) !important;
+    border-bottom: 2px solid var(--amb) !important;
+    padding: 6px 8px !important;
+    display: flex !important; gap: 5px !important; align-items: stretch !important;
+    min-height: 0 !important; border-radius: 0 !important;
+  }
+  .fg-mp {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; gap: 2px; padding: 6px 3px;
+    background: rgba(10,18,40,0.75); border: 1px solid var(--c,#2d4080);
+    border-radius: 8px; cursor: pointer; transition: all 0.15s;
+  }
+  .fg-mp:active { transform: scale(0.94); }
+  .fg-mp.fg-mp-on { border-width: 2px; background: rgba(18,32,68,0.95); }
+  .fg-mp-ic  { font-size: 14px; line-height: 1; }
+  .fg-mp-vl  { font-size: 13px; font-weight: 800; color: #fff; line-height: 1.1; display: flex; align-items: baseline; gap: 1px; }
+  .fg-mp-u   { font-size: 7px; color: var(--sl); }
+  .fg-mp-lb  { font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+  .fg-mrf {
+    width: 26px; flex-shrink: 0; align-self: center;
+    background: rgba(10,18,40,0.7); border: 1px solid rgba(45,64,128,0.5);
+    border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--sl); padding: 5px; transition: all 0.15s;
+  }
+  .fg-mrf:hover { border-color: var(--amb); color: var(--amb); }
+  .fg-mbar-load { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--sl); padding: 8px; }
+  .fg-mbar-tap { font-size: 11px; color: var(--sl); background: transparent; border: 1px dashed rgba(45,64,128,0.5); border-radius: 7px; padding: 7px 14px; cursor: pointer; width: 100%; }
+
+  /* Mobile detail dropdown */
+  .fg-mdet {
+    background: rgba(5,10,24,0.95);
+    border-bottom: 1px solid rgba(232,150,42,0.3);
+    padding: 10px 10px 14px;
+    animation: slideDown 0.18s ease-out;
+  }
+  @keyframes slideDown { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform: none; } }
+  .fg-mdet-close {
+    display: block; width: 100%; margin-top: 10px;
+    background: rgba(15,29,66,0.6); border: 1px solid rgba(45,64,128,0.4);
+    border-radius: 6px; color: var(--sl); padding: 6px; cursor: pointer; font-size: 11px;
+  }
+
+  /* ── DESKTOP PANEL (plugin__content) ──────────────────── */
+  .fg-panel {
+    background: transparent !important;
+    padding: 0 !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: #e8edf8; font-size: 13px; padding: 0;
-    max-width: 100%; box-sizing: border-box;
-    /* Let the Windy map show through */
-    background: transparent;
+    font-size: 12px; color: #e8edf8;
+    overflow-y: auto;
   }
 
-  /* ── Header ─────────────────────────────────────────────── */
-  .fg-header {
-    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-    background: rgba(10, 18, 40, 0.82);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border-bottom: 2px solid #e8962a;
+  /* Panel header */
+  .fg-ph {
+    display: flex; align-items: center; gap: 7px; padding: 6px 9px;
+    background: rgba(5,10,24,0.82);
+    border: 1px solid rgba(232,150,42,0.35); border-bottom: none;
+    border-radius: 10px 10px 0 0;
   }
-  .fg-logo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; }
-  .fg-logo-fallback { width: 30px; height: 30px; font-size: 22px; align-items: center; justify-content: center; flex-shrink: 0; }
-  .fg-header-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-  .fg-title { font-size: 15px; font-weight: 800; color: #fff; line-height: 1.1; }
-  .fg-subtitle { font-size: 8px; color: #8a9cc8; text-transform: uppercase; letter-spacing: 1px; }
-  .fg-header-right { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
-  .fg-icon-btn {
-    width: 30px; height: 30px; background: #1a2b5e; border: 1px solid #2d4080;
-    border-radius: 7px; cursor: pointer; display: flex; align-items: center;
-    justify-content: center; color: #8a9cc8; transition: all 0.15s; padding: 0;
+  .fg-ph-logo { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+  .fg-ph-shield { width: 22px; height: 22px; background: #1e3a8a; border-radius: 4px; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+  .fg-ph-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .fg-ph-title { font-size: 12px; font-weight: 800; color: #fff; line-height: 1.1; }
+  .fg-ph-sub   { font-size: 7px; color: var(--sl2); text-transform: uppercase; letter-spacing: 0.8px; }
+  .fg-ph-btn {
+    width: 22px; height: 22px; background: rgba(15,29,66,0.7);
+    border: 1px solid rgba(45,64,128,0.5); border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--sl); transition: all 0.15s; flex-shrink: 0; padding: 0;
   }
-  .fg-icon-btn svg { width: 15px; height: 15px; }
-  .fg-icon-btn:hover, .fg-icon-btn.active { border-color: #e8962a; color: #e8962a; }
+  .fg-ph-btn:hover { border-color: var(--amb); color: var(--amb); }
 
-  /* ── Location bar ────────────────────────────────────────── */
-  .fg-loc-bar {
-    display: flex; align-items: center; gap: 5px; padding: 5px 10px;
-    background: rgba(15, 29, 66, 0.75);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    font-size: 10px; color: #8a9cc8;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+  /* Loc bar */
+  .fg-ploc {
+    display: flex; align-items: center; gap: 4px; padding: 3px 9px;
+    background: rgba(5,10,24,0.75);
+    border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3);
+    font-size: 9px; color: var(--sl);
   }
-  .fg-loc-pin { font-size: 11px; }
-  .fg-loc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fg-loc-time { color: #4a6090; flex-shrink: 0; }
-  .fg-day-badge  { background: #78350f; color: #fcd34d; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
-  .fg-night-badge { background: #1e1b4b; color: #a5b4fc; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .fg-ploc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fg-ploc-r { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+  .fg-ploc-time { color: var(--sl2); }
+  .fg-dbadge { background: #78350f; color: #fcd34d; border-radius: 3px; padding: 1px 4px; font-size: 7px; font-weight: 700; }
+  .fg-nbadge { background: #1e1b4b; color: #a5b4fc; border-radius: 3px; padding: 1px 4px; font-size: 7px; font-weight: 700; }
 
-  /* ── Tabs ────────────────────────────────────────────────── */
-  .fg-tabs {
+  /* Tabs */
+  .fg-ptabs {
     display: flex;
-    background: rgba(10, 18, 40, 0.80);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: rgba(5,10,24,0.82);
+    border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3);
   }
-  .fg-tab {
-    flex: 1; padding: 7px 2px; background: transparent; border: none;
-    color: #4a6090; cursor: pointer; font-size: 10px;
+  .fg-ptab {
+    flex: 1; padding: 5px 2px; background: transparent; border: none;
+    color: var(--sl2); cursor: pointer; font-size: 8px;
     border-bottom: 2px solid transparent; transition: all 0.15s;
     display: flex; flex-direction: column; align-items: center; gap: 1px;
   }
-  .fg-tab-icon { font-size: 14px; }
-  .fg-tab-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .fg-tab.active { color: #e8962a; border-bottom-color: #e8962a; }
+  .fg-ptab span:first-child { font-size: 12px; }
+  .fg-ptab.fg-ptab-on { color: var(--amb); border-bottom-color: var(--amb); }
 
-  /* ── States ──────────────────────────────────────────────── */
-  .fg-loading { padding: 24px 12px; text-align: center; color: #8a9cc8; display: flex; flex-direction: column; align-items: center; gap: 10px; background: transparent; }
-  .fg-spinner {
-    width: 24px; height: 24px; border: 2px solid #1a2b5e;
-    border-top-color: #e8962a; border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+  /* Status grid */
+  .fg-pgrid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 6px 3px;
+    background: rgba(5,10,24,0.75);
+    border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3);
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .fg-error { padding: 10px 12px; background: rgba(61,10,10,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: #fca5a5; font-size: 11px; border-bottom: 1px solid #7f1d1d; }
-  .fg-ban-bar {
-    padding: 7px 12px;
-    background: rgba(124, 45, 18, 0.85);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    color: #fed7aa; font-size: 11px; font-weight: 700; text-align: center;
-    border-bottom: 1px solid #e8962a;
-  }
-
-  /* ── Status button grid ──────────────────────────────────── */
-  .fg-status-grid {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 8px; padding: 8px 10px 4px;
-    background: transparent;
-  }
-  .fg-status-btn {
-    background: rgba(15, 29, 66, 0.75);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    border: 1px solid var(--zone-color, rgba(45, 64, 128, 0.7));
-    border-radius: 12px; padding: 14px 8px;
-    cursor: pointer; text-align: center;
-    transition: all 0.15s; position: relative;
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    width: 100%;
-  }
-  .fg-status-btn:active { transform: scale(0.97); }
-  .fg-status-btn.expanded {
-    border-width: 2px;
-    background: rgba(20, 38, 80, 0.85);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--zone-color) 40%, transparent);
-  }
-  .fg-sb-icon { font-size: 22px; line-height: 1; }
-  .fg-sb-zone { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-  .fg-sb-val  { font-size: 18px; font-weight: 800; color: #fff; line-height: 1.2; }
-  .fg-sb-label { font-size: 9px; color: #8a9cc8; }
-  .fg-sb-chevron { font-size: 8px; color: #4a6090; margin-top: 2px; }
-
-  /* ── Detail panels ───────────────────────────────────────── */
-  .fg-detail-panel {
-    margin: 0 8px 6px; padding: 14px;
-    background: rgba(12, 24, 58, 0.92);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border: 1px solid; border-radius: 12px;
-    animation: slideDown 0.18s ease-out;
-  }
-  @keyframes slideDown { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
-  .fg-dp-title { font-size: 13px; font-weight: 800; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .fg-dp-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 10px; }
-  .fg-dp-m { background: rgba(8, 15, 35, 0.6); border-radius: 7px; padding: 7px 4px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
-  .fg-dp-v { font-size: 15px; font-weight: 800; color: #fff; }
-  .fg-dp-l { font-size: 9px; color: #4a6090; text-transform: uppercase; }
-  .fg-dp-schedule { background: rgba(8, 15, 35, 0.55); border-radius: 7px; padding: 8px; margin-bottom: 8px; }
-  .fg-dp-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; border-bottom: 1px solid #1a2b5e; }
-  .fg-dp-row:last-child { border-bottom: none; }
-  .fg-dp-rl { font-size: 10px; color: #4a6090; }
-  .fg-dp-rv { font-size: 11px; color: #8a9cc8; font-weight: 500; }
-  .fg-dp-rv-sm { font-size: 9px; }
-  .fg-dp-controls-title { font-size: 10px; color: #e8962a; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-bottom: 5px; }
-  .fg-dp-ctrl { font-size: 10px; color: #8a9cc8; padding: 2px 0; border-bottom: 1px solid #0f1d42; }
-  .fg-dp-ctrl:last-of-type { border-bottom: none; }
-  .fg-dp-ppe { font-size: 9px; color: #4a6090; margin-top: 6px; }
-  .fg-dp-threshold { font-size: 9px; color: #4a6090; margin-top: 6px; text-align: center; }
-
-  /* ── Solar panel extras ──────────────────────────────────── */
-  .fg-dp-night-msg {
-    background: rgba(30, 27, 75, 0.7); border-radius: 7px; padding: 12px; text-align: center;
-    display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: #c7d2fe;
-    border: 1px solid rgba(165, 180, 252, 0.2);
-  }
-  .fg-dp-night-icon { font-size: 28px; }
-  .fg-dp-night-msg strong { color: #a5b4fc; }
-  .fg-dp-night-sub { font-size: 10px; color: #4a6090; }
-  .fg-dp-solar-bar { margin: 10px 0 4px; }
-  .fg-dp-solar-track { position: relative; height: 6px; background: #0f1d42; border-radius: 3px; margin-bottom: 16px; }
-  .fg-dp-solar-fill { position: absolute; height: 100%; border-radius: 3px; transition: width 0.5s; }
-  .fg-dp-solar-sun { position: absolute; top: -8px; transform: translateX(-50%); font-size: 16px; transition: left 0.5s; }
-  .fg-dp-solar-labels { display: flex; justify-content: space-between; font-size: 9px; color: #4a6090; }
-
-  /* ── Model row ───────────────────────────────────────────── */
-  .fg-model-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px 10px;
-    background: rgba(10, 18, 40, 0.82);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(255,255,255,0.07);
-    font-size: 11px; color: #8a9cc8;
-    margin-bottom: 2px;
-  }
-  .fg-model-select { background: #1a2b5e; border: 1px solid #2d4080; color: #e8edf8; padding: 3px 6px; border-radius: 5px; font-size: 11px; }
-  .fg-worst-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; margin-left: auto; font-size: 11px; }
-  .fg-model-table-wrap { margin: 0 10px 6px; background: rgba(15,29,66,0.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(45,64,128,0.5); border-radius: 8px; padding: 8px; }
-  .fg-model-table-title { font-size: 10px; color: #e8962a; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
-  .fg-model-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-  .fg-model-table th { color: #4a6090; text-align: left; padding: 2px 3px; border-bottom: 1px solid #2d4080; }
-  .fg-model-table td { padding: 2px 3px; color: #8a9cc8; }
-  .fg-best-row td { color: #fff; font-weight: 700; background: #0f1d42; }
-
-  /* ── Gate ────────────────────────────────────────────────── */
-  .fg-gate { margin: 16px 10px; padding: 18px 14px; background: rgba(15,29,66,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(45,64,128,0.5); border-radius: 10px; text-align: center; }
-  .fg-gate-icon { font-size: 30px; margin-bottom: 6px; }
-  .fg-gate-title { font-size: 14px; font-weight: 800; color: #fff; margin-bottom: 6px; }
-  .fg-gate-desc { font-size: 11px; color: #4a6090; line-height: 1.6; margin-bottom: 12px; }
-  .fg-gate-btn { display: block; background: #e8962a; color: #0f1d42 !important; text-decoration: none; padding: 9px 14px; border-radius: 7px; font-size: 12px; font-weight: 800; }
-
-  /* ── SOS tab ─────────────────────────────────────────────── */
-  .fg-section-hd { padding: 8px 10px 4px; font-size: 10px; color: #e8962a; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
-  .fg-emg-card { margin: 0 10px 6px; background: rgba(15,29,66,0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid #dc2626; border-radius: 9px; padding: 12px; }
-  .fg-emg-warn { font-size: 13px; font-weight: 700; color: #f87171; margin-bottom: 3px; }
-  .fg-emg-sub  { font-size: 10px; color: #8a9cc8; margin-bottom: 10px; }
-  .fg-emg-section-hd { font-size: 9px; color: #4a6090; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 5px; }
-  .fg-emg-symptoms { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-  .fg-emg-symptom { background: #3d0a0a; color: #fca5a5; border-radius: 4px; padding: 2px 7px; font-size: 10px; }
-  .fg-emg-step { display: flex; gap: 7px; align-items: flex-start; padding: 4px 0; font-size: 10px; color: #8a9cc8; border-bottom: 1px solid #0f1d42; }
-  .fg-emg-step:last-child { border-bottom: none; }
-  .fg-emg-n { background: #2d4080; color: #e8edf8; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
-  .fg-emg-critical { color: #f87171 !important; font-weight: 700; }
-  .fg-emg-critical .fg-emg-n { background: #dc2626; }
-  .fg-empty { padding: 14px; text-align: center; color: #4a6090; font-size: 11px; }
-  .fg-alert-row { margin: 3px 10px; padding: 7px 9px; background: rgba(15,29,66,0.80); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 6px; border-left: 3px solid; }
-  .fg-alert-type { font-size: 11px; font-weight: 700; color: #fff; }
-  .fg-alert-msg  { font-size: 10px; color: #8a9cc8; }
-  .fg-alert-time { font-size: 9px; color: #4a6090; }
-
-  /* ── Report tab ──────────────────────────────────────────── */
-  .fg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 0 10px; }
-  label { display: block; color: #8a9cc8; font-size: 10px; }
-  label input, label select {
-    display: block; width: 100%; background: #0f1d42; border: 1px solid #2d4080;
-    color: #e8edf8; padding: 5px 7px; border-radius: 5px; font-size: 11px;
-    margin-top: 2px; box-sizing: border-box;
-  }
-  label input:focus, label select:focus { outline: none; border-color: #e8962a; }
-  .fg-action-btn {
-    display: block; width: calc(100% - 20px); margin: 7px 10px;
-    padding: 9px; border: none; border-radius: 7px; font-size: 13px; font-weight: 800;
-    cursor: pointer; background: #e8962a; color: #0f1d42;
-  }
-  .fg-action-btn-sec { background: #1a2b5e; color: #8a9cc8; border: 1px solid #2d4080; }
-  .fg-report-box { margin: 0 10px 6px; background: rgba(10,18,40,0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(45,64,128,0.5); border-radius: 8px; overflow: hidden; }
-  .fg-report-toolbar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #1a2b5e; border-bottom: 1px solid #2d4080; font-size: 10px; color: #4a6090; }
-  .fg-report-toolbar span { flex: 1; }
-  .fg-mini-btn { background: #2d4080; border: none; color: #8a9cc8; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
-  .fg-report-pre { padding: 8px; font-size: 8px; color: #8a9cc8; white-space: pre; overflow: auto; max-height: 240px; font-family: 'Courier New', monospace; line-height: 1.4; }
-
-  /* ── Settings tab ────────────────────────────────────────── */
-  .fg-setting-group { background: rgba(15,29,66,0.84); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 9px; margin: 5px 10px; padding: 10px; border: 1px solid rgba(45,64,128,0.6); }
-  .fg-license-group { border-color: #e8962a; }
-  .fg-setting-hd { font-size: 10px; font-weight: 700; color: #e8962a; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
-  .fg-license-active { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .fg-license-badge { background: #052e16; color: #4ade80; border: 1px solid #16a34a; border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
-  .fg-license-info { font-size: 11px; color: #86efac; flex: 1; }
-  .fg-deact-btn { background: #2d4080; border: 1px solid #334155; color: #8a9cc8; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
-  .fg-license-free-box { background: #0f1d42; border-radius: 7px; padding: 10px; margin-bottom: 8px; border: 1px solid #2d4080; }
-  .fg-free-tag { font-size: 9px; font-weight: 700; color: #4a6090; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-  .fg-free-list { font-size: 11px; color: #4a6090; line-height: 1.8; margin-bottom: 8px; }
-  .fg-key-row { display: flex; gap: 5px; margin-top: 4px; }
-  .fg-key-input { flex: 1; background: #0f1d42; border: 1px solid #2d4080; color: #e8edf8; padding: 6px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; }
-  .fg-key-input:focus { outline: none; border-color: #e8962a; }
-  .fg-key-btn { background: #e8962a; border: none; color: #0f1d42; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
-  .fg-key-btn:disabled { background: #2d4080; color: #4a6090; cursor: not-allowed; }
-  .fg-key-error { margin-top: 5px; font-size: 10px; color: #f87171; padding: 5px 7px; background: #3d0a0a; border-radius: 4px; }
-  .fg-radio-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; cursor: pointer; border-bottom: 1px solid #0f1d42; font-size: 11px; color: #c8d4f0; }
-  .fg-radio-row:last-child { border-bottom: none; }
-  .fg-radio-row span:first-of-type { flex: 1; }
-  .fg-adj-chip { background: #0f1d42; color: #8a9cc8; border: 1px solid #2d4080; border-radius: 3px; padding: 1px 5px; font-size: 9px; flex-shrink: 0; }
-  .fg-slider-label { display: block; color: #8a9cc8; font-size: 10px; margin-bottom: 5px; }
-  .fg-slider-row { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
-  .fg-slider-row input[type="range"] { flex: 1; accent-color: #e8962a; }
-  .fg-slider-row span { min-width: 50px; text-align: right; color: #e8962a; font-size: 11px; font-weight: 700; }
-  .fg-toggle-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; cursor: pointer; font-size: 11px; color: #c8d4f0; border-bottom: 1px solid #0f1d42; }
-  .fg-toggle-row:last-child { border-bottom: none; }
-  input[type="checkbox"] { accent-color: #e8962a; }
-  .fg-gate-msg { font-size: 10px; color: #4a6090; padding: 4px 0; }
-  .fg-locked { opacity: 0.4; pointer-events: none; }
-  .fg-pro-chip { background: #e8962a; color: #0f1d42; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 3px; margin-left: 5px; }
-  .fg-toggle-disabled { opacity: 0.4; }
-
-  /* ══ MOBILE SMALL WIDGET BAR ═══════════════════════════════
-     Shown when mobileUI = 'small' — floats over the Windy map
-     as a compact pill strip at the bottom of the screen.
-  ══════════════════════════════════════════════════════════ */
-
-  .fg-widget-bar {
-    /* Override Windy's plugin__mobile-header defaults */
-    background: rgba(8, 15, 35, 0.78) !important;
-    backdrop-filter: blur(18px) !important;
-    -webkit-backdrop-filter: blur(18px) !important;
-    border-top: 1px solid rgba(232, 150, 42, 0.4) !important;
-    border-radius: 16px 16px 0 0;
-    padding: 0 !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-  }
-
-  .fg-widget-inner {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 7px 10px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .fg-widget-inner::-webkit-scrollbar { display: none; }
-
-  /* Logo in widget bar */
-  .fg-widget-logo {
-    flex-shrink: 0;
-    width: 28px; height: 28px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .fg-widget-logo-img { width: 26px; height: 26px; object-fit: contain; }
-
-  /* Status pills */
-  .fg-pill {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    padding: 5px 9px;
-    background: rgba(15, 29, 66, 0.75);
-    border: 1px solid var(--pc, rgba(45, 64, 128, 0.7));
-    border-radius: 10px;
-    cursor: pointer;
-    flex-shrink: 0;
-    min-width: 52px;
-    transition: all 0.15s;
-    /* subtle glow matching zone color */
-    box-shadow: 0 0 8px color-mix(in srgb, var(--pc, #2d4080) 25%, transparent);
-  }
-  .fg-pill:active {
-    transform: scale(0.94);
-    background: rgba(25, 45, 90, 0.9);
-  }
-  .fg-pill-icon { font-size: 13px; line-height: 1; }
-  .fg-pill-val  {
-    font-size: 13px; font-weight: 800; color: #ffffff;
-    line-height: 1.1; display: flex; align-items: baseline; gap: 1px;
-  }
-  .fg-pill-val small { font-size: 8px; color: #8a9cc8; font-weight: 400; }
-  .fg-pill-zone {
-    font-size: 7px; font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.8px; line-height: 1;
-  }
-
-  /* Work ban pill */
-  .fg-pill-ban {
-    background: rgba(124, 45, 18, 0.8);
-    border-color: #e8962a;
-    animation: pulse-ban 1.5s ease-in-out infinite;
-    cursor: default;
-  }
-  @keyframes pulse-ban {
-    0%, 100% { box-shadow: 0 0 6px rgba(232, 150, 42, 0.3); }
-    50%       { box-shadow: 0 0 14px rgba(232, 150, 42, 0.7); }
-  }
-
-  /* Loading state in widget bar */
-  .fg-widget-loading {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: #8a9cc8; flex: 1; padding: 4px 0;
-  }
-  .fg-widget-spinner {
-    width: 14px; height: 14px;
-    border: 2px solid rgba(45,64,128,0.5);
-    border-top-color: #e8962a;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
-  }
-
-  /* Tap to load */
-  .fg-pill-refresh {
-    font-size: 11px; color: #8a9cc8; background: rgba(15,29,66,0.6);
-    border: 1px dashed #2d4080; border-radius: 8px; padding: 5px 12px;
-    cursor: pointer; flex: 1;
-  }
-
-  /* Refresh icon button in widget bar */
-  .fg-widget-refresh {
-    width: 28px; height: 28px;
-    background: rgba(15,29,66,0.6);
-    border: 1px solid rgba(45,64,128,0.5);
-    border-radius: 8px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    color: #4a6090; flex-shrink: 0;
-    transition: all 0.15s; margin-left: auto;
-  }
-  .fg-widget-refresh:hover { border-color: #e8962a; color: #e8962a; }
-
-  /* Windy controls widget bar visibility via plugin__mobile-header class
-     We don't need to hide it — Windy handles it based on mobileUI: 'small' */
-
-
-  /* ══ BOTTOM PILL BAR ════════════════════════════════════════ */
-  .fg-bar {
-    background: rgba(8, 15, 35, 0.92) !important;
-    backdrop-filter: blur(20px) !important;
-    -webkit-backdrop-filter: blur(20px) !important;
-    border-top: 2px solid #e8962a !important;
-    border-radius: 14px 14px 0 0 !important;
-    padding: 0 !important;
-    min-height: 0 !important;
-  }
-  .fg-bar > * { display: flex; align-items: center; gap: 4px; padding: 6px 8px; overflow-x: auto; scrollbar-width: none; }
-  .fg-bar > *::-webkit-scrollbar { display: none; }
-
-  /* The 4 pills */
-  .fg-bar-pill {
-    flex: 1; min-width: 60px; max-width: 80px;
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
-    padding: 7px 4px;
-    background: rgba(15, 29, 66, 0.7);
-    border: 1px solid var(--pc, #2d4080);
-    border-radius: 10px; cursor: pointer;
-    transition: all 0.15s;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--pc, #2d4080) 20%, transparent);
-  }
-  .fg-bar-pill:active { transform: scale(0.94); }
-  .fg-bar-pill.fg-bar-pill-active {
-    background: rgba(25, 45, 90, 0.9);
-    border-width: 2px;
-    box-shadow: 0 0 14px color-mix(in srgb, var(--pc, #2d4080) 40%, transparent);
-  }
-  .fg-bar-pill-icon { font-size: 16px; line-height: 1; }
-  .fg-bar-pill-val  { font-size: 14px; font-weight: 800; color: #fff; line-height: 1.1; display: flex; align-items: baseline; gap: 1px; }
-  .fg-bar-unit      { font-size: 8px; color: #8a9cc8; }
-  .fg-bar-pill-lbl  { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-
-  /* Ban badge */
-  .fg-bar-ban {
-    font-size: 18px; flex-shrink: 0;
-    animation: pulse-ban 1.5s ease-in-out infinite;
-  }
-  @keyframes pulse-ban { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-  /* Refresh button */
-  .fg-bar-refresh {
-    width: 28px; height: 28px; flex-shrink: 0; margin-left: auto;
-    background: rgba(15,29,66,0.6); border: 1px solid rgba(45,64,128,0.5);
-    border-radius: 8px; cursor: pointer; color: #4a6090;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-  }
-  .fg-bar-refresh:hover { border-color: #e8962a; color: #e8962a; }
-
-  /* Loading / tap */
-  .fg-bar-loading { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8a9cc8; padding: 10px 12px; }
-  .fg-bar-spin { width: 14px; height: 14px; border: 2px solid rgba(45,64,128,0.5); border-top-color: #e8962a; border-radius: 50%; animation: spin 0.8s linear infinite; }
-  .fg-bar-tap { font-size: 12px; color: #8a9cc8; background: transparent; border: 1px dashed #2d4080; border-radius: 8px; padding: 8px 16px; cursor: pointer; width: 100%; }
-
-  /* ══ DETAIL OVERLAY ═════════════════════════════════════════ */
-  .fg-overlay {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    top: 0;
-    z-index: 9999;
-    background: rgba(5, 10, 25, 0.5);
-    backdrop-filter: blur(4px);
-    display: flex; flex-direction: column; justify-content: flex-end;
-  }
-  .fg-overlay-panel {
-    background: rgba(10, 18, 42, 0.97);
-    backdrop-filter: blur(20px);
-    border-top: 2px solid #e8962a;
-    border-radius: 18px 18px 0 0;
-    padding: 12px 10px 20px;
-    max-height: 85vh;
-    overflow-y: auto;
-    position: relative;
-    animation: slideUp 0.22s ease-out;
-  }
-  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-
-  .fg-overlay-close {
-    position: absolute; top: 10px; right: 12px;
-    background: rgba(45,64,128,0.5); border: 1px solid #2d4080;
-    color: #8a9cc8; width: 28px; height: 28px;
-    border-radius: 8px; cursor: pointer; font-size: 13px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .fg-overlay-loc {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: #8a9cc8;
-    padding: 0 0 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    margin-bottom: 8px;
-    padding-right: 36px;
-  }
-  .fg-overlay-time { margin-left: auto; color: #4a6090; }
-
-  /* Tabs inside overlay */
-  .fg-overlay-tabs {
-    display: flex; gap: 4px; margin-bottom: 10px;
-    overflow-x: auto; scrollbar-width: none;
-  }
-  .fg-overlay-tabs::-webkit-scrollbar { display: none; }
-  .fg-overlay-tab {
-    padding: 5px 12px; background: rgba(15,29,66,0.6);
-    border: 1px solid #2d4080; border-radius: 20px;
-    color: #4a6090; font-size: 11px; cursor: pointer; white-space: nowrap;
-    transition: all 0.15s; flex-shrink: 0;
-  }
-  .fg-overlay-tab.active { background: #e8962a; color: #0f1d42; font-weight: 700; border-color: #e8962a; }
-
-  /* 4 pill selectors inside overlay */
-  .fg-overlay-pills {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 5px; margin-bottom: 10px;
-  }
-  .fg-ov-pill {
-    padding: 6px 4px; background: rgba(15,29,66,0.6);
-    border: 1px solid var(--pc, #2d4080); border-radius: 8px;
-    font-size: 11px; color: #8a9cc8; cursor: pointer;
+  .fg-psb {
+    background: rgba(10,18,40,0.8); border: 1px solid var(--c,#2d4080);
+    border-radius: 8px; padding: 10px 4px; cursor: pointer; text-align: center;
     display: flex; flex-direction: column; align-items: center; gap: 2px;
-    transition: all 0.15s;
+    transition: all 0.15s; width: 100%;
   }
-  .fg-ov-pill.active { background: rgba(25,45,90,0.9); border-width: 2px; }
-  .fg-ov-pill span { font-size: 9px; font-weight: 700; }
+  .fg-psb:hover { filter: brightness(1.15); }
+  .fg-psb.fg-psb-on { border-width: 2px; background: rgba(18,32,68,0.95); }
+  .fg-psb-ic { font-size: 17px; line-height: 1; }
+  .fg-psb-zo { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+  .fg-psb-vl { font-size: 15px; font-weight: 800; color: #fff; line-height: 1.2; }
+  .fg-psb-lb { font-size: 8px; color: var(--sl); }
+  .fg-psb-ch { font-size: 7px; color: var(--sl2); }
 
-  /* Hide the old full-panel content on plugin__content — 
-     the overlay handles everything now */
-  .fg .fg-status-grid { display: none; }
-  .fg .fg-detail-panel:not(.fg-overlay-panel .fg-detail-panel) { display: none; }
+  /* Detail panel */
+  .fg-pdet {
+    background: rgba(5,10,24,0.88); border: 1px solid; border-top: none;
+    padding: 9px 7px 7px;
+    border-left-color: rgba(232,150,42,0.3) !important;
+    border-right-color: rgba(232,150,42,0.3) !important;
+  }
 
+  /* Shared detail internals */
+  .fg-det-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 7px; }
+  .fg-det-grid  { display: grid; grid-template-columns: repeat(3,1fr); gap: 3px; margin-bottom: 6px; }
+  .fg-dc { background: rgba(5,10,22,0.6); border-radius: 4px; padding: 5px 2px; text-align: center; }
+  .fg-dv { font-size: 12px; font-weight: 800; color: #fff; display: block; }
+  .fg-dl { font-size: 7px; color: var(--sl2); text-transform: uppercase; letter-spacing: 0.3px; }
+  .fg-ds { background: rgba(5,10,22,0.4); border-radius: 4px; padding: 5px; margin-bottom: 4px; }
+  .fg-dr { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid rgba(10,18,38,0.9); font-size: 8px; }
+  .fg-dr:last-child { border: none; }
+  .fg-drl { color: var(--sl2); } .fg-drv { color: var(--sl); font-weight: 500; } .fg-drv-sm { font-size: 7px; }
+  .fg-dct { font-size: 8px; color: var(--amb); text-transform: uppercase; font-weight: 700; letter-spacing: 0.4px; margin: 5px 0 3px; }
+  .fg-dci { font-size: 8px; color: var(--sl); padding: 2px 0; border-bottom: 1px solid rgba(10,18,38,0.7); }
+  .fg-dci:last-child { border: none; }
+  .fg-dppe { font-size: 8px; color: var(--sl2); margin-top: 5px; }
+  .fg-dthr { font-size: 8px; color: var(--sl2); text-align: center; margin-top: 4px; }
+  .fg-night-msg { background: rgba(30,27,75,0.5); border-radius: 6px; padding: 10px; text-align: center; font-size: 10px; color: #c7d2fe; display: flex; flex-direction: column; gap: 4px; }
+  .fg-night-msg strong { color: #a5b4fc; }
+
+  /* Model row */
+  .fg-pmr {
+    display: flex; align-items: center; gap: 5px; padding: 5px 6px 6px;
+    background: rgba(5,10,24,0.82);
+    border: 1px solid rgba(232,150,42,0.3); border-top: none;
+    border-radius: 0 0 10px 10px;
+  }
+  .fg-pmr-sel { background: rgba(10,18,40,0.8); border: 1px solid rgba(45,64,128,0.5); color: #e8edf8; padding: 3px 5px; border-radius: 4px; font-size: 9px; }
+  .fg-pmr-wc { display: flex; align-items: center; gap: 3px; margin-left: auto; font-size: 8px; color: var(--sl); cursor: pointer; }
+  .fg-proch { background: var(--amb); color: #0f1d42; font-size: 7px; font-weight: 800; padding: 1px 3px; border-radius: 2px; }
+
+  /* Model table */
+  .fg-ptbl { padding: 0 6px 6px; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid rgba(232,150,42,0.3); border-radius: 0 0 10px 10px; }
+  .fg-tbl { width: 100%; border-collapse: collapse; font-size: 9px; }
+  .fg-tbl th { color: var(--sl2); text-align: left; padding: 3px 3px; border-bottom: 1px solid rgba(45,64,128,0.4); font-weight: 600; }
+  .fg-tbl td { padding: 2px 3px; color: var(--sl); }
+  .fg-tbl-best td { color: #fff; font-weight: 700; background: rgba(10,18,40,0.6); }
+
+  /* Loading/error inside panel */
+  .fg-pload { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px; color: var(--sl); font-size: 10px; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid rgba(232,150,42,0.3); border-radius: 0 0 10px 10px; }
+  .fg-perr { padding: 10px 9px; background: rgba(61,10,10,0.85); color: #fca5a5; font-size: 10px; border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid #7f1d1d; border-radius: 0 0 10px 10px; }
+  .fg-ban { padding: 6px 9px; background: rgba(124,45,18,0.85); color: #fed7aa; font-size: 10px; font-weight: 700; text-align: center; border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid var(--amb); }
+
+  /* Spinner */
+  .fg-spin { width: 16px; height: 16px; border: 2px solid rgba(45,64,128,0.5); border-top-color: var(--amb); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Sections inside tabs */
+  .fg-psec { padding: 7px 9px 3px; font-size: 9px; color: var(--amb); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); }
+  .fg-empty { padding: 14px; text-align: center; color: var(--sl2); font-size: 10px; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid rgba(232,150,42,0.3); border-radius: 0 0 10px 10px; }
+
+  /* SOS */
+  .fg-pemg { background: rgba(5,10,24,0.75); border: 1px solid rgba(220,38,38,0.5); border-top: none; border-radius: 0 0 10px 10px; padding: 10px 9px; }
+  .fg-pemg-warn { font-size: 11px; font-weight: 700; color: #f87171; margin-bottom: 4px; }
+  .fg-pemg-sub  { font-size: 9px; color: var(--sl); margin-bottom: 8px; }
+  .fg-pemg-hd   { font-size: 8px; color: var(--sl2); text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
+  .fg-pemg-syms { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+  .fg-sym       { background: rgba(61,10,10,0.8); color: #fca5a5; border-radius: 3px; padding: 2px 5px; font-size: 8px; }
+  .fg-pemg-step { display: flex; gap: 6px; align-items: flex-start; padding: 3px 0; font-size: 9px; color: var(--sl); border-bottom: 1px solid rgba(10,18,38,0.8); }
+  .fg-pemg-step:last-child { border: none; }
+  .fg-pemg-n    { background: rgba(45,64,128,0.6); color: #e8edf8; border-radius: 3px; padding: 1px 4px; font-size: 8px; font-weight: 700; flex-shrink: 0; }
+  .fg-pemg-crit { color: #f87171 !important; font-weight: 700; }
+  .fg-pemg-crit .fg-pemg-n { background: #dc2626; }
+
+  /* Alert log */
+  .fg-alog { margin: 3px 9px; padding: 6px 8px; background: rgba(10,18,40,0.7); border-radius: 5px; border-left: 3px solid; }
+  .fg-alog-t  { font-size: 10px; font-weight: 700; color: #fff; }
+  .fg-alog-m  { font-size: 9px; color: var(--sl); }
+  .fg-alog-tm { font-size: 8px; color: var(--sl2); }
+
+  /* Report form */
+  .fg-prform { padding: 6px 9px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); }
+  label { display: block; color: var(--sl); font-size: 9px; }
+  label input, label select { display: block; width: 100%; background: rgba(5,10,22,0.9); border: 1px solid rgba(45,64,128,0.5); color: #e8edf8; padding: 4px 6px; border-radius: 4px; font-size: 9px; margin-top: 2px; box-sizing: border-box; }
+  label input:focus, label select:focus { outline: none; border-color: var(--amb); }
+  .fg-pbtn { display: block; width: calc(100% - 0px); margin: 0; padding: 8px; border: none; border-radius: 0; font-size: 11px; font-weight: 800; cursor: pointer; background: var(--amb); color: #0f1d42; border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); }
+  .fg-pbtn-sec { background: rgba(10,18,40,0.8); color: var(--sl); border: 1px solid rgba(45,64,128,0.4); border-radius: 5px; width: calc(100%); }
+  .fg-pbtn-amber { display: block; text-align: center; text-decoration: none; background: var(--amb); color: #0f1d42 !important; padding: 7px; border-radius: 5px; font-size: 10px; font-weight: 800; margin-top: 5px; }
+  .fg-prep { background: rgba(5,10,22,0.9); border: 1px solid rgba(45,64,128,0.4); border-radius: 0 0 10px 10px; overflow: hidden; }
+  .fg-prep-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(10,18,40,0.9); border-bottom: 1px solid rgba(45,64,128,0.3); font-size: 9px; color: var(--sl2); }
+  .fg-prep-bar span { flex: 1; }
+  .fg-prep-btn { background: rgba(45,64,128,0.5); border: none; color: var(--sl); padding: 2px 7px; border-radius: 3px; cursor: pointer; font-size: 9px; }
+  .fg-prep-txt { padding: 8px; font-size: 8px; color: var(--sl); white-space: pre; overflow: auto; max-height: 220px; font-family: 'Courier New', monospace; line-height: 1.4; }
+
+  /* Settings groups */
+  .fg-pgrp { background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid rgba(45,64,128,0.2); padding: 8px 9px; }
+  .fg-pgrp:last-child { border-bottom: 1px solid rgba(232,150,42,0.3); border-radius: 0 0 10px 10px; }
+  .fg-lic-grp { border-top: none; }
+  .fg-pgrp-hd { font-size: 9px; font-weight: 700; color: var(--amb); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 7px; }
+  .fg-lic-act { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .fg-lic-badge { background: rgba(5,46,22,0.8); color: #4ade80; border: 1px solid #16a34a; border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 700; }
+  .fg-lic-info  { font-size: 10px; color: #86efac; flex: 1; }
+  .fg-lic-deact { background: rgba(10,18,40,0.8); border: 1px solid rgba(45,64,128,0.5); color: var(--sl); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 9px; }
+  .fg-lic-free  { background: rgba(5,10,22,0.6); border-radius: 5px; padding: 8px; margin-bottom: 7px; border: 1px solid rgba(45,64,128,0.3); }
+  .fg-lic-free-tag  { font-size: 8px; font-weight: 700; color: var(--sl2); text-transform: uppercase; margin-bottom: 5px; }
+  .fg-lic-free-list { font-size: 9px; color: var(--sl2); line-height: 1.7; margin-bottom: 5px; }
+  .fg-lic-row   { display: flex; gap: 4px; }
+  .fg-lic-input { flex: 1; background: rgba(5,10,22,0.9); border: 1px solid rgba(45,64,128,0.5); color: #e8edf8; padding: 4px 6px; border-radius: 4px; font-size: 9px; font-family: monospace; }
+  .fg-lic-input:disabled { opacity: 0.5; }
+  .fg-lic-act-btn { background: var(--amb); border: none; color: #0f1d42; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 800; white-space: nowrap; }
+  .fg-lic-act-btn:disabled { background: rgba(45,64,128,0.4); color: var(--sl2); cursor: not-allowed; }
+  .fg-lic-err { margin-top: 5px; font-size: 9px; color: #f87171; padding: 4px 6px; background: rgba(61,10,10,0.8); border-radius: 4px; }
+  .fg-radio { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; border-bottom: 1px solid rgba(5,10,22,0.8); font-size: 9px; color: #c8d4f0; }
+  .fg-radio:last-child { border-bottom: none; }
+  .fg-radio span { flex: 1; }
+  .fg-adjch { background: rgba(5,10,22,0.8); color: var(--sl); border-radius: 2px; padding: 1px 4px; font-size: 8px; }
+  .fg-slbl { display: block; color: var(--sl); font-size: 9px; margin-bottom: 4px; }
+  .fg-srow { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .fg-srow input[type="range"] { flex: 1; accent-color: var(--amb); }
+  .fg-srow span { min-width: 48px; text-align: right; color: var(--amb); font-size: 9px; font-weight: 700; }
+  .fg-tog { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; font-size: 9px; color: #c8d4f0; border-bottom: 1px solid rgba(5,10,22,0.8); }
+  .fg-tog:last-child { border-bottom: none; }
+  input[type="checkbox"] { accent-color: var(--amb); }
+
+  /* Gate */
+  .fg-gate { padding: 16px 12px; background: rgba(5,10,24,0.75); border-left: 1px solid rgba(232,150,42,0.3); border-right: 1px solid rgba(232,150,42,0.3); border-bottom: 1px solid rgba(232,150,42,0.3); border-radius: 0 0 10px 10px; text-align: center; }
+  .fg-gate-ic { font-size: 28px; margin-bottom: 6px; }
+  .fg-gate-ti { font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .fg-gate-desc { font-size: 10px; color: var(--sl2); margin-bottom: 10px; }
+  .fg-gate-btn { display: block; background: var(--amb); color: #0f1d42 !important; text-decoration: none; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+  .fg-disabled { opacity: 0.4; pointer-events: none; }
 </style>
