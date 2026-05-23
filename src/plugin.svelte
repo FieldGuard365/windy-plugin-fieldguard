@@ -1,69 +1,290 @@
-<!-- ══ MOBILE SMALL WIDGET BAR (shown when mobileUI=small) ══════ -->
-<div class="plugin__mobile-header fg-widget-bar">
-  <div class="fg-widget-inner">
+<!-- ══ BOTTOM WIDGET BAR ═══════════════════════════════════════
+     This is the always-visible compact strip.
+     On mobile (mobileUI=small): shown at bottom by Windy as plugin__mobile-header
+     On desktop (box mode): shown as compact header of the floating box
+════════════════════════════════════════════════════════════════ -->
+<div class="plugin__mobile-header fg-bar">
 
-    <!-- Logo pill -->
-    <div class="fg-widget-logo">
-      <img src="./assets/logo-white.png" alt="FG" class="fg-widget-logo-img"
-           onerror="this.style.display='none'" />
+  {#if loading}
+    <div class="fg-bar-loading">
+      <div class="fg-bar-spin"></div>
+      <span>Loading…</span>
     </div>
+  {:else if heat}
 
-    {#if loading}
-      <div class="fg-widget-loading">
-        <div class="fg-widget-spinner"></div>
-        <span>Loading…</span>
-      </div>
-    {:else if heat}
-
-      <!-- Heat zone pill -->
-      <button class="fg-pill" style="--pc:{heat.zoneInfo.color}" on:click={() => openFullPanel('heat')}>
-        <span class="fg-pill-icon">🌡</span>
-        <span class="fg-pill-val">{heat.apparentTempFinal === 999 ? 'NW' : heat.apparentTempFinal+'°'}</span>
-        <span class="fg-pill-zone" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
-      </button>
-
-      <!-- Wind pill -->
-      <button class="fg-pill" style="--pc:{windResult?.riskColor}" on:click={() => openFullPanel('wind')}>
-        <span class="fg-pill-icon">💨</span>
-        <span class="fg-pill-val">{rawData?.windMs.toFixed(1)}<small>m/s</small></span>
-        <span class="fg-pill-zone" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
-      </button>
-
-      <!-- Rain pill -->
-      <button class="fg-pill" style="--pc:{rainResult?.riskColor}" on:click={() => openFullPanel('rain')}>
-        <span class="fg-pill-icon">🌧</span>
-        <span class="fg-pill-val">{rawData?.rainMmH.toFixed(1)}<small>mm</small></span>
-        <span class="fg-pill-zone" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
-      </button>
-
-      <!-- Solar pill -->
-      <button class="fg-pill" style="--pc:{solarColor}" on:click={() => openFullPanel('solar')}>
-        <span class="fg-pill-icon">{isNight ? '🌙' : '☀'}</span>
-        <span class="fg-pill-val">{isNight ? 'Night' : rawData?.solarWm2+' W'}</span>
-        <span class="fg-pill-zone" style="color:{solarColor}">{solarLabel}</span>
-      </button>
-
-      <!-- Ban indicator -->
-      {#if heat.isBanPeriod}
-        <div class="fg-pill fg-pill-ban">
-          <span class="fg-pill-icon">🚫</span>
-          <span class="fg-pill-val">BAN</span>
-        </div>
-      {/if}
-
-    {:else}
-      <button class="fg-pill-refresh" on:click={refreshData}>Tap to load</button>
-    {/if}
-
-    <!-- Refresh button -->
-    <button class="fg-widget-refresh" on:click={refreshData} title="Refresh">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+    <!-- 4 horizontal pills -->
+    <button class="fg-bar-pill {activeDetail==='heat'?'fg-bar-pill-active':''}"
+      style="--pc:{heat.zoneInfo.color}"
+      on:click={() => toggleDetail('heat')}>
+      <span class="fg-bar-pill-icon">🌡</span>
+      <span class="fg-bar-pill-val">{heat.apparentTempFinal === 999 ? 'NW' : heat.apparentTempFinal+'°'}</span>
+      <span class="fg-bar-pill-lbl" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
     </button>
 
-  </div>
+    <button class="fg-bar-pill {activeDetail==='wind'?'fg-bar-pill-active':''}"
+      style="--pc:{windResult?.riskColor}"
+      on:click={() => toggleDetail('wind')}>
+      <span class="fg-bar-pill-icon">💨</span>
+      <span class="fg-bar-pill-val">{rawData?.windMs.toFixed(1)}<span class="fg-bar-unit">m/s</span></span>
+      <span class="fg-bar-pill-lbl" style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
+    </button>
+
+    <button class="fg-bar-pill {activeDetail==='rain'?'fg-bar-pill-active':''}"
+      style="--pc:{rainResult?.riskColor}"
+      on:click={() => toggleDetail('rain')}>
+      <span class="fg-bar-pill-icon">🌧</span>
+      <span class="fg-bar-pill-val">{rawData?.rainMmH.toFixed(1)}<span class="fg-bar-unit">mm</span></span>
+      <span class="fg-bar-pill-lbl" style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
+    </button>
+
+    <button class="fg-bar-pill {activeDetail==='solar'?'fg-bar-pill-active':''}"
+      style="--pc:{solarColor}"
+      on:click={() => toggleDetail('solar')}>
+      <span class="fg-bar-pill-icon">{isNight ? '🌙' : '☀'}</span>
+      <span class="fg-bar-pill-val">{isNight ? '--' : rawData?.solarWm2}<span class="fg-bar-unit">{isNight ? '' : 'W'}</span></span>
+      <span class="fg-bar-pill-lbl" style="color:{solarColor}">{solarLabel}</span>
+    </button>
+
+    {#if heat.isBanPeriod}
+      <div class="fg-bar-ban">🚫</div>
+    {/if}
+
+    <button class="fg-bar-refresh" on:click={refreshData}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+        <path d="M21 3v5h-5"/>
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+        <path d="M8 16H3v5"/>
+      </svg>
+    </button>
+
+  {:else}
+    <button class="fg-bar-tap" on:click={refreshData}>⚡ Tap to load FieldGuard</button>
+  {/if}
+
 </div>
 
 <section class="plugin__content fg">
+
+  <!-- ══ DETAIL OVERLAY — shown when a bottom pill is tapped ══ -->
+  {#if activeDetail}
+    <div class="fg-overlay" on:click|self={() => activeDetail = null}>
+      <div class="fg-overlay-panel">
+
+        <!-- Close button -->
+        <button class="fg-overlay-close" on:click={() => activeDetail = null}>✕</button>
+
+        <!-- Location + time header -->
+        <div class="fg-overlay-loc">
+          📍 {locationName || (lat.toFixed(3)+', '+lon.toFixed(3))}
+          <span class="fg-overlay-time">{currentTime}</span>
+          {#if isNight}<span class="fg-night-badge">🌙 Night</span>
+          {:else}<span class="fg-day-badge">☀ Day</span>{/if}
+        </div>
+
+        <!-- Tab pills inside overlay -->
+        <div class="fg-overlay-tabs">
+          {#each TABS as t}
+            <button class="fg-overlay-tab {tab===t.id?'active':''}" on:click={() => tab=t.id}>
+              {t.icon} {t.label}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Content based on active tab -->
+        {#if tab === 'dashboard'}
+
+          {#if heat.isBanPeriod}
+            <div class="fg-ban-bar">🚫 LEGAL WORK BAN ACTIVE · 12:30–15:30</div>
+          {/if}
+
+          <!-- 4 pill selectors inside overlay -->
+          <div class="fg-overlay-pills">
+            <button class="fg-ov-pill {activeDetail==='heat'?'active':''}"
+              style="--pc:{heat.zoneInfo.color}" on:click={() => activeDetail='heat'}>
+              🌡 <span style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</span>
+            </button>
+            <button class="fg-ov-pill {activeDetail==='wind'?'active':''}"
+              style="--pc:{windResult?.riskColor}" on:click={() => activeDetail='wind'}>
+              💨 <span style="color:{windResult?.riskColor}">{windResult?.riskLabel}</span>
+            </button>
+            <button class="fg-ov-pill {activeDetail==='rain'?'active':''}"
+              style="--pc:{rainResult?.riskColor}" on:click={() => activeDetail='rain'}>
+              🌧 <span style="color:{rainResult?.riskColor}">{rainResult?.riskLabel}</span>
+            </button>
+            <button class="fg-ov-pill {activeDetail==='solar'?'active':''}"
+              style="--pc:{solarColor}" on:click={() => activeDetail='solar'}>
+              {isNight?'🌙':'☀'} <span style="color:{solarColor}">{solarLabel}</span>
+            </button>
+          </div>
+
+          <!-- Detail content -->
+          {#if activeDetail === 'heat'}
+            <div class="fg-detail-panel" style="border-color:{heat.zoneInfo.color}">
+              <div class="fg-dp-title" style="color:{heat.zoneInfo.color}">🌡 Heat Stress — {heat.zoneInfo.riskLabel}</div>
+              <div class="fg-dp-metrics">
+                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.tempC}°C</span><span class="fg-dp-l">Temp</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.humidity}%</span><span class="fg-dp-l">Humidity</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{heat.apparentTemp1}°C</span><span class="fg-dp-l">App.Temp A</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v" style="color:{heat.zoneInfo.color}">{heat.apparentTempFinal===999?'NW':heat.apparentTempFinal+'°C'}</span><span class="fg-dp-l">App.Temp B</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtBase}°C</span><span class="fg-dp-l">WBGT</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{heat.wbgtAdjusted}°C</span><span class="fg-dp-l">WBGT+PPE</span></div>
+              </div>
+              <div class="fg-dp-schedule">
+                <div class="fg-dp-row"><span class="fg-dp-rl">🕐 Light work</span><span class="fg-dp-rv">{heat.workRestSchedule.light}</span></div>
+                <div class="fg-dp-row"><span class="fg-dp-rl">💪 Heavy work</span><span class="fg-dp-rv">{heat.workRestSchedule.heavy}</span></div>
+                <div class="fg-dp-row"><span class="fg-dp-rl">💧 Hydration</span><span class="fg-dp-rv">{heat.hydration}</span></div>
+                <div class="fg-dp-row"><span class="fg-dp-rl">👁 Monitoring</span><span class="fg-dp-rv fg-dp-rv-sm">{heat.zoneInfo.monitoringSchedule}</span></div>
+              </div>
+              <div class="fg-dp-controls-title">⚠ Mandatory Controls</div>
+              {#each heat.zoneInfo.mandatoryControls as ctrl}
+                <div class="fg-dp-ctrl">▸ {ctrl}</div>
+              {/each}
+              <div class="fg-dp-ppe">PPE: {PPE_PROFILES[settings.ppeProfile].label} (+{PPE_PROFILES[settings.ppeProfile].adjustment}°C)</div>
+            </div>
+          {:else if activeDetail === 'wind'}
+            <div class="fg-detail-panel" style="border-color:{windResult?.riskColor}">
+              <div class="fg-dp-title" style="color:{windResult?.riskColor}">💨 Wind — {windResult?.riskLabel}</div>
+              <div class="fg-dp-metrics">
+                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.windMs.toFixed(1)}</span><span class="fg-dp-l">m/s</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{((rawData?.windMs??0)*3.6).toFixed(1)}</span><span class="fg-dp-l">km/h</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">Bft {windResult?.beaufort}</span><span class="fg-dp-l">{windResult?.beaufortDesc}</span></div>
+              </div>
+              <div class="fg-dp-threshold">Warn ≥ {settings.windWarnMs} m/s · Danger ≥ {settings.windDangerMs} m/s</div>
+            </div>
+          {:else if activeDetail === 'rain'}
+            <div class="fg-detail-panel" style="border-color:{rainResult?.riskColor}">
+              <div class="fg-dp-title" style="color:{rainResult?.riskColor}">🌧 Rain — {rainResult?.riskLabel}</div>
+              <div class="fg-dp-metrics">
+                <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.rainMmH.toFixed(1)}</span><span class="fg-dp-l">mm/h</span></div>
+                <div class="fg-dp-m"><span class="fg-dp-v">{rainResult?.intensityLabel}</span><span class="fg-dp-l">Intensity</span></div>
+              </div>
+              <div class="fg-dp-threshold">Warn ≥ {settings.rainWarnMmh} mm/h · Danger ≥ {settings.rainDangerMmh} mm/h</div>
+            </div>
+          {:else if activeDetail === 'solar'}
+            <div class="fg-detail-panel" style="border-color:{solarColor}">
+              <div class="fg-dp-title" style="color:{solarColor}">{isNight ? '🌙 Night — No Solar' : '☀ Solar — '+solarLabel}</div>
+              {#if isNight}
+                <div class="fg-dp-night-msg">
+                  <div class="fg-dp-night-icon">🌙</div>
+                  <div>Solar radiation is <strong>zero</strong> at night. WBGT uses only temperature, humidity and wind.</div>
+                  <div class="fg-dp-night-sub">Sunrise: ~{sunriseTime} · Sunset: ~{sunsetTime}</div>
+                </div>
+              {:else}
+                <div class="fg-dp-metrics">
+                  <div class="fg-dp-m"><span class="fg-dp-v">{rawData?.solarWm2}</span><span class="fg-dp-l">W/m²</span></div>
+                  <div class="fg-dp-m"><span class="fg-dp-v">UV ~{uvIndex}</span><span class="fg-dp-l">Index</span></div>
+                  <div class="fg-dp-m"><span class="fg-dp-v">{solarElevDeg}°</span><span class="fg-dp-l">Sun angle</span></div>
+                </div>
+                <div class="fg-dp-solar-bar">
+                  <div class="fg-dp-solar-track">
+                    <div class="fg-dp-solar-fill" style="width:{solarPct}%;background:{solarColor}"></div>
+                    <div class="fg-dp-solar-sun" style="left:{solarPct}%">☀</div>
+                  </div>
+                  <div class="fg-dp-solar-labels"><span>Dawn</span><span>Solar Noon</span><span>Dusk</span></div>
+                </div>
+                <div class="fg-dp-schedule">
+                  <div class="fg-dp-row"><span class="fg-dp-rl">Sunrise</span><span class="fg-dp-rv">{sunriseTime}</span></div>
+                  <div class="fg-dp-row"><span class="fg-dp-rl">Solar noon</span><span class="fg-dp-rv">{solarNoonTime}</span></div>
+                  <div class="fg-dp-row"><span class="fg-dp-rl">Sunset</span><span class="fg-dp-rv">{sunsetTime}</span></div>
+                  <div class="fg-dp-row"><span class="fg-dp-rl">WBGT solar contribution</span><span class="fg-dp-rv">+{wbgtSolarContrib}°C</span></div>
+                </div>
+              {/if}
+              <div class="fg-dp-threshold">0–200 Low · 200–600 Moderate · 600–900 High · &gt;900 Extreme (W/m²)</div>
+            </div>
+          {/if}
+
+          <!-- Model row at bottom of overlay -->
+          <div class="fg-model-row">
+            <select class="fg-model-select" bind:value={selectedModel} on:change={refreshData}>
+              {#each MODELS as m}<option value={m.key}>{m.label}</option>{/each}
+            </select>
+            <label class="fg-worst-toggle {!license.valid?'fg-toggle-disabled':''}">
+              <input type="checkbox" bind:checked={worstCaseMode} on:change={refreshData} disabled={!license.valid}/>
+              <span>Worst-case ⚡</span>
+              {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}
+            </label>
+          </div>
+
+        {:else if tab === 'sos'}
+          {#if !license.valid}
+            <div class="fg-gate"><div class="fg-gate-icon">🚨</div><div class="fg-gate-title">SOS — Pro Feature</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
+          {:else}
+            <div class="fg-section-hd">🚨 Emergency Response</div>
+            <div class="fg-emg-card">
+              <div class="fg-emg-warn">⚠ Heat Stress Is Life-Threatening</div>
+              <div class="fg-emg-section-hd">🔴 SYMPTOMS (every 2 hours)</div>
+              <div class="fg-emg-symptoms">{#each HEAT_STRESS_SYMPTOMS as s}<span class="fg-emg-symptom">● {s}</span>{/each}</div>
+              <div class="fg-emg-section-hd">🚑 RESPONSE STEPS</div>
+              {#each EMERGENCY_RESPONSE as step, i}
+                <div class="fg-emg-step {step.includes('SEVERE')?'fg-emg-critical':''}">
+                  <span class="fg-emg-n">{i+1}</span> {step}
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+        {:else if tab === 'report'}
+          {#if !license.valid}
+            <div class="fg-gate"><div class="fg-gate-icon">📄</div><div class="fg-gate-title">Reports — Pro Feature</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Upgrade at fieldguard-hse.com</a></div>
+          {:else}
+            <div class="fg-section-hd">📄 ISO 7933 Weekly Report</div>
+            <div class="fg-form-grid">
+              <label>Project<input bind:value={reportMeta.projectName} placeholder="Project Name"/></label>
+              <label>Country<input bind:value={reportMeta.country} placeholder="Oman, UAE…"/></label>
+              <label>Client<input bind:value={reportMeta.clientName}/></label>
+              <label>Contractor<input bind:value={reportMeta.contractorName}/></label>
+              <label>HSE Manager<input bind:value={reportMeta.hseManagerName}/></label>
+              <label>FIDIC<select bind:value={reportMeta.fidic}><option>ELIGIBLE</option><option>NOT ELIGIBLE</option><option>UNDER REVIEW</option></select></label>
+            </div>
+            <button class="fg-action-btn" on:click={generateReport}>📋 Generate Report</button>
+            {#if reportText}
+              <div class="fg-report-box">
+                <div class="fg-report-toolbar"><span>Report ready</span><button class="fg-mini-btn" on:click={copyReport}>📋 Copy</button><button class="fg-mini-btn" on:click={downloadReport}>⬇ .txt</button></div>
+                <pre class="fg-report-pre">{reportText}</pre>
+              </div>
+            {/if}
+          {/if}
+
+        {:else if tab === 'settings'}
+          <div class="fg-setting-group fg-license-group">
+            <div class="fg-setting-hd">🔑 License</div>
+            {#if license.valid}
+              <div class="fg-license-active"><span class="fg-license-badge">✓ PRO</span><span class="fg-license-info">{license.tier?.toUpperCase()} · expires {license.expires?.slice(0,10)}</span><button class="fg-deact-btn" on:click={deactivateLicense}>Deactivate</button></div>
+            {:else}
+              <div class="fg-license-free-box"><div class="fg-free-tag">FREE TIER</div><div class="fg-free-list">⚡ Multi-model worst-case<br/>📄 ISO 7933 reports<br/>🚨 SOS emergency tab<br/>🎛 Custom thresholds</div><a class="fg-gate-btn" href="https://fieldguard-hse.com" target="_blank">Get Pro</a></div>
+              <div class="fg-key-row"><input class="fg-key-input" bind:value={licenseKeyInput} placeholder="Paste license key…" disabled={licenseLoading}/><button class="fg-key-btn" on:click={activateLicense} disabled={licenseLoading||!licenseKeyInput.trim()}>{licenseLoading?'…':'Activate'}</button></div>
+              {#if licenseError}<div class="fg-key-error">⚠ {licenseError}</div>{/if}
+            {/if}
+          </div>
+          <div class="fg-setting-group">
+            <div class="fg-setting-hd">👷 PPE Profile</div>
+            {#each Object.entries(PPE_PROFILES) as [key, prof]}
+              <label class="fg-radio-row"><input type="radio" bind:group={settings.ppeProfile} value={key} on:change={saveSettings}/><span>{prof.label}</span><span class="fg-adj-chip">+{prof.adjustment}°C</span></label>
+            {/each}
+          </div>
+          {#if license.valid}
+          <div class="fg-setting-group">
+            <div class="fg-setting-hd">🌡 WBGT · 💨 Wind · 🌧 Rain Thresholds</div>
+            <label class="fg-slider-label">WBGT Warn (°C)<div class="fg-slider-row"><input type="range" min="28" max="38" step="0.5" bind:value={settings.wbgtWarnC} on:change={saveSettings}/><span>{settings.wbgtWarnC}°C</span></div></label>
+            <label class="fg-slider-label">WBGT Danger (°C)<div class="fg-slider-row"><input type="range" min="30" max="42" step="0.5" bind:value={settings.wbgtDangerC} on:change={saveSettings}/><span>{settings.wbgtDangerC}°C</span></div></label>
+            <label class="fg-slider-label">Wind Warn (m/s)<div class="fg-slider-row"><input type="range" min="5" max="25" step="0.5" bind:value={settings.windWarnMs} on:change={saveSettings}/><span>{settings.windWarnMs} m/s</span></div></label>
+            <label class="fg-slider-label">Wind Danger (m/s)<div class="fg-slider-row"><input type="range" min="10" max="35" step="0.5" bind:value={settings.windDangerMs} on:change={saveSettings}/><span>{settings.windDangerMs} m/s</span></div></label>
+            <label class="fg-slider-label">Rain Warn (mm/h)<div class="fg-slider-row"><input type="range" min="1" max="25" step="0.5" bind:value={settings.rainWarnMmh} on:change={saveSettings}/><span>{settings.rainWarnMmh} mm/h</span></div></label>
+            <label class="fg-slider-label">Rain Danger (mm/h)<div class="fg-slider-row"><input type="range" min="5" max="60" step="1" bind:value={settings.rainDangerMmh} on:change={saveSettings}/><span>{settings.rainDangerMmh} mm/h</span></div></label>
+            <button class="fg-action-btn fg-action-btn-sec" on:click={resetSettings}>↩ Reset Defaults</button>
+          </div>
+          {/if}
+          <div class="fg-setting-group">
+            <div class="fg-setting-hd">🔔 Alerts</div>
+            <label class="fg-toggle-row"><input type="checkbox" bind:checked={settings.soundAlerts} on:change={saveSettings}/>Browser notifications</label>
+            <label class="fg-toggle-row {!license.valid?'fg-locked':''}"><input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!license.valid}/>Auto-refresh 15 min {#if !license.valid}<span class="fg-pro-chip">PRO</span>{/if}</label>
+          </div>
+        {/if}
+
+      </div>
+    </div>
+  {/if}
 
   <!-- ══ HEADER ══════════════════════════════════════════════ -->
   <div class="fg-header">
@@ -531,7 +752,8 @@
   let locationName = '';
   let loading = false, error = '';
   let currentTime = '';
-  let expandedCard: string | null = 'heat'; // open heat by default
+  let expandedCard: string | null = 'heat'; // used in desktop full panel
+  let activeDetail: string | null = null; // used in bottom bar pill taps
 
   // ── Weather state ──────────────────────────────────────────
   let rawData: WeatherInputs | null = null;
@@ -631,6 +853,13 @@
 
   function toggleCard(id: string) {
     expandedCard = expandedCard === id ? null : id;
+  }
+
+  // For the bottom bar pills — toggles the overlay detail panel
+  function toggleDetail(id: string) {
+    activeDetail = activeDetail === id ? null : id;
+    // Also sync with main panel expanded card
+    expandedCard = activeDetail;
   }
 
   // Called from mobile widget bar pills — switches to full panel view
@@ -1253,5 +1482,137 @@
 
   /* Windy controls widget bar visibility via plugin__mobile-header class
      We don't need to hide it — Windy handles it based on mobileUI: 'small' */
+
+
+  /* ══ BOTTOM PILL BAR ════════════════════════════════════════ */
+  .fg-bar {
+    background: rgba(8, 15, 35, 0.92) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-top: 2px solid #e8962a !important;
+    border-radius: 14px 14px 0 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+  .fg-bar > * { display: flex; align-items: center; gap: 4px; padding: 6px 8px; overflow-x: auto; scrollbar-width: none; }
+  .fg-bar > *::-webkit-scrollbar { display: none; }
+
+  /* The 4 pills */
+  .fg-bar-pill {
+    flex: 1; min-width: 60px; max-width: 80px;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 7px 4px;
+    background: rgba(15, 29, 66, 0.7);
+    border: 1px solid var(--pc, #2d4080);
+    border-radius: 10px; cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--pc, #2d4080) 20%, transparent);
+  }
+  .fg-bar-pill:active { transform: scale(0.94); }
+  .fg-bar-pill.fg-bar-pill-active {
+    background: rgba(25, 45, 90, 0.9);
+    border-width: 2px;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--pc, #2d4080) 40%, transparent);
+  }
+  .fg-bar-pill-icon { font-size: 16px; line-height: 1; }
+  .fg-bar-pill-val  { font-size: 14px; font-weight: 800; color: #fff; line-height: 1.1; display: flex; align-items: baseline; gap: 1px; }
+  .fg-bar-unit      { font-size: 8px; color: #8a9cc8; }
+  .fg-bar-pill-lbl  { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Ban badge */
+  .fg-bar-ban {
+    font-size: 18px; flex-shrink: 0;
+    animation: pulse-ban 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-ban { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Refresh button */
+  .fg-bar-refresh {
+    width: 28px; height: 28px; flex-shrink: 0; margin-left: auto;
+    background: rgba(15,29,66,0.6); border: 1px solid rgba(45,64,128,0.5);
+    border-radius: 8px; cursor: pointer; color: #4a6090;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .fg-bar-refresh:hover { border-color: #e8962a; color: #e8962a; }
+
+  /* Loading / tap */
+  .fg-bar-loading { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8a9cc8; padding: 10px 12px; }
+  .fg-bar-spin { width: 14px; height: 14px; border: 2px solid rgba(45,64,128,0.5); border-top-color: #e8962a; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .fg-bar-tap { font-size: 12px; color: #8a9cc8; background: transparent; border: 1px dashed #2d4080; border-radius: 8px; padding: 8px 16px; cursor: pointer; width: 100%; }
+
+  /* ══ DETAIL OVERLAY ═════════════════════════════════════════ */
+  .fg-overlay {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    top: 0;
+    z-index: 9999;
+    background: rgba(5, 10, 25, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .fg-overlay-panel {
+    background: rgba(10, 18, 42, 0.97);
+    backdrop-filter: blur(20px);
+    border-top: 2px solid #e8962a;
+    border-radius: 18px 18px 0 0;
+    padding: 12px 10px 20px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    animation: slideUp 0.22s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .fg-overlay-close {
+    position: absolute; top: 10px; right: 12px;
+    background: rgba(45,64,128,0.5); border: 1px solid #2d4080;
+    color: #8a9cc8; width: 28px; height: 28px;
+    border-radius: 8px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .fg-overlay-loc {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: #8a9cc8;
+    padding: 0 0 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 8px;
+    padding-right: 36px;
+  }
+  .fg-overlay-time { margin-left: auto; color: #4a6090; }
+
+  /* Tabs inside overlay */
+  .fg-overlay-tabs {
+    display: flex; gap: 4px; margin-bottom: 10px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .fg-overlay-tabs::-webkit-scrollbar { display: none; }
+  .fg-overlay-tab {
+    padding: 5px 12px; background: rgba(15,29,66,0.6);
+    border: 1px solid #2d4080; border-radius: 20px;
+    color: #4a6090; font-size: 11px; cursor: pointer; white-space: nowrap;
+    transition: all 0.15s; flex-shrink: 0;
+  }
+  .fg-overlay-tab.active { background: #e8962a; color: #0f1d42; font-weight: 700; border-color: #e8962a; }
+
+  /* 4 pill selectors inside overlay */
+  .fg-overlay-pills {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 5px; margin-bottom: 10px;
+  }
+  .fg-ov-pill {
+    padding: 6px 4px; background: rgba(15,29,66,0.6);
+    border: 1px solid var(--pc, #2d4080); border-radius: 8px;
+    font-size: 11px; color: #8a9cc8; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: all 0.15s;
+  }
+  .fg-ov-pill.active { background: rgba(25,45,90,0.9); border-width: 2px; }
+  .fg-ov-pill span { font-size: 9px; font-weight: 700; }
+
+  /* Hide the old full-panel content on plugin__content — 
+     the overlay handles everything now */
+  .fg .fg-status-grid { display: none; }
+  .fg .fg-detail-panel:not(.fg-overlay-panel .fg-detail-panel) { display: none; }
 
 </style>
