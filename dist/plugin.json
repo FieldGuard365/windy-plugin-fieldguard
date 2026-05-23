@@ -1,16 +1,16 @@
 {
   "name": "windy-plugin-fieldguard",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Calculates Heat Index (WBGT), Wind & Rain alerts across all Windy models. Worst-case scenario engine, customizable thresholds, and ISO 7933-compliant weekly PDF reports.",
   "author": "FieldGuard HSE",
   "desktopUI": "rhpane",
   "mobileUI": "small",
-  "desktopWidth": 360,
+  "desktopWidth": 320,
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1779468074424,
-  "builtReadable": "2026-05-22T16:41:14.424Z"
+  "built": 1779525845330,
+  "builtReadable": "2026-05-23T08:44:05.330Z"
 }

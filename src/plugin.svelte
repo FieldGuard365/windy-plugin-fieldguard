@@ -4,7 +4,8 @@
 
     <!-- Logo pill -->
     <div class="fg-widget-logo">
-      <img src="./assets/logo-white.png" alt="FG" class="fg-widget-logo-img" />
+      <img src="./assets/logo-white.png" alt="FG" class="fg-widget-logo-img"
+           onerror="this.style.display='none'" />
     </div>
 
     {#if loading}
@@ -37,8 +38,8 @@
 
       <!-- Solar pill -->
       <button class="fg-pill" style="--pc:{solarColor}" on:click={() => openFullPanel('solar')}>
-        <span class="fg-pill-icon">{dayPhaseIcon}</span>
-        <span class="fg-pill-val">{isNight ? dayPhaseLabel : rawData?.solarWm2+'<small>W</small>'}</span>
+        <span class="fg-pill-icon">{isNight ? '🌙' : '☀'}</span>
+        <span class="fg-pill-val">{isNight ? 'Night' : rawData?.solarWm2+' W'}</span>
         <span class="fg-pill-zone" style="color:{solarColor}">{solarLabel}</span>
       </button>
 
@@ -66,7 +67,10 @@
 
   <!-- ══ HEADER ══════════════════════════════════════════════ -->
   <div class="fg-header">
-    <img class="fg-logo" src="./assets/logo-white.png" alt="FieldGuard" />
+    <img class="fg-logo" src="./assets/logo-white.png" 
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+         alt="FieldGuard" />
+    <div class="fg-logo-fallback" style="display:none">🛡️</div>
     <div class="fg-header-text">
       <span class="fg-title">FieldGuard</span>
       <span class="fg-subtitle">Real-time Heat & Weather Safety</span>
@@ -86,10 +90,11 @@
     <span class="fg-loc-pin">📍</span>
     <span class="fg-loc-name">{locationName || (lat.toFixed(3)+', '+lon.toFixed(3))}</span>
     <span class="fg-loc-time">{currentTime}</span>
-    <span class="fg-phase-badge fg-phase-{dayPhase}"
-          title="Sunrise {sunriseTime} · Sunset {sunsetTime} · Sun {solarElevDeg}°">
-      {dayPhaseIcon} {dayPhaseLabel}
-    </span>
+    {#if isNight}
+      <span class="fg-night-badge">🌙 Night</span>
+    {:else}
+      <span class="fg-day-badge">☀ Day</span>
+    {/if}
   </div>
 
   <!-- ══ TAB BAR ═════════════════════════════════════════════ -->
@@ -169,10 +174,10 @@
           style="--zone-color:{solarColor};--zone-bg:#0f1d42"
           on:click={() => toggleCard('solar')}
         >
-          <div class="fg-sb-icon">{dayPhaseIcon}</div>
+          <div class="fg-sb-icon">{isNight ? '🌙' : '☀'}</div>
           <div class="fg-sb-zone" style="color:{solarColor}">{solarLabel}</div>
           <div class="fg-sb-val">{rawData?.solarWm2} W/m²</div>
-          <div class="fg-sb-label">{isNight ? dayPhaseLabel + ' — no solar load' : 'UV Index ~'+uvIndex}</div>
+          <div class="fg-sb-label">{isNight ? 'Night — no solar' : 'UV Index ~'+uvIndex}</div>
           <div class="fg-sb-chevron">{expandedCard==='solar'?'▲':'▼'}</div>
         </button>
 
@@ -241,22 +246,14 @@
       {#if expandedCard === 'solar'}
         <div class="fg-detail-panel" style="border-color:{solarColor}">
           <div class="fg-dp-title" style="color:{solarColor}">
-            {isNight ? dayPhaseIcon + ' ' + dayPhaseLabel + ' — No Solar Load' : '☀ Solar Radiation — '+solarLabel}
+            {isNight ? '🌙 Night — No Solar Radiation' : '☀ Solar Radiation — '+solarLabel}
           </div>
           {#if isNight}
             <div class="fg-dp-night-msg">
-              <div class="fg-dp-night-icon">{dayPhaseIcon}</div>
-              <div>
-                {#if dayPhase === 'night'}
-                  Solar radiation is <strong>zero</strong> — full night.
-                {:else if dayPhase === 'dawn'}
-                  <strong>Dawn</strong> — sun is rising. Solar load is negligible but increasing.
-                {:else}
-                  <strong>Dusk</strong> — sun is setting. Solar load has dropped to negligible levels.
-                {/if}
-              </div>
+              <div class="fg-dp-night-icon">🌙</div>
+              <div>Solar radiation is <strong>zero</strong> during night hours.</div>
               <div>WBGT calculation uses <strong>nocturnal formula</strong> — only temperature, humidity and wind contribute to heat stress.</div>
-              <div class="fg-dp-night-sub">Sunrise: {sunriseTime} &nbsp;·&nbsp; Sunset: {sunsetTime} &nbsp;·&nbsp; Sun: {solarElevDeg}°</div>
+              <div class="fg-dp-night-sub">Sunrise: ~{sunriseTime} &nbsp;·&nbsp; Sunset: ~{sunsetTime}</div>
             </div>
           {:else}
             <div class="fg-dp-metrics">
@@ -534,7 +531,7 @@
   let locationName = '';
   let loading = false, error = '';
   let currentTime = '';
-  let expandedCard: string | null = null;
+  let expandedCard: string | null = 'heat'; // open heat by default
 
   // ── Weather state ──────────────────────────────────────────
   let rawData: WeatherInputs | null = null;
@@ -551,11 +548,6 @@
 
   // ── Solar / day-night state ────────────────────────────────
   let isNight = false;
-  // 4-phase day cycle: 'day' | 'dawn' | 'dusk' | 'night'
-  let dayPhase: 'day' | 'dawn' | 'dusk' | 'night' = 'day';
-  let dayPhaseIcon = '☀';
-  let dayPhaseLabel = 'Day';
-  let dayPhaseColor = '#f59e0b';
   let solarElevDeg = 0;
   let solarPct = 0;
   let uvIndex = 0;
@@ -567,8 +559,6 @@
   let solarLabel = 'LOW';
 
   // ── Solar calculations (day/night aware) ───────────────────
-  // LST = Local Solar Time at the given longitude (NOT clock time).
-  // For longitudes within ~7.5° of a standard zone meridian, LST ≈ clock time.
   function calcSolarPosition(latDeg: number, lonDeg: number, date: Date) {
     const JD = date.getTime() / 86400000 + 2440587.5;
     const n  = JD - 2451545.0;
@@ -579,28 +569,25 @@
     const sinDec = Math.sin(epsilon) * Math.sin(lambda);
     const dec    = Math.asin(sinDec);
     const UT = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+    const LSTM = 15 * Math.round(lonDeg / 15);
     const B   = (360/365) * (n - 81) * Math.PI / 180;
     const EoT = 9.87*Math.sin(2*B) - 7.53*Math.cos(B) - 1.5*Math.sin(B);
-    // FIXED: LST = UT + 4 min/° longitude offset + Equation of Time.
-    // Previous formula subtracted the standard meridian (LSTM), which made LST
-    // collapse back to UTC and caused the sun to appear overhead at the wrong time.
-    const LSTraw = UT + lonDeg / 15 + EoT / 60;
-    const LST = ((LSTraw % 24) + 24) % 24;
+    const TC  = 4*(lonDeg - LSTM) + EoT;
+    const LST = UT + TC/60;
     const HRA = (LST - 12) * 15 * Math.PI / 180;
     const latRad = latDeg * Math.PI / 180;
     const sinElev = Math.sin(latRad)*Math.sin(dec) + Math.cos(latRad)*Math.cos(dec)*Math.cos(HRA);
     const elev = Math.asin(sinElev) * 180 / Math.PI;
-    // sunrise/sunset hour angle (in LST)
+    // sunrise/sunset hour angle
     const cosHA_rise = -Math.tan(latRad) * Math.tan(dec);
-    const polar = cosHA_rise < -1 || cosHA_rise > 1;
-    const HA_rise = polar ? NaN : Math.acos(cosHA_rise) * 180 / Math.PI;
-    const sunrise_LST = polar ? NaN : 12 - HA_rise/15;
-    const sunset_LST  = polar ? NaN : 12 + HA_rise/15;
-    return { elev, LST, sunrise_LST, sunset_LST, solarNoon_LST: 12, polar };
+    const HA_rise = Math.acos(Math.max(-1, Math.min(1, cosHA_rise))) * 180 / Math.PI;
+    const sunrise_LST = 12 - HA_rise/15;
+    const sunset_LST  = 12 + HA_rise/15;
+    return { elev, LST, sunrise_LST, sunset_LST, solarNoon_LST: 12 };
   }
 
   function fmtLocalSolarTime(lst: number): string {
-    if (!isFinite(lst)) return '--:--';
+    // convert solar time to UTC for display (approximate)
     const h = Math.floor(((lst % 24) + 24) % 24);
     const m = Math.floor((lst - Math.floor(lst)) * 60);
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
@@ -610,41 +597,7 @@
     const now = new Date();
     const sol = calcSolarPosition(lat, lon, now);
 
-    // 4-phase classification using sun elevation
-    // Day:   elev > +0.5°       — sun clearly up, full solar load
-    // Dawn:  -6° < elev ≤ +0.5° AND sun is rising  (civil twilight, morning)
-    // Dusk:  -6° < elev ≤ +0.5° AND sun is setting (civil twilight, evening)
-    // Night: elev ≤ -6°          — civil night
-    const elev = sol.elev;
-    if (elev > 0.5) {
-      dayPhase = 'day';
-      dayPhaseIcon = '☀';
-      dayPhaseLabel = 'Day';
-      dayPhaseColor = '#f59e0b';
-    } else if (elev > -6) {
-      // Determine rising vs setting by sampling 10 minutes earlier
-      const earlier = new Date(now.getTime() - 10 * 60 * 1000);
-      const elevPrev = calcSolarPosition(lat, lon, earlier).elev;
-      if (elev > elevPrev) {
-        dayPhase = 'dawn';
-        dayPhaseIcon = '🌅';
-        dayPhaseLabel = 'Dawn';
-        dayPhaseColor = '#fb923c';
-      } else {
-        dayPhase = 'dusk';
-        dayPhaseIcon = '🌇';
-        dayPhaseLabel = 'Dusk';
-        dayPhaseColor = '#fb923c';
-      }
-    } else {
-      dayPhase = 'night';
-      dayPhaseIcon = '🌙';
-      dayPhaseLabel = 'Night';
-      dayPhaseColor = '#1e3a8a';
-    }
-    // Treat anything other than 'day' as no-solar-load for solar engine.
-    // (dawn/dusk solar W/m² is negligible — keep existing zero-out behaviour.)
-    isNight = dayPhase !== 'day';
+    isNight = sol.elev < -0.833; // standard civil twilight threshold
     solarElevDeg = Math.round(sol.elev * 10) / 10;
 
     // Sun arc percentage (0 = sunrise, 100 = sunset)
@@ -669,9 +622,7 @@
 
     // Solar risk label and color
     const w = inputs.solarWm2;
-    if (dayPhase === 'night')     { solarColor = '#1e3a8a'; solarLabel = 'NIGHT'; }
-    else if (dayPhase === 'dawn') { solarColor = '#fb923c'; solarLabel = 'DAWN'; }
-    else if (dayPhase === 'dusk') { solarColor = '#fb923c'; solarLabel = 'DUSK'; }
+    if (isNight)       { solarColor = '#a5b4fc'; solarLabel = 'NIGHT'; }
     else if (w < 200)  { solarColor = '#16a34a'; solarLabel = 'LOW'; }
     else if (w < 600)  { solarColor = '#d97706'; solarLabel = 'MODERATE'; }
     else if (w < 900)  { solarColor = '#dc2626'; solarLabel = 'HIGH'; }
@@ -957,6 +908,7 @@
     border-bottom: 2px solid #e8962a;
   }
   .fg-logo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; }
+  .fg-logo-fallback { width: 30px; height: 30px; font-size: 22px; align-items: center; justify-content: center; flex-shrink: 0; }
   .fg-header-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .fg-title { font-size: 15px; font-weight: 800; color: #fff; line-height: 1.1; }
   .fg-subtitle { font-size: 8px; color: #8a9cc8; text-transform: uppercase; letter-spacing: 1px; }
@@ -980,19 +932,8 @@
   .fg-loc-pin { font-size: 11px; }
   .fg-loc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fg-loc-time { color: #4a6090; flex-shrink: 0; }
-  .fg-phase-badge {
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-size: 9px;
-    font-weight: 700;
-    flex-shrink: 0;
-    letter-spacing: 0.3px;
-    cursor: help;
-  }
-  .fg-phase-day   { background: #78350f; color: #fcd34d; }   /* amber */
-  .fg-phase-dawn  { background: #7c2d12; color: #fed7aa; }   /* orange-rose */
-  .fg-phase-dusk  { background: #7c2d12; color: #fed7aa; }   /* orange-rose */
-  .fg-phase-night { background: #1e1b4b; color: #a5b4fc; }   /* indigo */
+  .fg-day-badge  { background: #78350f; color: #fcd34d; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .fg-night-badge { background: #1e1b4b; color: #a5b4fc; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
 
   /* ── Tabs ────────────────────────────────────────────────── */
   .fg-tabs {
@@ -1031,17 +972,18 @@
   /* ── Status button grid ──────────────────────────────────── */
   .fg-status-grid {
     display: grid; grid-template-columns: 1fr 1fr;
-    gap: 6px; padding: 8px 10px;
+    gap: 8px; padding: 8px 10px 4px;
     background: transparent;
   }
   .fg-status-btn {
-    background: rgba(15, 29, 66, 0.72);
+    background: rgba(15, 29, 66, 0.75);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--zone-color, rgba(45, 64, 128, 0.7));
-    border-radius: 10px; padding: 10px 8px;
+    border-radius: 12px; padding: 14px 8px;
     cursor: pointer; text-align: center;
     transition: all 0.15s; position: relative;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    width: 100%;
   }
   .fg-status-btn:active { transform: scale(0.97); }
   .fg-status-btn.expanded {
@@ -1049,25 +991,25 @@
     background: rgba(20, 38, 80, 0.85);
     box-shadow: 0 0 14px color-mix(in srgb, var(--zone-color) 40%, transparent);
   }
-  .fg-sb-icon { font-size: 18px; line-height: 1; }
-  .fg-sb-zone { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-  .fg-sb-val  { font-size: 16px; font-weight: 800; color: #fff; line-height: 1.2; }
+  .fg-sb-icon { font-size: 22px; line-height: 1; }
+  .fg-sb-zone { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+  .fg-sb-val  { font-size: 18px; font-weight: 800; color: #fff; line-height: 1.2; }
   .fg-sb-label { font-size: 9px; color: #8a9cc8; }
   .fg-sb-chevron { font-size: 8px; color: #4a6090; margin-top: 2px; }
 
   /* ── Detail panels ───────────────────────────────────────── */
   .fg-detail-panel {
-    margin: 0 10px 6px; padding: 12px;
-    background: rgba(15, 29, 66, 0.88);
+    margin: 0 8px 6px; padding: 14px;
+    background: rgba(12, 24, 58, 0.92);
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border: 1px solid; border-radius: 10px;
+    border: 1px solid; border-radius: 12px;
     animation: slideDown 0.18s ease-out;
   }
   @keyframes slideDown { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
-  .fg-dp-title { font-size: 12px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .fg-dp-title { font-size: 13px; font-weight: 800; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
   .fg-dp-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 10px; }
   .fg-dp-m { background: rgba(8, 15, 35, 0.6); border-radius: 7px; padding: 7px 4px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
-  .fg-dp-v { font-size: 14px; font-weight: 700; color: #fff; }
+  .fg-dp-v { font-size: 15px; font-weight: 800; color: #fff; }
   .fg-dp-l { font-size: 9px; color: #4a6090; text-transform: uppercase; }
   .fg-dp-schedule { background: rgba(8, 15, 35, 0.55); border-radius: 7px; padding: 8px; margin-bottom: 8px; }
   .fg-dp-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; border-bottom: 1px solid #1a2b5e; }
@@ -1083,8 +1025,9 @@
 
   /* ── Solar panel extras ──────────────────────────────────── */
   .fg-dp-night-msg {
-    background: #1e1b4b; border-radius: 7px; padding: 12px; text-align: center;
-    display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: #8a9cc8;
+    background: rgba(30, 27, 75, 0.7); border-radius: 7px; padding: 12px; text-align: center;
+    display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: #c7d2fe;
+    border: 1px solid rgba(165, 180, 252, 0.2);
   }
   .fg-dp-night-icon { font-size: 28px; }
   .fg-dp-night-msg strong { color: #a5b4fc; }
@@ -1098,11 +1041,12 @@
   /* ── Model row ───────────────────────────────────────────── */
   .fg-model-row {
     display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px;
-    background: rgba(10, 18, 40, 0.78);
+    padding: 8px 10px 10px;
+    background: rgba(10, 18, 40, 0.82);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid rgba(255,255,255,0.07);
     font-size: 11px; color: #8a9cc8;
+    margin-bottom: 2px;
   }
   .fg-model-select { background: #1a2b5e; border: 1px solid #2d4080; color: #e8edf8; padding: 3px 6px; border-radius: 5px; font-size: 11px; }
   .fg-worst-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; margin-left: auto; font-size: 11px; }
@@ -1307,9 +1251,7 @@
   }
   .fg-widget-refresh:hover { border-color: #e8962a; color: #e8962a; }
 
-  /* On desktop the widget bar is hidden — it's only for mobile small mode */
-  @media (min-width: 768px) {
-    .fg-widget-bar { display: none; }
-  }
+  /* Windy controls widget bar visibility via plugin__mobile-header class
+     We don't need to hide it — Windy handles it based on mobileUI: 'small' */
 
 </style>
