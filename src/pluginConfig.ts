@@ -2,7 +2,7 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-fieldguard',
-    version: '1.0.9',
+    version: '2.1.0',
     icon: '🛡️',
     title: 'FieldGuard — HSE Field Safety',
     description:
