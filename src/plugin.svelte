@@ -451,14 +451,76 @@
   function isPro(): boolean {
     return license.valid && !!license.expires && new Date(license.expires) > new Date();
   }
-  function loadLicense() {
+  // ── LICENSE: server-controlled ─────────────────────────────
+  // Re-validates with server on every open so you can revoke/extend
+  // keys from fieldguard-hse.com without republishing the plugin.
+  // Falls back to cached localStorage if server unreachable.
+  async function loadLicense() {
     try {
       const s = localStorage.getItem('fg_license');
-      if (s) {
-        const p: LicenseData = JSON.parse(s);
-        if (p.valid && new Date(p.expires) > new Date()) { license = p; worstCaseMode = true; }
+      if (!s) return;
+      const cached: LicenseData = JSON.parse(s);
+      if (!cached.valid) return;
+
+      // Show cached license immediately (good UX)
+      if (new Date(cached.expires) > new Date()) {
+        license = cached;
       }
-    } catch {}
+
+      // Re-validate with server in background
+      try {
+        const res = await fetch('https://fieldguard-hse.com/api/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: cached.key ?? cached.token ?? '',
+            revalidate: true,
+            fingerprint: navigator.userAgent,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.valid) {
+            // Update with fresh server data (new expiry, tier changes etc)
+            license = { valid: true, tier: data.tier, expires: data.expires, token: data.token, key: cached.key };
+            localStorage.setItem('fg_license', JSON.stringify(license));
+            worstCaseMode = true;
+          } else {
+            // Server says key is revoked/expired — clear it
+            license = { valid: false };
+            localStorage.removeItem('fg_license');
+            worstCaseMode = false;
+          }
+        }
+        // If server unreachable (network error), keep cached license
+      } catch { /* server unreachable — keep cached */ }
+
+    } catch { /* corrupt localStorage — clear */ localStorage.removeItem('fg_license'); }
+  }
+
+  // ── REMOTE CONFIG: fetch settings from server ───────────────
+  // Lets you push config changes (zone thresholds, ban hours,
+  // announcements) to all users without republishing the plugin.
+  async function loadRemoteConfig() {
+    try {
+      const res = await fetch('https://fieldguard-hse.com/api/plugin-config', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        // Include version so server can push version-specific config
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) return;
+      const cfg = await res.json();
+      // Apply any server-pushed overrides
+      if (cfg.banStart)         settings.banStart = cfg.banStart;
+      if (cfg.banEnd)           settings.banEnd = cfg.banEnd;
+      if (cfg.banMonths)        settings.banMonths = cfg.banMonths;
+      if (cfg.wbgtWarnC)        settings.wbgtWarnC = cfg.wbgtWarnC;
+      if (cfg.wbgtDangerC)      settings.wbgtDangerC = cfg.wbgtDangerC;
+      if (cfg.announcement)     console.info('[FieldGuard]', cfg.announcement);
+      // Cache remote config locally
+      localStorage.setItem('fg_remote_config', JSON.stringify(cfg));
+    } catch { /* use local settings if server unreachable */ }
   }
   async function activateLicense() {
     const key = licenseKeyInput.trim();
@@ -472,7 +534,7 @@
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
       if (data.valid) {
-        license = { valid:true, tier:data.tier, expires:data.expires, token:data.token };
+        license = { valid:true, tier:data.tier, expires:data.expires, token:data.token, key };
         localStorage.setItem('fg_license', JSON.stringify(license));
         licenseKeyInput = ''; worstCaseMode = true; refreshData();
       } else {
@@ -671,6 +733,7 @@
   onMount(() => {
     try { const s=localStorage.getItem('fieldguard_settings'); if(s) settings={...DEFAULT_SETTINGS,...JSON.parse(s)}; } catch {}
     loadLicense();
+    loadRemoteConfig(); // fetch server config without republishing
     try { const c=map.getCenter(); lat=c.lat; lon=c.lng; } catch {}
     map.on('click', (e:any) => { lat=e.latlng.lat; lon=e.latlng.lng; refreshData(); });
     refreshData();
@@ -692,35 +755,31 @@
     --sl:#8a9cc8; --sl2:#4a6090;
   }
 
-  /* ── ROOT: embedded mode — plain div, we control position ──
-     SoarCalc pattern: position absolute, bottom-right corner,
-     above Windy's timeline and model bars (~160px from bottom)
+  /* ── ROOT: embedded mode ─────────────────────────────────────
+     Do NOT use position:absolute — Windy places the embedded
+     container itself. We just style the contents.
+     Windy gives ~300px width by default for embedded plugins.
   ──────────────────────────────────────────────────────────── */
   .fg {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 12px; color: #e8edf8;
     background: rgba(8,14,30,0.97);
-    /* Desktop: positioned bottom-right like SoarCalc */
-    position: absolute;
-    bottom: 160px;
-    right: 10px;
-    width: 300px;
-    border-radius: 6px;
-    border: 1px solid rgba(232,150,42,0.5);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
-    overflow: hidden;
-    z-index: 100;
-  }
-  /* Mobile: full width, no absolute positioning — Windy handles it */
-  #device-mobile .fg {
-    position: static;
     width: 100%;
+    min-width: 260px;
+    border-radius: 6px;
+    border: 1px solid rgba(232,150,42,0.4);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  /* Mobile small mode — full width strip */
+  #device-mobile .fg {
     border-radius: 0;
     border-left: none;
     border-right: none;
     border-top: 2px solid var(--amb);
     border-bottom: none;
     box-shadow: none;
+    min-width: 0;
   }
 
   /* ── HEADER ──────────────────────────────────────────────── */
