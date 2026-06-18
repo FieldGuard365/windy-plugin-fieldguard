@@ -1,0 +1,18 @@
+{
+    "name": "windy-plugin-fieldguard",
+    "version": "3.0.4",
+    "description": "FieldGuard — HSE Field Safety Monitor for Windy.com",
+    "main": "dist/plugin.min.js",
+    "type": "module",
+    "scripts": {
+        "build": "set SERVE=false && rollup -c",
+        "build:win": "set SERVE=false && rollup -c",
+        "start": "rollup -w -c"
+    },
+    "keywords": ["windy", "plugin", "hse", "safety", "heat-stress", "wbgt", "fieldwork"],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@windycom/plugin-devtools": "^3.0.4"
+    }
+}

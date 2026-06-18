@@ -1,0 +1,40 @@
+name: Publish Plugin
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build plugin
+        run: npm run build
+        env:
+          SERVE: "false"
+
+      - name: Publish to windy-plugins.com
+        run: |
+          cd dist
+          echo "Creating plugin-info.json..."
+          echo "{\"repositoryName\": \"https://github.com/FieldGuard365/windy-plugin-fieldguard\", \"commitSha\": \"$(git rev-parse --short HEAD)\", \"repositoryOwner\": \"FieldGuard365\"}" > ./plugin-info.json
+          echo "Merging with plugin.json..."
+          jq -s '.[0] * .[1]' ./plugin.json ./plugin-info.json > ./plugin2.json
+          rm ./plugin.json && mv ./plugin2.json ./plugin.json
+          echo "Creating archive..."
+          tar cf ./plugin.tar --exclude='./plugin.tar' .
+          if [ -z "$WINDY_API_KEY" ]; then echo "ERROR: WINDY_API_KEY secret is not set" && exit 1; fi
+          echo "Uploading to windy-plugins.com..."
+          curl --fail-with-body -XPOST 'https://node.windy.com/plugins/v1.0/upload' \
+            -H "x-windy-api-key: ${{ secrets.WINDY_API_KEY }}" \
+            -F "plugin_archive=@./plugin.tar"
+          rm ./plugin.tar
+        env:
+          WINDY_API_KEY: ${{ secrets.WINDY_API_KEY }}
