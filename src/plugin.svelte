@@ -33,6 +33,27 @@
       <button class="fg-mini-btn" title="Refresh" on:click={refreshData}>🔄</button>
     </div>
 
+    <!-- SAVED SITES (multi-site + background monitor) -->
+    <div class="fg-sites">
+      {#each savedSites as s}
+        <button class="fg-site-chip {s.id === activeSiteId ? 'active' : ''}" on:click={() => selectSite(s)}>
+          <span class="fg-site-dot" style="background:{bgStatus[s.id]?.color || '#475569'}"></span>{s.name}<span class="fg-site-x" title="Remove" on:click|stopPropagation={() => removeSite(s)}>×</span>
+        </button>
+      {/each}
+      {#if canAddSite()}
+        <input class="fg-site-name" bind:value={newSiteName} placeholder="Name…" />
+        <button class="fg-site-add" title="Save current pin as a site" on:click={addCurrentSite}>＋ Save pin</button>
+      {:else if isPro}
+        <span class="fg-site-max">Max {maxSites()} sites on this licence</span>
+      {:else}
+        <a class="fg-site-locked" href="https://fieldguard-hse.com" target="_blank">＋ Save more sites — Pro</a>
+      {/if}
+    </div>
+
+    {#if isStale}
+      <div class="fg-stale">⚠ Offline — showing last saved reading from {staleTime}</div>
+    {/if}
+
     <div class="fg-model-row">
       <label style="margin:0">Model:</label>
       <select bind:value={selectedModel} on:change={refreshData}>
@@ -395,7 +416,9 @@
     </div>
 
     <div class="fg-card" style="border-color:#d97706">
-      <div class="fg-card-header">📋 Alerts Log (This Session)</div>
+      <div class="fg-card-header">📋 Alerts Log (This Session)
+        {#if alertLog.length > 0}<button class="fg-mini-btn" style="margin-left:auto" on:click={downloadCSV}>CSV</button>{/if}
+      </div>
       {#if alertLog.length === 0}
         <div class="fg-empty">No alerts triggered yet.</div>
       {:else}
@@ -585,7 +608,7 @@
       </label>
       <label class="fg-toggle-label">
         <input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!isPro} />
-        Auto-refresh every 15 minutes{#if !isPro} <span class="fg-pro-tag">PRO</span>{/if}
+        Auto-refresh + background site monitor (every 15 min, tab open){#if !isPro} <span class="fg-pro-tag">PRO</span>{/if}
       </label>
     </div>
 
@@ -652,6 +675,21 @@
   let alertLog: any[] = [];
   let reportText = '';
   let autoRefreshTimer: any = null;
+
+  // ── Saved sites (multi-site) + background monitoring ───────
+  interface SavedSite { id: string; name: string; lat: number; lon: number; }
+  let savedSites: SavedSite[] = [];
+  let activeSiteId = '';
+  let newSiteName = '';
+  let isStale = false, staleTime = '';
+  let bgStatus: Record<string, { color: string; label: string; time: string }> = {};
+  // Saved-site limit is tier-based — multi-site is a paid feature.
+  // Free = 1 site · Pro/Individual = 3 · Site = 10.
+  function maxSites(): number {
+    if (!isPro) return 1;
+    return licenseTier === 'site' ? 10 : 3;
+  }
+  function canAddSite(): boolean { return savedSites.length < maxSites(); }
 
   const TABS = [
     { id: 'dashboard',  icon: '🏠', label: 'Live'    },
@@ -819,10 +857,21 @@
       coldResult = results[0].cold;
       thunderResult = results[0].thunder;
       worstModelLabel = results[0].modelLabel;
+      isStale = false;
+      if (rawData) cacheReading(rawData);
+      if (activeSiteId && heat) bgStatus = { ...bgStatus, [activeSiteId]: { color: heat.zoneInfo.color, label: heat.zoneInfo.riskLabel, time: new Date().toLocaleTimeString() } };
 
       checkAlerts();
     } catch (e) {
-      error = 'Failed to fetch data. Check network or try a different model.';
+      const cached = loadCachedReading();
+      if (cached) {
+        const { heat: h, wind: w, rain: r, cold: cd, thunder: th } = processInputs(cached.inputs);
+        rawData = cached.inputs; heat = h; windResult = w; rainResult = r; coldResult = cd; thunderResult = th;
+        modelResults = [{ modelKey: selectedModel, modelLabel: 'cached', raw: cached.inputs, heat: h, wind: w, rain: r, cold: cd, thunder: th, isWorst: true }];
+        worstModelLabel = 'cached'; isStale = true; staleTime = cached.time; error = '';
+      } else {
+        error = 'Failed to fetch data. Check network or try a different model.';
+      }
     }
     loading = false;
   }
@@ -882,7 +931,7 @@
   function resetSettings() { settings = { ...DEFAULT_SETTINGS }; saveSettings(); }
   function setupAutoRefresh() {
     if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
-    if (settings.autoRefresh) autoRefreshTimer = setInterval(refreshData, 15 * 60 * 1000);
+    if (settings.autoRefresh) autoRefreshTimer = setInterval(backgroundTick, 15 * 60 * 1000);
   }
 
   // ── License activation (validated at fieldguard-hse.com/api/validate) ──
@@ -971,6 +1020,100 @@
     a.click();
   }
 
+  // ════════════ Saved sites (multi-site) ════════════════════
+  function loadSites() {
+    try { const s = localStorage.getItem('fieldguard_sites'); if (s) savedSites = JSON.parse(s); } catch {}
+  }
+  function persistSites() {
+    try { localStorage.setItem('fieldguard_sites', JSON.stringify(savedSites)); } catch {}
+  }
+  function addCurrentSite() {
+    if (!canAddSite()) return;
+    const id = `${Date.now()}`;
+    const name = (newSiteName || '').trim() || (locationName ? locationName.split(',')[0] : `Site ${savedSites.length + 1}`);
+    savedSites = [...savedSites, { id, name, lat, lon }];
+    activeSiteId = id; newSiteName = '';
+    persistSites();
+  }
+  function selectSite(s: SavedSite) {
+    activeSiteId = s.id; locked = true;
+    lat = s.lat; lon = s.lon; locationName = s.name; geocodedFor = '';
+    refreshData();
+  }
+  function removeSite(s: SavedSite) {
+    savedSites = savedSites.filter(x => x.id !== s.id);
+    if (activeSiteId === s.id) activeSiteId = '';
+    persistSites();
+  }
+
+  // ════════════ Offline cache (last reading per site) ═══════
+  function cacheKey(): string { return `${lat.toFixed(3)},${lon.toFixed(3)}`; }
+  function cacheReading(inputs: WeatherInputs) {
+    try {
+      const all = JSON.parse(localStorage.getItem('fieldguard_cache') || '{}');
+      all[cacheKey()] = { inputs, time: new Date().toLocaleString() };
+      localStorage.setItem('fieldguard_cache', JSON.stringify(all));
+    } catch {}
+  }
+  function loadCachedReading(): { inputs: WeatherInputs; time: string } | null {
+    try {
+      const all = JSON.parse(localStorage.getItem('fieldguard_cache') || '{}');
+      return all[cacheKey()] ?? null;
+    } catch { return null; }
+  }
+
+  // ════════════ CSV export (session alert log) ══════════════
+  function downloadCSV() {
+    const head = ['Time', 'Type', 'Message', 'Site'];
+    const rows = alertLog.map((a: any) => [
+      a.time, String(a.type).replace(/[^\x20-\x7E]/g, '').trim(), a.message, locationName || cacheKey(),
+    ]);
+    const esc = (v: any) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [head, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `FieldGuard-log-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  }
+
+  // ════════════ Background monitor — all saved sites ════════
+  // While the Windy tab is OPEN, polls every saved site, updates the chip dot,
+  // and notifies if a non-active site hits danger. CANNOT run when the tab or
+  // browser is closed — no browser plugin can.
+  async function monitorSites() {
+    if (savedSites.length === 0) return;
+    const om = MODELS.find(m => m.key === selectedModel)?.om ?? 'best_match';
+    for (const s of savedSites) {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}` +
+          `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` +
+          `&hourly=cape&wind_speed_unit=ms&forecast_days=1&models=${om}`;
+        const res = await fetch(url); if (!res.ok) continue;
+        const j = await res.json(); const c = j && j.current; if (!c || c.temperature_2m == null) continue;
+        const capeArr = j && j.hourly && j.hourly.cape;
+        const capeJkg = Array.isArray(capeArr) && capeArr[0] != null ? Math.max(0, Math.round(capeArr[0])) : undefined;
+        const inputs: WeatherInputs = {
+          tempC: c.temperature_2m, humidity: c.relative_humidity_2m ?? 50,
+          windMs: Math.max(0, c.wind_speed_10m ?? 0), solarWm2: Math.max(0, c.shortwave_radiation ?? 0),
+          rainMmH: Math.max(0, c.precipitation ?? 0), capeJkg,
+        };
+        const now = new Date();
+        const h = assessHeatStress(inputs, settings.ppeProfile, now.getUTCHours() + s.lon / 15, now.getMonth() + 1, null);
+        bgStatus = { ...bgStatus, [s.id]: { color: h.zoneInfo.color, label: h.zoneInfo.riskLabel, time: now.toLocaleTimeString() } };
+        if (settings.soundAlerts && s.id !== activeSiteId && (h.zone === 'red' || h.zone === 'purple' || h.zone === 'black')) {
+          triggerNotification(`⚠ ${s.name} — ${h.zoneInfo.riskLabel}`,
+            `Apparent Temp ${h.apparentTempFinal === 999 ? 'NO WORK' : h.apparentTempFinal + '°C'}`);
+        }
+      } catch {}
+    }
+  }
+
+  function backgroundTick() { refreshData(); monitorSites(); }
+  // Refresh as soon as the Windy tab is shown again (data may be stale after it
+  // was backgrounded). The most a plugin can do — it CANNOT run when the tab or
+  // browser is fully closed.
+  function onVisible() { if (document.visibilityState === 'visible') { refreshData(); monitorSites(); } }
+
   // Named handler so onDestroy removes ONLY our listener via map.off('click', onMapClick).
   // (A bare map.off('click') would strip every click handler on the Windy map, including Windy's own.)
   function onMapClick(e: any) {
@@ -981,9 +1124,12 @@
   onMount(() => {
     try { const s = localStorage.getItem('fieldguard_settings'); if (s) settings = {...DEFAULT_SETTINGS, ...JSON.parse(s)}; } catch {}
     loadLicense();
+    loadSites();
     try { const c = map.getCenter(); lat = c.lat; lon = c.lng; } catch {}
     map.on('click', onMapClick);
+    document.addEventListener('visibilitychange', onVisible);
     refreshData();
+    monitorSites();
     setupAutoRefresh();
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
   });
@@ -991,6 +1137,7 @@
   onDestroy(() => {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
     map.off('click', onMapClick);
+    document.removeEventListener('visibilitychange', onVisible);
   });
 
   export const onopen = (params: any) => {
@@ -1029,6 +1176,17 @@
   .fg-worst-label { display:flex; align-items:center; gap:4px; cursor:pointer; margin-left:auto; }
   .fg-mini-btn { background:#334155; border:none; color:#94a3b8; padding:2px 6px; border-radius:4px; cursor:pointer; font-size:11px; }
   .fg-mini-btn.locked { background:#b45309; color:#fff; }
+  .fg-sites { display:flex; flex-wrap:wrap; gap:5px; align-items:center; padding:6px 12px; background:#1e293b; border-top:1px solid #0f172a; }
+  .fg-site-chip { display:inline-flex; align-items:center; gap:4px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; padding:3px 7px; border-radius:14px; cursor:pointer; font-size:10px; }
+  .fg-site-chip.active { border-color:#38bdf8; color:#38bdf8; }
+  .fg-site-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .fg-site-x { color:#64748b; font-weight:700; padding:0 2px; }
+  .fg-site-x:hover { color:#f87171; }
+  .fg-site-name { background:#0f172a; border:1px solid #334155; color:#e2e8f0; padding:3px 7px; border-radius:14px; font-size:10px; width:74px; box-sizing:border-box; }
+  .fg-site-add { background:#0284c7; border:none; color:#fff; padding:3px 9px; border-radius:14px; cursor:pointer; font-size:10px; font-weight:600; }
+  .fg-site-max { font-size:9px; color:#64748b; }
+  .fg-site-locked { background:#0f172a; border:1px dashed #334155; color:#94a3b8; padding:3px 9px; border-radius:14px; font-size:10px; text-decoration:none; }
+  .fg-stale { margin:6px 12px 0; padding:5px 10px; background:#422006; border:1px solid #a16207; color:#fde68a; font-size:10px; border-radius:6px; }
   .fg-daynight { font-size:10px; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
   .fg-daynight.day { background:#78350f; color:#fcd34d; }
   .fg-daynight.night { background:#1e3a8a; color:#bfdbfe; }
