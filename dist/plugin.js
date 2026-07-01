@@ -1,27 +1,22 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "3.0.1",
+  "version": "3.0.4",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
-  "description": "Real-time HSE safety monitor. Heat stress zones (ISO 7243/7933), wind & rain alerts, multi-model worst-case engine, ISO 7933 weekly reports.",
+  "description": "Real-time HSE safety monitor for field workers. Heat stress (WBGT), cold stress (wind chill), wind, rain and thunderstorm/lightning risk across all Windy models. Metric or imperial units (°C/°F, m/s/mph), worst-case engine, customizable thresholds, and ISO 7933-compliant weekly reports.",
   "author": "FieldGuard HSE",
-  "repository": "https://github.com/FieldGuard365/windy-plugin-fieldguard",
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
-  "desktopWidth": 300,
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
-  "addToContextmenu": true,
-  "built": 1780584176032,
-  "builtReadable": "2026-06-04T14:42:56.032Z",
+  "hooks": "contextmenu",
+  "built": 1782905208603,
+  "builtReadable": "2026-07-01T11:26:48.603Z",
   "screenshot": "screenshot.jpg"
 };
 
 // transformCode: import { map } from '@windy/map';
 const { map } = W.map;
-
-// transformCode: import { store } from '@windy/store';
-const { store } = W.store;
 
 
 /** @returns {void} */
@@ -54,23 +49,6 @@ function is_function(thing) {
 /** @returns {boolean} */
 function safe_not_equal(a, b) {
 	return a != a ? b == b : a !== b || (a && typeof a === 'object') || typeof a === 'function';
-}
-
-let src_url_equal_anchor;
-
-/**
- * @param {string} element_src
- * @param {string} url
- * @returns {boolean}
- */
-function src_url_equal(element_src, url) {
-	if (element_src === url) return true;
-	if (!src_url_equal_anchor) {
-		src_url_equal_anchor = document.createElement('a');
-	}
-	// This is actually faster than doing URL(..).href
-	src_url_equal_anchor.href = url;
-	return element_src === src_url_equal_anchor.href;
 }
 
 /** @returns {boolean} */
@@ -197,6 +175,16 @@ function empty() {
 function listen(node, event, handler, options) {
 	node.addEventListener(event, handler, options);
 	return () => node.removeEventListener(event, handler, options);
+}
+
+/**
+ * @returns {(event: any) => any} */
+function stop_propagation(fn) {
+	return function (event) {
+		event.stopPropagation();
+		// @ts-ignore
+		return fn.call(this, event);
+	};
 }
 
 /**
@@ -731,19 +719,21 @@ if (typeof window !== 'undefined')
 	(window.__svelte || (window.__svelte = { v: new Set() })).v.add(PUBLIC_VERSION);
 
 /**
- * FieldGuard HSE Calculations — v2.0
+ * FieldGuard HSE Calculations
  *
- * Standard: ISO 7933:2004 / ISO 7243:2017
+ * Standards alignment:
+ *   - ISO 7243:2017 — WBGT heat-stress index
+ *   - ISO 7933:2004 — Analytical determination of thermal strain (PHS)
+ *   - ACGIH TLV® — heat- and cold-stress action levels
  *
  * Core method: 2-step Apparent Temperature lookup
  *   Step 1: Temp (°C) + Humidity (%) → Apparent Temp (°C) [Chart A]
  *   Step 2: Apparent Temp + Wind (m/s) → Final Apparent Temp [Chart B]
  *   Output zone: Green / Amber / Red / Purple / Black (No Work)
  *
- * Zone thresholds and work/rest schedules per ISO 7243 field standard.
- * Work ban: 12:30–15:30, June/July/August (outdoor workers).
+ * Midday outdoor work ban (configurable): 12:30–15:30, June/July/August.
  * Stop work when temp exceeds 50°C ambient (when monitor unavailable).
- */ // Zones from ISO 7243 / field standard
+ */ // Heat-stress zones (Apparent Temperature bands → controls)
 const ZONES = {
     green: {
         key: 'green',
@@ -853,7 +843,7 @@ const ZONES = {
         ]
     }
 };
-// ─── Chart A: Temp × Humidity → Apparent Temp ─────────────────────────────────
+// ─── Chart A: Temp × Humidity → Apparent Temp ───────────────────────────────
 const CHART_A_TEMPS = [
     25,
     26,
@@ -1601,7 +1591,7 @@ const CHART_A = [
         60
     ]
 ];
-// ─── Chart B: Apparent Temp × Wind → Final Apparent Temp ──────────────────────
+// ─── Chart B: Apparent Temp × Wind → Final Apparent Temp ────────────────────
 const CHART_B_APPTEMPS = [
     25,
     26,
@@ -2523,7 +2513,7 @@ function apparentTempToZone(finalApparent, tempC) {
     if (finalApparent >= 35) return 'amber';
     return 'green';
 }
-function assessHeatStress(inputs, ppeKey, localHour, month) {
+function assessHeatStress(inputs, ppeKey, localHour, month, ban) {
     const appTemp1 = calcApparentTemp(inputs.tempC, inputs.humidity);
     const appTempFinal = calcFinalApparentTemp(appTemp1, inputs.windMs);
     const zone = apparentTempToZone(appTempFinal, inputs.tempC);
@@ -2531,12 +2521,8 @@ function assessHeatStress(inputs, ppeKey, localHour, month) {
     const wbgtBase = calcWBGT(inputs);
     const wbgtAdj = calcAdjustedWBGT(wbgtBase, ppeKey);
     const heatIdx = calcHeatIndex(inputs.tempC, inputs.humidity);
-    // Legal work ban: 12:30–15:30, June/July/August
-    const isBanPeriod = [
-        6,
-        7,
-        8
-    ].includes(month) && localHour >= 12.5 && localHour < 15.5;
+    // Statutory midday outdoor-work ban for the pin's country (if any).
+    const isBanPeriod = !!ban && ban.months.includes(month) && localHour >= ban.start && localHour < ban.end;
     return {
         apparentTemp1: appTemp1,
         apparentTempFinal: appTempFinal,
@@ -2715,7 +2701,7 @@ function assessRain(mmh, warnMmh, dangerMmh) {
         exceedsThreshold: mmh >= warnMmh
     };
 }
-// ─── Symptom & Emergency reference (ISO 7243) ─────────────────────────────────
+// ─── Symptom & Emergency reference ───────────────────────────────────────────
 const HEAT_STRESS_SYMPTOMS = [
     'Weakness',
     'Headache',
@@ -2733,11 +2719,293 @@ const EMERGENCY_RESPONSE = [
     'Consult Doctor — Notify site representative',
     'FOR SEVERE SYMPTOMS: GET IMMEDIATE MEDICAL CARE'
 ];
+/** Wind chill in °C (Environment Canada / NWS 2001). Valid for T ≤ 10°C and wind ≥ ~5 km/h. */ function calcWindChill(tempC, windMs) {
+    const vKmh = windMs * 3.6;
+    if (tempC > 10 || vKmh < 4.8) return Math.round(tempC * 10) / 10;
+    const v16 = Math.pow(vKmh, 0.16);
+    const wc = 13.12 + 0.6215 * tempC - 11.37 * v16 + 0.3965 * tempC * v16;
+    return Math.round(wc * 10) / 10;
+}
+function assessColdStress(tempC, windMs) {
+    const wc = calcWindChill(tempC, windMs);
+    const active = tempC <= 10;
+    // Environment Canada wind-chill risk bands
+    let riskLabel = 'SAFE', riskColor = '#16a34a', bgColor = '#14532d', frostbite = 'Low risk', exceeds = false;
+    let controls = [
+        'No cold-stress controls required',
+        'Keep dry; carry a windproof layer if conditions change'
+    ];
+    if (wc <= -55) {
+        riskLabel = 'DANGER';
+        riskColor = '#6b7280';
+        bgColor = '#030712';
+        frostbite = 'Frostbite in UNDER 2 min on exposed skin';
+        exceeds = true;
+        controls = [
+            'OUTDOOR WORK STOPPED — conditions dangerous for any exposed skin',
+            'Only emergency work, fully covered, with continuous buddy checks',
+            'Heated shelter within immediate reach; rotate crews continuously'
+        ];
+    } else if (wc <= -48) {
+        riskLabel = 'EXTREME';
+        riskColor = '#7c3aed';
+        bgColor = '#2e1065';
+        frostbite = 'Frostbite in 2–5 min on exposed skin';
+        exceeds = true;
+        controls = [
+            'Business-critical work only; cover ALL exposed skin',
+            'Heated warm-up shelter ≤ a few minutes away; scheduled warm-up breaks',
+            'Continuous buddy system; watch for frostnip (white/waxy skin)',
+            'Insulated, windproof PPE + face/eye protection'
+        ];
+    } else if (wc <= -40) {
+        riskLabel = 'VERY COLD';
+        riskColor = '#dc2626';
+        bgColor = '#450a0a';
+        frostbite = 'Frostbite in 5–10 min on exposed skin';
+        exceeds = true;
+        controls = [
+            'Frequent scheduled warm-up breaks (ACGIH Cold Stress TLV)',
+            'Cover all exposed skin; windproof outer layer mandatory',
+            'Buddy system; monitor for hypothermia & frostbite',
+            'Warm, sweet drinks; no alcohol/caffeine before exposure'
+        ];
+    } else if (wc <= -28) {
+        riskLabel = 'COLD';
+        riskColor = '#f97316';
+        bgColor = '#451a03';
+        frostbite = 'Frostbite possible in 10–30 min on exposed skin';
+        exceeds = true;
+        controls = [
+            'Layer clothing; keep dry; add windproof shell',
+            'Scheduled warm-up breaks; limit continuous exposure',
+            'Watch extremities (fingers, toes, ears, nose)'
+        ];
+    } else if (wc <= -10) {
+        riskLabel = 'COOL';
+        riskColor = '#d97706';
+        bgColor = '#451a03';
+        frostbite = 'Low frostbite risk; hypothermia risk with long exposure';
+        controls = [
+            'Dress in layers; keep dry',
+            'Take warm-up breaks on long shifts'
+        ];
+    } else if (active) {
+        riskLabel = 'MILD COLD';
+        riskColor = '#16a34a';
+        bgColor = '#14532d';
+        frostbite = 'Low risk';
+        controls = [
+            'Light cold-weather layers; keep dry'
+        ];
+    }
+    return {
+        windChillC: wc,
+        riskLabel,
+        riskColor,
+        bgColor,
+        frostbite,
+        exceedsThreshold: exceeds,
+        controls,
+        active
+    };
+}
+function assessThunderstorm(capeJkg) {
+    if (capeJkg === undefined || capeJkg === null || Number.isNaN(capeJkg)) {
+        return {
+            available: false,
+            capeJkg: 0,
+            riskLabel: 'N/A',
+            riskColor: '#475569',
+            instability: 'CAPE not provided by this model — switch model or enable Worst-case',
+            exceedsThreshold: false,
+            guidance: [
+                'Live lightning-strike detection is not part of the weather model.',
+                'Apply the 30-30 rule: if thunder follows a flash within 30 s (≈10 km),',
+                'suspend outdoor work; resume only 30 min after the last thunder.'
+            ]
+        };
+    }
+    const cape = Math.max(0, Math.round(capeJkg));
+    let riskLabel = 'LOW', riskColor = '#16a34a', instability = 'Stable — thunderstorms unlikely', exceeds = false;
+    if (cape >= 2500) {
+        riskLabel = 'SEVERE';
+        riskColor = '#7c3aed';
+        instability = 'Extreme instability — severe thunderstorm / lightning potential';
+        exceeds = true;
+    } else if (cape >= 1000) {
+        riskLabel = 'HIGH';
+        riskColor = '#dc2626';
+        instability = 'Strong instability — thunderstorms likely';
+        exceeds = true;
+    } else if (cape >= 300) {
+        riskLabel = 'MODERATE';
+        riskColor = '#f97316';
+        instability = 'Marginal instability — isolated storms possible';
+        exceeds = false;
+    }
+    return {
+        available: true,
+        capeJkg: cape,
+        riskLabel,
+        riskColor,
+        instability,
+        exceedsThreshold: exceeds,
+        guidance: [
+            'CAPE shows storm POTENTIAL, not live strikes.',
+            '30-30 rule: suspend work if thunder follows a flash within 30 s (≈10 km).',
+            'Resume only 30 min after the last thunder; clear elevated/exposed areas.'
+        ]
+    };
+}
+/** Format a Celsius value; NW sentinel (999) renders as the no-work marker. */ function fmtTemp(c, units, withUnit = true) {
+    if (c === NW || c === 999) return 'NO WORK';
+    if (units === 'imperial') {
+        const f = c * 9 / 5 + 32;
+        return Math.round(f * 10) / 10 + (withUnit ? '°F' : '');
+    }
+    return Math.round(c * 10) / 10 + (withUnit ? '°C' : '');
+}
+/** Primary wind speed: m/s (metric) or mph (imperial). */ function fmtWind(ms, units, withUnit = true) {
+    if (units === 'imperial') return Math.round(ms * 2.23694 * 10) / 10 + (withUnit ? ' mph' : '');
+    return Math.round(ms * 10) / 10 + (withUnit ? ' m/s' : '');
+}
+/** Secondary wind speed: km/h (metric) or knots (imperial). */ function fmtWindSecondary(ms, units) {
+    if (units === 'imperial') return {
+        val: (Math.round(ms * 1.94384 * 10) / 10).toString(),
+        lbl: 'knots'
+    };
+    return {
+        val: (Math.round(ms * 3.6 * 10) / 10).toString(),
+        lbl: 'km/h'
+    };
+}
+/** Rainfall rate: mm/h (metric) or in/h (imperial). */ function fmtRain(mmh, units, withUnit = true) {
+    if (units === 'imperial') return Math.round(mmh * 0.0393701 * 100) / 100 + (withUnit ? ' in/h' : '');
+    return Math.round(mmh * 10) / 10 + (withUnit ? ' mm/h' : '');
+}
+/** Distance: km (metric) or miles (imperial). */ function fmtDistance(km, units, withUnit = true) {
+    if (units === 'imperial') return Math.round(km * 0.621371 * 10) / 10 + (withUnit ? ' mi' : '');
+    return Math.round(km * 10) / 10 + (withUnit ? ' km' : '');
+}
+// ════════════════════════════════════════════════════════════════════════════
+//  SOLAR POSITION (day/night + elevation) and SOLAR IRRADIANCE BAND
+// ════════════════════════════════════════════════════════════════════════════
+/** Solar elevation angle (degrees above horizon) for a lat/lon at a given time. */ function solarElevationDeg(lat, lon, date) {
+    const rad = Math.PI / 180;
+    const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 0);
+    const dayOfYear = Math.floor((date.getTime() - startOfYear) / 86400000);
+    const decl = 23.45 * Math.sin(rad * (360 / 365) * (dayOfYear + 284)); // solar declination
+    const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60;
+    const solarTime = utcHours + lon / 15; // approx local solar time
+    const H = 15 * (solarTime - 12); // hour angle (deg)
+    const elev = Math.asin(Math.sin(lat * rad) * Math.sin(decl * rad) + Math.cos(lat * rad) * Math.cos(decl * rad) * Math.cos(H * rad)) / rad;
+    return Math.round(elev * 10) / 10;
+}
+function isDaytime(lat, lon, date) {
+    return solarElevationDeg(lat, lon, date) > 0;
+}
+/** Qualitative solar-radiation band from irradiance (W/m²). At night returns NIGHT
+ *  regardless of irradiance; by day, low irradiance is LOW (e.g. high-latitude sun). */ function solarBand(wm2, day = true) {
+    if (!day) return {
+        label: 'NIGHT',
+        color: '#475569'
+    };
+    if (wm2 < 200) return {
+        label: 'LOW',
+        color: '#16a34a'
+    };
+    if (wm2 < 500) return {
+        label: 'MODERATE',
+        color: '#d97706'
+    };
+    if (wm2 < 800) return {
+        label: 'HIGH',
+        color: '#f97316'
+    };
+    return {
+        label: 'EXTREME',
+        color: '#dc2626'
+    };
+}
+const MIDDAY_BANS = {
+    OM: {
+        country: 'Oman',
+        months: [
+            6,
+            7,
+            8
+        ],
+        start: 12.5,
+        end: 15.5,
+        label: '12:30–15:30, Jun–Aug'
+    },
+    AE: {
+        country: 'United Arab Emirates',
+        months: [
+            6,
+            7,
+            8,
+            9
+        ],
+        start: 12.5,
+        end: 15.0,
+        label: '12:30–15:00, 15 Jun–15 Sep'
+    },
+    SA: {
+        country: 'Saudi Arabia',
+        months: [
+            6,
+            7,
+            8,
+            9
+        ],
+        start: 12.0,
+        end: 15.0,
+        label: '12:00–15:00, 15 Jun–15 Sep'
+    },
+    QA: {
+        country: 'Qatar',
+        months: [
+            6,
+            7,
+            8,
+            9
+        ],
+        start: 10.0,
+        end: 15.5,
+        label: '10:00–15:30, 1 Jun–15 Sep'
+    },
+    KW: {
+        country: 'Kuwait',
+        months: [
+            6,
+            7,
+            8
+        ],
+        start: 11.0,
+        end: 16.0,
+        label: '11:00–16:00, Jun–Aug'
+    },
+    BH: {
+        country: 'Bahrain',
+        months: [
+            7,
+            8
+        ],
+        start: 12.0,
+        end: 16.0,
+        label: '12:00–16:00, Jul–Aug'
+    }
+};
+function getMiddayBan(countryCode) {
+    return MIDDAY_BANS[(countryCode || '').toUpperCase()] ?? null;
+}
 
 /**
- * FieldGuard Weekly Report Generator — v2.0
- * Standard: ISO 7933:2004 / ISO 7243:2017 / FIDIC Clause 8.4
- * Standard: ISO 7933:2004 / ISO 7243:2017 / FIDIC Clause 8.4
+ * FieldGuard Weekly Report Generator
+ * Heat-stress zone method: 2-step Apparent Temperature (Temp×RH, then ×Wind)
+ * Standards: ISO 7933:2004 / ISO 7243:2017 / ACGIH TLV / FIDIC Clause 8.4
  */ function pad(s, n = 8) {
     return String(s).padEnd(n);
 }
@@ -2818,7 +3086,7 @@ function generateWeeklyReport(d) {
 ================================================================================
 FIELDGUARD — WEEKLY HEAT & WEATHER SAFETY AUDIT REPORT
 Document Ref: HSE-WBGT-WEEKLY | Standard: ISO 7933:2004 / ISO 7243:2017
-Standard: ISO 7933:2004 / ISO 7243:2017
+Method: 2-step Apparent Temperature + PPE-adjusted WBGT (ACGIH TLV)
 Audit Period: ${d.weekStart} to ${d.weekEnd}
 Generated: ${now} UTC | Report ID: ${reportId}
 ================================================================================
@@ -2840,7 +3108,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v2.0
+FieldGuard Version:     v3.0.4
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 
@@ -2848,7 +3116,7 @@ SECTION B — EXECUTIVE SUMMARY
 ──────────────────────────────────────────────────────────────────────────────
 During the week of ${d.weekStart} to ${d.weekEnd}, site "${d.projectName}" at
 ${d.siteAddress} recorded ${d.wbgtLog.length} heat stress exceedance events per
-the ISO 7243 / ISO 7933 zone system (PPE-Adjusted WBGT).
+the FieldGuard zone system (ISO 7243 / ISO 7933, PPE-Adjusted WBGT).
 
 Peak Adjusted WBGT:          ${peakEntry.wbgtAdj}°C at ${peakEntry.time} on ${peakEntry.date}
 PPE Profile:                 ${d.ppeProfile} (+${d.ppeAdjustment}°C)
@@ -2860,18 +3128,18 @@ Legal Work Ban:              ${d.banStart}–${d.banEnd} (${d.banMonths})
 FIDIC Clause 8.4 Assessment: ${d.fidic}
 Estimated delay:             ${d.delayDays} calendar day(s)
 
-Note: Zones determined by 2-step Apparent Temperature method (Chart A: Temp×RH;
-Chart B: Apparent Temp × Wind) per ISO 7243 field calculator.
+Note: Zones determined by a 2-step Apparent Temperature method (Chart A: Temp×RH;
+Chart B: Apparent Temp × Wind).
 Zone system: Green (safe) → Amber (attention) → Red (alert) → Purple (extreme) → Black (no work)
 Stop-work rule applied when ambient temp exceeds 50°C or NW (No Work) on Chart B.
 
 
 SECTION C — METEOROLOGICAL DATA SUMMARY
 ──────────────────────────────────────────────────────────────────────────────
-Data Source:     FieldGuard — Windy.com multi-model (ECMWF, GFS, ICON, MEPS, GEM, ACCESS-G)
-                 + Open-Meteo API backup (ECMWF/ICON, 15-min interval)
+Data Source:     FieldGuard — Open-Meteo multi-model point forecast
+                 (ECMWF, GFS, ICON, GEM, ARPEGE, ACCESS-G)
 Method:          Worst-case across all available forecast models
-Measurement:     Every 2 hours per field (ISO 7243 Execution protocol)
+Measurement:     Every 2 hours per field
 
 ${metTable()}
 Weekly Max Temp:     ${Math.max(...d.dailyMet.map((m)=>m.maxTemp))}°C
@@ -2879,9 +3147,9 @@ Weekly Max Humidity: ${Math.max(...d.dailyMet.map((m)=>m.maxRH))}%
 Weekly Max Wind:     ${Math.max(...d.dailyMet.map((m)=>m.maxWind))} m/s
 
 
-SECTION D — HEAT STRESS ZONE ANALYSIS (ISO 7933 / ISO 7243)
+SECTION D — HEAT STRESS ZONE ANALYSIS (ISO 7243 / ISO 7933)
 ──────────────────────────────────────────────────────────────────────────────
-Zone System Reference: ISO 7243:2017 / ISO 7933:2004
+Zone System Reference: FieldGuard 2-step Apparent Temperature method
 WBGT Supplement:      ISO 7933:2004 — Analytical Determination of Thermal Stress (PHS)
 
 PPE Profile Applied:    ${d.ppeProfile}
@@ -2895,7 +3163,7 @@ ZONE THRESHOLDS (Apparent Temperature, °C):
   ● ≥ 55°C  — BLACK  (No Work):    All outdoor work STOPPED — A/C shelter only
   ● "NW"    — NO WORK on Chart B:  Stop work regardless of temperature
 
-WORK/REST SCHEDULES (ISO 7243):
+WORK/REST SCHEDULES:
   Zone     Light Work               Heavy Work
   AMBER    Continuous self-paced    45 min / 15 min rest
   RED      45 min / 15 min rest     20 min / 30 min rest
@@ -2944,15 +3212,15 @@ SUPPORTING DOCUMENTS (attach):
   □ Appendix A: FieldGuard GPS-stamped alert log
   □ Appendix B: Open-Meteo API export (15-min intervals) — ECMWF/ICON best_match
   □ Appendix C: Site photographs with timestamps
-  □ Appendix D: Supervisor attendance records (Ref: field monitoring log)
+  □ Appendix D: Supervisor attendance records (monitoring log)
   □ Appendix E: ISO 7933 PPE adjustment calculation worksheet
-  □ Appendix F: Heat Stress Calculator output screenshots
+  □ Appendix F: FieldGuard Heat Stress dashboard screenshots
   □ Appendix G: National meteorological station records
 
 
 SECTION H — REGULATORY COMPLIANCE CHECKLIST
 ──────────────────────────────────────────────────────────────────────────────
-Based on: ISO 7243:2017 / ISO 7933:2004 / ${d.regulatoryRef}
+Based on: ISO 7933 / ISO 7243 / ACGIH TLV + ${d.regulatoryRef}
 
 PLAN (Day Before):
   ☐ Weather forecast checked against Heat Stress Calculator (FieldGuard)
@@ -2995,22 +3263,22 @@ DEFICIENCIES / CORRECTIVE ACTIONS:
 
 SECTION I — AI RISK ASSESSMENT & FORECAST
 ──────────────────────────────────────────────────────────────────────────────
-FieldGuard Worst-Case Engine: All available Windy.com forecast models queried
-simultaneously (ECMWF, GFS, ICON, MEPS, GEM, ACCESS-G). Highest-severity result
-across all models used for zone determination and alerts.
+FieldGuard Worst-Case Engine: All available forecast models queried simultaneously
+(ECMWF, GFS, ICON, GEM, ARPEGE, ACCESS-G). Highest-severity result across all
+models used for zone determination and alerts.
 
 CURRENT WEEK ASSESSMENT:
 ${d.forecastNarrative}
 
 IMPORTANT: Risk of heat stress increases when apparent temperature exceeds 35°C.
 Heat is not defined by temperature alone but also depends on relative humidity and
-wind speed. (ISO 7243:2017)
+wind speed.
 
 
 SECTION J — SIGNATURES & CERTIFICATION
 ──────────────────────────────────────────────────────────────────────────────
 FieldGuard Data: Windy.com API + Open-Meteo (ECMWF/ICON)
-Method: 2-Step Apparent Temperature (Charts A & B) + ISO 7933 WBGT
+Method: 2-step Apparent Temperature (Charts A & B) + ISO 7933 WBGT
 Report ID: ${reportId}
 
 ─────────────────────────────────────────────────────────────────────────────
@@ -3036,7 +3304,7 @@ Archive Reference: FG-VAULT-${siteId}-${reportId}
 FIELDGUARD HSE PLUGIN — Windy.com
 "All models. Worst case. Zero compromise."
 Standard: ISO 7933:2004 / ISO 7243:2017 / ACGIH TLV® / FIDIC Clause 8.4
-Zone system: ISO 7243:2017 / ISO 7933:2004
+Zone system: FieldGuard 2-step Apparent Temperature method
 WBGT method: Liljegren (2008) | Apparent Temp: 2-step Chart A+B
 ================================================================================
 END OF REPORT — ${reportId}
@@ -3047,929 +3315,119 @@ END OF REPORT — ${reportId}
 /* src\plugin.svelte generated by Svelte v4.2.20 */
 
 function add_css(target) {
-	append_styles(target, "svelte-apo8v3", ":root{--amb:#e8962a;--n1:#050a18;--n2:#0a1228;--n4:#1a2d55;--sl:#8a9cc8;--sl2:#4a6090}.plugin__content{padding:0 !important}.fg.svelte-apo8v3.svelte-apo8v3{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:12px;color:#e8edf8;background:rgba(8,14,30,0.97);display:flex;flex-direction:column;min-height:100%}.fg-head.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#0a1228;border-bottom:2px solid var(--amb)}.fg-head-logo.svelte-apo8v3.svelte-apo8v3{width:26px;height:26px;object-fit:contain;flex-shrink:0}.fg-head-shield.svelte-apo8v3.svelte-apo8v3{font-size:18px;flex-shrink:0}.fg-head-txt.svelte-apo8v3.svelte-apo8v3{flex:1;display:flex;flex-direction:column}.fg-head-title.svelte-apo8v3.svelte-apo8v3{font-size:13px;font-weight:800;color:#fff}.fg-head-sub.svelte-apo8v3.svelte-apo8v3{font-size:8px;color:var(--sl2);text-transform:uppercase;letter-spacing:0.8px}.fg-icon-btn.svelte-apo8v3.svelte-apo8v3{width:26px;height:26px;background:rgba(15,29,66,0.8);border:1px solid rgba(45,64,128,0.6);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--sl);transition:all 0.15s;flex-shrink:0;padding:0}.fg-icon-btn.svelte-apo8v3.svelte-apo8v3:hover{border-color:var(--amb);color:var(--amb)}.fg-loc.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(10,18,40,0.8);border-bottom:1px solid rgba(255,255,255,0.04);font-size:9px;color:var(--sl)}.fg-loc-name.svelte-apo8v3.svelte-apo8v3{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fg-loc-r.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:4px;flex-shrink:0}.fg-loc-t.svelte-apo8v3.svelte-apo8v3{color:var(--sl2)}.fg-dbadge.svelte-apo8v3.svelte-apo8v3{background:#78350f;color:#fcd34d;border-radius:3px;padding:1px 5px;font-size:7px;font-weight:700}.fg-lock-btn.svelte-apo8v3.svelte-apo8v3{background:rgba(10,18,40,0.8);border:1px solid rgba(45,64,128,0.5);border-radius:5px;cursor:pointer;font-size:11px;padding:2px 6px;transition:all 0.15s;flex-shrink:0}.fg-lock-btn.svelte-apo8v3.svelte-apo8v3:hover{border-color:var(--amb)}.fg-lock-btn.locked.svelte-apo8v3.svelte-apo8v3{border-color:#16a34a;background:rgba(5,46,22,0.6)}.fg-loc-hint.svelte-apo8v3.svelte-apo8v3{padding:2px 10px 3px;font-size:8px;color:var(--sl2);background:rgba(232,150,42,0.06);border-bottom:1px solid rgba(232,150,42,0.15);text-align:center}.fg-nbadge.svelte-apo8v3.svelte-apo8v3{background:#1e1b4b;color:#a5b4fc;border-radius:3px;padding:1px 5px;font-size:7px;font-weight:700}.fg-pills.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:stretch;gap:5px;padding:8px 8px 6px;background:#0d1933;border-bottom:1px solid rgba(232,150,42,0.2)}.fg-pill.svelte-apo8v3.svelte-apo8v3{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 3px;background:rgba(10,18,40,0.8);border:1px solid var(--c,#2d4080);border-radius:9px;cursor:pointer;transition:all 0.15s}.fg-pill.svelte-apo8v3.svelte-apo8v3:active{transform:scale(0.94)}.fg-pill.fg-pill-on.svelte-apo8v3.svelte-apo8v3{border-width:2px;background:rgba(18,32,68,0.95)}.fg-pill-ic.svelte-apo8v3.svelte-apo8v3{font-size:16px;line-height:1}.fg-pill-vl.svelte-apo8v3.svelte-apo8v3{font-size:14px;font-weight:800;color:#fff;line-height:1.1;display:flex;align-items:baseline;gap:1px}.fg-pill-u.svelte-apo8v3.svelte-apo8v3{font-size:8px;color:var(--sl)}.fg-pill-lb.svelte-apo8v3.svelte-apo8v3{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px}.fg-pill-ban.svelte-apo8v3.svelte-apo8v3{font-size:18px;align-self:center;flex-shrink:0;animation:svelte-apo8v3-pulse 1.5s infinite}@keyframes svelte-apo8v3-pulse{0%,100%{opacity:1}50%{opacity:.4}}.fg-rfr.svelte-apo8v3.svelte-apo8v3{width:28px;flex-shrink:0;align-self:center;background:rgba(10,18,40,0.7);border:1px solid rgba(45,64,128,0.5);border-radius:8px;font-size:16px;cursor:pointer;color:var(--sl);padding:5px;display:flex;align-items:center;justify-content:center;transition:all 0.15s}.fg-rfr.svelte-apo8v3.svelte-apo8v3:hover{border-color:var(--amb);color:var(--amb)}.fg-pills-tap.svelte-apo8v3.svelte-apo8v3{width:100%;background:transparent;border:1px dashed rgba(45,64,128,0.5);border-radius:7px;color:var(--sl);font-size:11px;cursor:pointer;padding:8px}.fg-desktop.svelte-apo8v3.svelte-apo8v3{display:block}.fg-tabs.svelte-apo8v3.svelte-apo8v3{display:flex;background:#0a1228;border-bottom:1px solid rgba(255,255,255,0.06)}.fg-tab.svelte-apo8v3.svelte-apo8v3{flex:1;padding:6px 2px;background:transparent;border:none;color:var(--sl2);cursor:pointer;font-size:9px;border-bottom:2px solid transparent;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;gap:1px}.fg-tab.svelte-apo8v3 span.svelte-apo8v3:first-child{font-size:13px}.fg-tab.fg-tab-on.svelte-apo8v3.svelte-apo8v3{color:var(--amb);border-bottom-color:var(--amb)}.fg-det.svelte-apo8v3.svelte-apo8v3{background:rgba(5,10,24,0.8);border:1px solid;margin:6px 8px;border-radius:8px;padding:10px 9px}.fg-det-ti.svelte-apo8v3.svelte-apo8v3{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px}.fg-det-g.svelte-apo8v3.svelte-apo8v3{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:7px}.fg-dc.svelte-apo8v3.svelte-apo8v3{background:rgba(5,10,22,0.6);border-radius:5px;padding:5px 3px;text-align:center}.fg-dv.svelte-apo8v3.svelte-apo8v3{font-size:12px;font-weight:800;color:#fff;display:block}.fg-dl.svelte-apo8v3.svelte-apo8v3{font-size:7px;color:var(--sl2);text-transform:uppercase;letter-spacing:0.3px}.fg-ds.svelte-apo8v3.svelte-apo8v3{background:rgba(5,10,22,0.4);border-radius:5px;padding:6px;margin-bottom:5px}.fg-dr.svelte-apo8v3.svelte-apo8v3{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(10,18,38,0.9);font-size:9px}.fg-dr.svelte-apo8v3.svelte-apo8v3:last-child{border:none}.fg-drl.svelte-apo8v3.svelte-apo8v3{color:var(--sl2)}.fg-drv.svelte-apo8v3.svelte-apo8v3{color:var(--sl);font-weight:500}.fg-dct.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--amb);text-transform:uppercase;font-weight:700;margin:6px 0 4px}.fg-dci.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl);padding:2px 0;border-bottom:1px solid rgba(10,18,38,0.7)}.fg-dci.svelte-apo8v3.svelte-apo8v3:last-child{border:none}.fg-dppe.svelte-apo8v3.svelte-apo8v3{font-size:8px;color:var(--sl2);margin-top:5px}.fg-dthr.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl2);text-align:center;margin:4px 8px 0}.fg-night.svelte-apo8v3.svelte-apo8v3{background:rgba(30,27,75,0.5);border-radius:6px;padding:12px;text-align:center;font-size:10px;color:#c7d2fe}.fg-det-hint.svelte-apo8v3.svelte-apo8v3{padding:18px;text-align:center;color:var(--sl2);font-size:10px}.fg-ban.svelte-apo8v3.svelte-apo8v3{padding:7px 10px;background:rgba(124,45,18,0.85);color:#fed7aa;font-size:10px;font-weight:700;text-align:center}.fg-load.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:8px;padding:18px 10px;font-size:10px;color:var(--sl)}.fg-err.svelte-apo8v3.svelte-apo8v3{padding:10px;background:rgba(61,10,10,0.85);color:#fca5a5;font-size:10px}.fg-mr.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid rgba(255,255,255,0.05);background:rgba(10,18,40,0.5)}.fg-mr-sel.svelte-apo8v3.svelte-apo8v3{background:rgba(10,18,40,0.9);border:1px solid rgba(45,64,128,0.5);color:#e8edf8;padding:3px 6px;border-radius:4px;font-size:10px}.fg-mr-wc.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:4px;margin-left:auto;font-size:9px;color:var(--sl);cursor:pointer}.fg-proch.svelte-apo8v3.svelte-apo8v3{background:var(--amb);color:#0f1d42;font-size:7px;font-weight:800;padding:1px 4px;border-radius:2px}.fg-tbl.svelte-apo8v3.svelte-apo8v3{width:100%;border-collapse:collapse;font-size:9px;margin:0 8px 6px;width:calc(100% - 16px)}.fg-tbl.svelte-apo8v3 th.svelte-apo8v3{color:var(--sl2);text-align:left;padding:3px;border-bottom:1px solid rgba(45,64,128,0.4)}.fg-tbl.svelte-apo8v3 td.svelte-apo8v3{padding:2px 3px;color:var(--sl)}.fg-tbl-b.svelte-apo8v3 td.svelte-apo8v3{color:#fff;font-weight:700;background:rgba(10,18,40,0.6)}.fg-emg.svelte-apo8v3.svelte-apo8v3{padding:10px 10px}.fg-emg-w.svelte-apo8v3.svelte-apo8v3{font-size:11px;font-weight:700;color:#f87171;margin-bottom:5px}.fg-emg-syms.svelte-apo8v3.svelte-apo8v3{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px}.fg-sym.svelte-apo8v3.svelte-apo8v3{background:rgba(61,10,10,0.8);color:#fca5a5;border-radius:3px;padding:2px 6px;font-size:9px}.fg-emg-hd.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl2);text-transform:uppercase;font-weight:700;margin-bottom:5px}.fg-emg-step.svelte-apo8v3.svelte-apo8v3{display:flex;gap:7px;align-items:flex-start;padding:3px 0;font-size:9px;color:var(--sl);border-bottom:1px solid rgba(10,18,38,0.8)}.fg-emg-step.svelte-apo8v3.svelte-apo8v3:last-child{border:none}.fg-emg-n.svelte-apo8v3.svelte-apo8v3{background:rgba(45,64,128,0.6);color:#e8edf8;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;flex-shrink:0}.fg-emg-crit.svelte-apo8v3.svelte-apo8v3{color:#f87171 !important;font-weight:700}.fg-emg-crit.svelte-apo8v3 .fg-emg-n.svelte-apo8v3{background:#dc2626}.fg-sec.svelte-apo8v3.svelte-apo8v3{padding:8px 10px 3px;font-size:9px;color:var(--amb);text-transform:uppercase;font-weight:700}.fg-alog.svelte-apo8v3.svelte-apo8v3{margin:3px 10px;padding:6px 8px;background:rgba(10,18,40,0.7);border-radius:5px;border-left:3px solid}.fg-alog-t.svelte-apo8v3.svelte-apo8v3{font-size:10px;font-weight:700;color:#fff}.fg-alog-m.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl)}.fg-alog-tm.svelte-apo8v3.svelte-apo8v3{font-size:8px;color:var(--sl2)}.fg-rform.svelte-apo8v3.svelte-apo8v3{padding:7px 10px;display:grid;grid-template-columns:1fr 1fr;gap:5px}label.svelte-apo8v3.svelte-apo8v3{display:block;color:var(--sl);font-size:9px}label.svelte-apo8v3 input.svelte-apo8v3,label.svelte-apo8v3 select.svelte-apo8v3{display:block;width:100%;background:rgba(5,10,22,0.9);border:1px solid rgba(45,64,128,0.5);color:#e8edf8;padding:4px 7px;border-radius:4px;font-size:9px;margin-top:2px;box-sizing:border-box}label.svelte-apo8v3 input.svelte-apo8v3:focus,label.svelte-apo8v3 select.svelte-apo8v3:focus{outline:none;border-color:var(--amb)}.fg-btn.svelte-apo8v3.svelte-apo8v3{display:block;width:100%;padding:9px;border:none;font-size:11px;font-weight:800;cursor:pointer;background:var(--amb);color:#0f1d42}.fg-btn-sec.svelte-apo8v3.svelte-apo8v3{background:rgba(10,18,40,0.8);color:var(--sl);border:1px solid rgba(45,64,128,0.4);border-radius:5px;width:calc(100% - 20px);margin:0 10px}.fg-btn-amb.svelte-apo8v3.svelte-apo8v3{display:block;text-align:center;text-decoration:none;background:var(--amb);color:#0f1d42 !important;padding:8px;border-radius:5px;font-size:10px;font-weight:800;margin-top:5px}.fg-rep.svelte-apo8v3.svelte-apo8v3{overflow:hidden;border-top:1px solid rgba(45,64,128,0.3)}.fg-rep-bar.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(10,18,40,0.8);font-size:9px;color:var(--sl2)}.fg-rep-bar.svelte-apo8v3 span.svelte-apo8v3{flex:1}.fg-rep-btn.svelte-apo8v3.svelte-apo8v3{background:rgba(45,64,128,0.5);border:none;color:var(--sl);padding:2px 8px;border-radius:3px;cursor:pointer;font-size:9px}.fg-rep-txt.svelte-apo8v3.svelte-apo8v3{padding:8px 10px;font-size:8px;color:var(--sl);white-space:pre;overflow:auto;max-height:220px;font-family:monospace;line-height:1.4}.fg-grp.svelte-apo8v3.svelte-apo8v3{padding:9px 10px;border-bottom:1px solid rgba(45,64,128,0.2)}.fg-grp-hd.svelte-apo8v3.svelte-apo8v3{font-size:9px;font-weight:700;color:var(--amb);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px}.fg-lic-act.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.fg-lic-b.svelte-apo8v3.svelte-apo8v3{background:rgba(5,46,22,0.8);color:#4ade80;border:1px solid #16a34a;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700}.fg-lic-i.svelte-apo8v3.svelte-apo8v3{font-size:10px;color:#86efac;flex:1}.fg-lic-d.svelte-apo8v3.svelte-apo8v3{background:rgba(10,18,40,0.8);border:1px solid rgba(45,64,128,0.5);color:var(--sl);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:9px}.fg-lic-free.svelte-apo8v3.svelte-apo8v3{background:rgba(5,10,22,0.6);border-radius:5px;padding:9px;margin-bottom:7px}.fg-lic-ft.svelte-apo8v3.svelte-apo8v3{font-size:8px;font-weight:700;color:var(--sl2);text-transform:uppercase;margin-bottom:4px}.fg-lic-fl.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl2);line-height:1.7;margin-bottom:5px}.fg-lic-row.svelte-apo8v3.svelte-apo8v3{display:flex;gap:4px}.fg-lic-in.svelte-apo8v3.svelte-apo8v3{flex:1;background:rgba(5,10,22,0.9);border:1px solid rgba(45,64,128,0.5);color:#e8edf8;padding:4px 7px;border-radius:4px;font-size:9px;font-family:monospace}.fg-lic-in.svelte-apo8v3.svelte-apo8v3:disabled{opacity:0.5}.fg-lic-ab.svelte-apo8v3.svelte-apo8v3{background:var(--amb);border:none;color:#0f1d42;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:800;white-space:nowrap}.fg-lic-ab.svelte-apo8v3.svelte-apo8v3:disabled{background:rgba(45,64,128,0.4);color:var(--sl2);cursor:not-allowed}.fg-lic-err.svelte-apo8v3.svelte-apo8v3{margin-top:5px;font-size:9px;color:#f87171;padding:4px 7px;background:rgba(61,10,10,0.8);border-radius:4px}.fg-radio.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;border-bottom:1px solid rgba(5,10,22,0.8);font-size:9px;color:#c8d4f0}.fg-radio.svelte-apo8v3.svelte-apo8v3:last-child{border-bottom:none}.fg-radio.svelte-apo8v3 span.svelte-apo8v3{flex:1}.fg-adjch.svelte-apo8v3.svelte-apo8v3{background:rgba(5,10,22,0.8);color:var(--sl);border-radius:2px;padding:1px 4px;font-size:8px}.fg-slbl.svelte-apo8v3.svelte-apo8v3{display:block;color:var(--sl);font-size:9px;margin-bottom:4px}.fg-srow.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;margin-top:2px}.fg-srow.svelte-apo8v3 input[type=\"range\"].svelte-apo8v3{flex:1;accent-color:var(--amb)}.fg-srow.svelte-apo8v3 span.svelte-apo8v3{min-width:48px;text-align:right;color:var(--amb);font-size:9px;font-weight:700}.fg-tog.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;font-size:9px;color:#c8d4f0;border-bottom:1px solid rgba(5,10,22,0.8)}.fg-tog.svelte-apo8v3.svelte-apo8v3:last-child{border-bottom:none}input[type=\"checkbox\"].svelte-apo8v3.svelte-apo8v3{accent-color:var(--amb)}.fg-gate.svelte-apo8v3.svelte-apo8v3{padding:16px 12px;text-align:center}.fg-gate-ic.svelte-apo8v3.svelte-apo8v3{font-size:28px;margin-bottom:6px}.fg-gate-ti.svelte-apo8v3.svelte-apo8v3{font-size:13px;font-weight:800;color:#fff;margin-bottom:6px}.fg-gate-btn.svelte-apo8v3.svelte-apo8v3{display:block;background:var(--amb);color:#0f1d42 !important;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:11px;font-weight:800}.fg-spin.svelte-apo8v3.svelte-apo8v3{width:15px;height:15px;border:2px solid rgba(45,64,128,0.5);border-top-color:var(--amb);border-radius:50%;animation:svelte-apo8v3-spin 0.8s linear infinite;flex-shrink:0}@keyframes svelte-apo8v3-spin{to{transform:rotate(360deg)}}.fg-dis.svelte-apo8v3.svelte-apo8v3{opacity:0.4;pointer-events:none}.fg-det-free-row.svelte-apo8v3.svelte-apo8v3{display:flex;flex-direction:column;align-items:center;padding:10px 8px;gap:3px;text-align:center}.fg-det-free-val.svelte-apo8v3.svelte-apo8v3{font-size:28px;font-weight:800;line-height:1}.fg-det-free-lbl.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl2);text-transform:uppercase;letter-spacing:0.5px}.fg-pro-nudge.svelte-apo8v3.svelte-apo8v3{margin:5px 0 2px;padding:7px 9px;background:rgba(232,150,42,0.08);border:1px solid rgba(232,150,42,0.25);border-radius:6px;font-size:9px;color:var(--sl2);display:flex;flex-direction:column;gap:5px}.fg-pro-nudge-btn.svelte-apo8v3.svelte-apo8v3{display:block;text-align:center;background:var(--amb);color:#3d1f00 !important;text-decoration:none;border-radius:4px;padding:4px 8px;font-size:9px;font-weight:800}.fg-mr-free.svelte-apo8v3.svelte-apo8v3{font-size:10px;font-weight:700;color:#e8edf8;background:rgba(10,18,40,0.9);border:1px solid rgba(45,64,128,0.5);padding:3px 8px;border-radius:4px}.fg-mr-pro-badge.svelte-apo8v3.svelte-apo8v3{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:9px;color:var(--sl2);text-decoration:none;background:rgba(232,150,42,0.08);border:1px solid rgba(232,150,42,0.25);padding:3px 8px;border-radius:4px;transition:all 0.15s}.fg-mr-pro-badge.svelte-apo8v3.svelte-apo8v3:hover{background:rgba(232,150,42,0.15);color:var(--amb)}.fg-summary.svelte-apo8v3.svelte-apo8v3{display:none}.fg-summary-hd.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;margin-bottom:5px}.fg-summary-name.svelte-apo8v3.svelte-apo8v3{font-size:10px;font-weight:800;color:var(--amb)}.fg-summary-loc.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fg-summary-time.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--sl);flex-shrink:0}.fg-summary-grid.svelte-apo8v3.svelte-apo8v3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 8px;margin-bottom:5px}.fg-sg.svelte-apo8v3.svelte-apo8v3{display:flex;flex-direction:column;cursor:pointer}.fg-sg-v.svelte-apo8v3.svelte-apo8v3{font-size:13px;font-weight:700;color:#fff;line-height:1.2}.fg-sg-l.svelte-apo8v3.svelte-apo8v3{font-size:8px;color:var(--sl2);text-transform:uppercase;letter-spacing:0.3px}.fg-summary-ft.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;justify-content:space-between}.fg-summary-tap.svelte-apo8v3.svelte-apo8v3{font-size:10px;color:var(--amb);cursor:pointer;text-decoration:underline}.fg-summary-ban.svelte-apo8v3.svelte-apo8v3{font-size:10px;color:#fcd34d;font-weight:700;background:rgba(124,45,18,0.8);padding:2px 8px;border-radius:3px}.fg-summary-load.svelte-apo8v3.svelte-apo8v3{padding:8px 0}.fg-pills.desktoponly.svelte-apo8v3.svelte-apo8v3{display:flex}.fg-susp-section.svelte-apo8v3.svelte-apo8v3{border-top:1px solid rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.05)}.fg-susp-hd.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:rgba(10,18,40,0.6);font-size:11px;font-weight:700;color:#e8edf8}.fg-susp-count.svelte-apo8v3.svelte-apo8v3{display:inline-flex;align-items:center;justify-content:center;background:var(--amb);color:#3d1f00;font-size:9px;font-weight:800;width:16px;height:16px;border-radius:50%;margin-left:4px}.fg-susp-add-btn.svelte-apo8v3.svelte-apo8v3{font-size:10px;font-weight:700;background:rgba(232,150,42,0.15);border:1px solid rgba(232,150,42,0.4);color:var(--amb);border-radius:5px;padding:3px 8px;cursor:pointer;transition:all 0.15s}.fg-susp-add-btn.svelte-apo8v3.svelte-apo8v3:hover{background:rgba(232,150,42,0.25)}.fg-susp-form.svelte-apo8v3.svelte-apo8v3{padding:8px 10px;background:rgba(5,10,22,0.6);border-top:1px solid rgba(45,64,128,0.3);display:flex;flex-direction:column;gap:6px}.fg-susp-form-row.svelte-apo8v3.svelte-apo8v3{display:flex;gap:5px}.fg-susp-lbl.svelte-apo8v3.svelte-apo8v3{display:flex;flex-direction:column;gap:2px;font-size:8px;color:var(--sl2);flex:1}.fg-susp-input.svelte-apo8v3.svelte-apo8v3{background:rgba(10,18,40,0.9);border:1px solid rgba(45,64,128,0.5);color:#e8edf8;padding:4px 5px;border-radius:4px;font-size:9px;width:100%;box-sizing:border-box}.fg-susp-input.svelte-apo8v3.svelte-apo8v3:focus{outline:none;border-color:var(--amb)}.fg-susp-form-footer.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;justify-content:space-between;padding-top:2px}.fg-susp-dur.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:var(--amb);font-weight:700}.fg-susp-save-btn.svelte-apo8v3.svelte-apo8v3{background:var(--amb);border:none;color:#3d1f00;font-size:10px;font-weight:800;padding:5px 12px;border-radius:5px;cursor:pointer;margin-left:auto}.fg-susp-save-btn.svelte-apo8v3.svelte-apo8v3:disabled{background:rgba(45,64,128,0.4);color:var(--sl2);cursor:not-allowed}.fg-susp-list.svelte-apo8v3.svelte-apo8v3{display:flex;flex-direction:column;gap:0}.fg-susp-item.svelte-apo8v3.svelte-apo8v3{padding:6px 10px;border-bottom:1px solid rgba(10,18,40,0.8);background:rgba(5,10,22,0.4)}.fg-susp-item.svelte-apo8v3.svelte-apo8v3:last-of-type{border-bottom:none}.fg-susp-item-main.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:6px;font-size:10px;color:#e8edf8;margin-bottom:2px}.fg-susp-item-date.svelte-apo8v3.svelte-apo8v3{color:var(--sl);font-family:monospace;font-size:9px}.fg-susp-item-time.svelte-apo8v3.svelte-apo8v3{color:var(--sl2);font-size:9px}.fg-susp-item-dur.svelte-apo8v3.svelte-apo8v3{background:rgba(232,150,42,0.2);color:var(--amb);font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px}.fg-susp-item-trigger.svelte-apo8v3.svelte-apo8v3{font-size:9px;color:#f87171;flex:1}.fg-susp-item-sub.svelte-apo8v3.svelte-apo8v3{display:flex;align-items:center;gap:8px;font-size:9px;color:var(--sl2)}.fg-susp-del.svelte-apo8v3.svelte-apo8v3{margin-left:auto;background:transparent;border:none;color:rgba(248,113,113,0.5);cursor:pointer;font-size:10px;padding:1px 4px;border-radius:3px;transition:all 0.15s}.fg-susp-del.svelte-apo8v3.svelte-apo8v3:hover{color:#f87171;background:rgba(248,113,113,0.1)}.fg-susp-total.svelte-apo8v3.svelte-apo8v3{padding:5px 10px;font-size:9px;color:var(--amb);font-weight:700;background:rgba(232,150,42,0.06);border-top:1px solid rgba(232,150,42,0.2);text-align:right}.fg-susp-empty.svelte-apo8v3.svelte-apo8v3{padding:10px;font-size:9px;color:var(--sl2);text-align:center;font-style:italic}");
+	append_styles(target, "svelte-fq6k1p", ".fieldguard.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;color:#e2e8f0;font-size:13px;padding:0 0 14px;background:#0f172a;min-height:100%}.fg-header.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0f172a;border-bottom:1px solid #1e293b}.fg-logo.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:26px;flex-shrink:0}.fg-titlewrap.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{min-width:0;flex:1;overflow:hidden}.fg-title.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:16px;font-weight:700;color:#f8fafc;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-subtitle.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-settings-btn.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:11px}.fg-tabs.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;background:#0f172a;border-bottom:1px solid #1e293b}.fg-tab.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{flex:1;padding:7px 2px;background:transparent;border:none;color:#64748b;cursor:pointer;font-size:11px}.fg-tab.active.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{color:#38bdf8;border-bottom:2px solid #38bdf8}.fg-location-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#1e293b;font-size:11px;color:#94a3b8}.fg-loc-text.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fg-model-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px;padding:5px 12px;background:#0f172a;font-size:11px;color:#94a3b8}.fg-model-row.svelte-fq6k1p select.svelte-fq6k1p.svelte-fq6k1p{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:3px 6px;border-radius:4px;font-size:11px}.fg-worst-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto}.fg-mini-btn.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#334155;border:none;color:#94a3b8;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:11px}.fg-mini-btn.locked.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#b45309;color:#fff}.fg-sites.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 12px;background:#1e293b;border-top:1px solid #0f172a}.fg-site-chip.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:inline-flex;align-items:center;gap:4px;background:#0f172a;border:1px solid #334155;color:#cbd5e1;padding:3px 7px;border-radius:14px;cursor:pointer;font-size:10px}.fg-site-chip.active.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{border-color:#38bdf8;color:#38bdf8}.fg-site-dot.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{width:7px;height:7px;border-radius:50%;flex-shrink:0}.fg-site-x.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{color:#64748b;font-weight:700;padding:0 2px}.fg-site-x.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p:hover{color:#f87171}.fg-site-name.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:3px 7px;border-radius:14px;font-size:10px;width:74px;box-sizing:border-box}.fg-site-add.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0284c7;border:none;color:#fff;padding:3px 9px;border-radius:14px;cursor:pointer;font-size:10px;font-weight:600}.fg-site-max.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:9px;color:#64748b}.fg-site-locked.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0f172a;border:1px dashed #334155;color:#94a3b8;padding:3px 9px;border-radius:14px;font-size:10px;text-decoration:none}.fg-stale.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:6px 12px 0;padding:5px 10px;background:#422006;border:1px solid #a16207;color:#fde68a;font-size:10px;border-radius:6px}.fg-daynight.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0}.fg-daynight.day.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#78350f;color:#fcd34d}.fg-daynight.night.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#1e3a8a;color:#bfdbfe}.fg-ban-info.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:5px 12px 0;padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;font-size:10px;color:#94a3b8}.fg-hazard-strip.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;gap:6px;padding:8px 12px 4px}.fg-hz.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{flex:1;background:#1e293b;border:2px solid #334155;border-radius:10px;padding:8px 4px 7px;cursor:pointer;text-align:center;min-width:0}.fg-hz.sel.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{outline:2px solid #f8fafc;outline-offset:-2px}.fg-hz-ic.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:16px;line-height:1}.fg-hz-val.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:15px;font-weight:800;color:#f8fafc;margin-top:3px;line-height:1;white-space:nowrap}.fg-hz-u.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:9px;font-weight:600;color:#94a3b8;margin-left:1px}.fg-hz-st.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:8.5px;font-weight:700;letter-spacing:0.3px;margin-top:4px}.fg-loading.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:20px;text-align:center;color:#64748b}.fg-error.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:12px;background:#450a0a;color:#fca5a5;border-radius:6px;margin:8px 12px}.fg-ban-alert.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:6px 12px;padding:10px 12px;background:#7c2d12;border:1px solid #ea580c;border-radius:7px;color:#fed7aa;font-size:12px;font-weight:600;text-align:center}.fg-ban-alert.svelte-fq6k1p small.svelte-fq6k1p.svelte-fq6k1p{font-weight:400;font-size:10px;display:block;margin-top:3px;color:#fdba74}.fg-zone-banner.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:10px;margin:8px 12px;padding:10px 12px;border-radius:8px;border:1px solid}.fg-zone-dot.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{width:14px;height:14px;border-radius:50%;flex-shrink:0}.fg-zone-main.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{flex:1}.fg-zone-name.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:17px;font-weight:800;letter-spacing:1px}.fg-zone-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#94a3b8}.fg-zone-sub.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#64748b;margin-top:2px}.fg-zone-time.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#475569}.fg-card.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#1e293b;border:1px solid #334155;border-left-width:3px;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-flat.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#1e293b;border:1px solid #334155;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-header.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-weight:600;font-size:12px;margin-bottom:8px;color:#f1f5f9;display:flex;align-items:center}.fg-badge.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin-left:auto;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;color:#fff}.fg-metrics-grid.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}.fg-metric.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0f172a;border-radius:6px;padding:5px;text-align:center}.fg-metric-val.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:14px;font-weight:700;color:#f8fafc}.fg-metric-lbl.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:9px;color:#64748b;text-transform:uppercase}.fg-work-schedule.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0f172a;border-radius:6px;padding:7px;margin-bottom:6px}.fg-ws-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:baseline;gap:6px;padding:2px 0}.fg-ws-icon.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px}.fg-ws-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#64748b;min-width:70px}.fg-ws-val.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#94a3b8;font-weight:500}.fg-ppe-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#475569;margin-top:4px}.fg-control-item.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#94a3b8;padding:3px 0;border-bottom:1px solid #0f172a}.fg-control-item.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p:last-child{border-bottom:none}.fg-threshold-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#475569;margin-top:4px}.fg-table.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{width:100%;border-collapse:collapse;font-size:11px}.fg-table.svelte-fq6k1p th.svelte-fq6k1p.svelte-fq6k1p{color:#64748b;text-align:left;padding:3px 4px;border-bottom:1px solid #334155}.fg-table.svelte-fq6k1p td.svelte-fq6k1p.svelte-fq6k1p{padding:3px 4px;color:#94a3b8}.fg-worst-row.svelte-fq6k1p td.svelte-fq6k1p.svelte-fq6k1p{color:#f1f5f9;font-weight:600;background:#0f172a}.fg-section-title.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:10px 12px 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px}.fg-empty.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:16px;text-align:center;color:#475569;font-size:11px}.fg-alert-item.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:3px 12px;padding:7px 10px;background:#1e293b;border-radius:6px}.fg-alert-time.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#64748b}.fg-alert-type.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:12px;font-weight:600;color:#f1f5f9}.fg-alert-msg.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#94a3b8}.fg-emergency-card.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#1e293b;border-radius:8px;margin:6px 12px;padding:12px;border:1px solid #dc2626}.fg-emg-title.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:14px;font-weight:700;color:#f87171;margin-bottom:4px}.fg-emg-sub.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#94a3b8;margin-bottom:10px}.fg-emg-section.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin-bottom:12px}.fg-emg-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}.fg-emg-item.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#fca5a5;padding:2px 0}.fg-emg-step.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:11px;color:#94a3b8}.fg-emg-num.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#334155;color:#e2e8f0;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;flex-shrink:0}.fg-emg-critical.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{color:#f87171 !important;font-weight:600}.fg-emg-critical.svelte-fq6k1p .fg-emg-num.svelte-fq6k1p.svelte-fq6k1p{background:#dc2626}.fg-report-note.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:0 12px 6px;padding:7px 10px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b}.fg-form.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:0 12px;display:grid;grid-template-columns:1fr 1fr;gap:5px}label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:block;color:#94a3b8;font-size:11px;margin-bottom:4px}.fg-form.svelte-fq6k1p label.svelte-fq6k1p input.svelte-fq6k1p,.fg-form.svelte-fq6k1p label select.svelte-fq6k1p.svelte-fq6k1p{display:block;width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:5px;font-size:11px;margin-top:2px;box-sizing:border-box}.fg-radio-label.svelte-fq6k1p input[type=\"radio\"].svelte-fq6k1p.svelte-fq6k1p,.fg-toggle-label.svelte-fq6k1p input[type=\"checkbox\"].svelte-fq6k1p.svelte-fq6k1p,.fg-worst-label.svelte-fq6k1p input[type=\"checkbox\"].svelte-fq6k1p.svelte-fq6k1p{width:auto;flex:0 0 auto;margin:0}.fg-radio-text.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{text-align:left}.fg-btn.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:block;width:calc(100% - 24px);margin:6px 12px;padding:9px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}.fg-btn-primary.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0284c7;color:#fff}.fg-btn-secondary.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#334155;color:#94a3b8}.fg-report-preview.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;overflow:hidden}.fg-report-toolbar.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1e293b;border-bottom:1px solid #334155;font-size:11px;color:#64748b}.fg-report-toolbar.svelte-fq6k1p span.svelte-fq6k1p.svelte-fq6k1p{flex:1}.fg-report-text.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{padding:10px;font-size:9px;color:#94a3b8;white-space:pre;overflow:auto;max-height:280px;font-family:'Courier New',monospace;line-height:1.5}.fg-settings-section.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#1e293b;border-radius:8px;margin:5px 12px;padding:10px}.fg-settings-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;font-weight:600;color:#38bdf8;margin-bottom:7px;text-transform:uppercase;letter-spacing:0.5px}.fg-note.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:10px;color:#475569;margin-bottom:7px}.fg-radio-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid #0f172a}.fg-radio-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p:last-child{border-bottom:none}.fg-radio-text.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:11px;color:#cbd5e1;flex:1}.fg-adj.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#334155;color:#94a3b8;border-radius:3px;padding:1px 5px;font-size:9px;margin-left:4px}.fg-pro-tag.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#f59e0b;color:#0f172a;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;margin-left:6px;letter-spacing:0.5px}.fg-tier.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-left:6px;flex-shrink:0}.fg-tier.free.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#334155;color:#94a3b8}.fg-tier.pro.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#f59e0b;color:#0f172a}.fg-license-active.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1}.fg-pro-badge.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#16a34a;color:#fff;font-weight:700;font-size:10px;padding:2px 8px;border-radius:4px}.fg-license-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;gap:6px;margin-top:6px}.fg-license-input.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{flex:1;min-width:0;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:5px;font-size:12px;font-family:monospace;letter-spacing:0.5px;text-transform:uppercase}.fg-btn-inline.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#0284c7;color:#fff;border:none;border-radius:5px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.fg-btn-inline.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p:disabled{opacity:0.6;cursor:default}.fg-buy-link.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:inline-block;margin-top:7px;font-size:11px;color:#38bdf8;text-decoration:none}.fg-license-msg.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin-top:7px;font-size:11px;color:#fcd34d}.fg-upgrade.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin:8px 12px;padding:12px;background:#1e293b;border:1px solid var(--amber, #f59e0b);border-radius:8px;font-size:12px;color:#fcd34d;line-height:1.6}input.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p:disabled{opacity:0.45;cursor:not-allowed}.fg-lock.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{margin-top:8px;padding:8px 10px;background:#0f172a;border:1px dashed #475569;border-radius:6px;font-size:10px;color:#94a3b8;display:flex;flex-direction:column;gap:7px}.fg-lock-btn.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{background:#f59e0b;color:#0f172a;border:none;border-radius:5px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}.fg-pro-feature.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{text-align:center;padding:32px 16px}.fg-pro-feature.svelte-fq6k1p .pf-ic.svelte-fq6k1p.svelte-fq6k1p{font-size:34px}.fg-pro-feature.svelte-fq6k1p .pf-t.svelte-fq6k1p.svelte-fq6k1p{font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 16px}.fg-pro-feature.svelte-fq6k1p .pf-btn.svelte-fq6k1p.svelte-fq6k1p{display:inline-block;background:#f59e0b;color:#0f172a;border:none;border-radius:7px;padding:10px 28px;font-size:13px;font-weight:700;cursor:pointer}.fg-slider-row.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px}.fg-slider-row.svelte-fq6k1p input[type=\"range\"].svelte-fq6k1p.svelte-fq6k1p{flex:1}.fg-slider-row.svelte-fq6k1p span.svelte-fq6k1p.svelte-fq6k1p{min-width:55px;text-align:right;color:#38bdf8;font-size:11px;font-weight:600}.fg-toggle-label.svelte-fq6k1p.svelte-fq6k1p.svelte-fq6k1p{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:11px;color:#cbd5e1}");
 }
 
-function get_each_context_7(ctx, list, i) {
+function get_each_context_9(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[125] = list[i][0];
-	child_ctx[126] = list[i][1];
+	child_ctx[149] = list[i][0];
+	child_ctx[150] = list[i][1];
 	return child_ctx;
 }
 
 function get_each_context_6(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[120] = list[i];
+	child_ctx[141] = list[i];
 	return child_ctx;
 }
 
-function get_each_context_3(ctx, list, i) {
+function get_each_context_7(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[114] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_4(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[117] = list[i];
-	child_ctx[119] = i;
-	return child_ctx;
-}
-
-function get_each_context_5(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[120] = list[i];
-	return child_ctx;
-}
-
-function get_each_context(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[105] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_1(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[108] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_2(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[111] = list[i];
+	child_ctx[144] = list[i];
+	child_ctx[146] = i;
 	return child_ctx;
 }
 
 function get_each_context_8(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[129] = list[i];
+	child_ctx[138] = list[i];
 	return child_ctx;
 }
 
-// (34:6) {:else}
-function create_else_block_12(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "☀ Day";
-			attr(span, "class", "fg-dbadge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
+function get_each_context(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[124] = list[i];
+	return child_ctx;
 }
 
-// (33:6) {#if isNight}
-function create_if_block_41(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "🌙 Night";
-			attr(span, "class", "fg-nbadge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
+function get_each_context_1(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[127] = list[i];
+	return child_ctx;
 }
 
-// (45:2) {#if isPro() && !locationLocked}
-function create_if_block_40(ctx) {
-	let div;
-
-	return {
-		c() {
-			div = element("div");
-			div.textContent = "Tap map to move pin · 📌 to lock location";
-			attr(div, "class", "fg-loc-hint svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
+function get_each_context_2(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[130] = list[i];
+	return child_ctx;
 }
 
-// (103:4) {:else}
-function create_else_block_11(ctx) {
-	let div;
+function get_each_context_3(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[130] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_4(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[135] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_5(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[138] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_10(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[153] = list[i];
+	return child_ctx;
+}
+
+// (18:4) {#each TABS as t}
+function create_each_block_10(ctx) {
 	let button;
-	let mounted;
-	let dispose;
-
-	return {
-		c() {
-			div = element("div");
-			button = element("button");
-			button.textContent = "⚡ Tap to load FieldGuard";
-			attr(button, "class", "fg-pills-tap svelte-apo8v3");
-			attr(div, "class", "fg-summary-load svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, button);
-
-			if (!mounted) {
-				dispose = listen(button, "click", /*refreshData*/ ctx[43]);
-				mounted = true;
-			}
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-
-			mounted = false;
-			dispose();
-		}
-	};
-}
-
-// (56:19) 
-function create_if_block_38(ctx) {
-	let div0;
-	let span0;
+	let t0_value = /*t*/ ctx[153].icon + "";
+	let t0;
 	let t1;
-	let span1;
-	let t2_value = (/*lat*/ ctx[1].toFixed(2) + ', ' + /*lon*/ ctx[2].toFixed(2)) + "";
+	let t2_value = /*t*/ ctx[153].label + "";
 	let t2;
 	let t3;
-	let span2;
-	let t4;
-	let t5;
-	let t6_value = (/*isNight*/ ctx[20] ? '🌙' : '☀') + "";
-	let t6;
-	let t7;
-	let div7;
-	let div1;
-	let span3;
-
-	let t8_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-	? 'NW'
-	: /*heat*/ ctx[9].apparentTempFinal + '°C') + "";
-
-	let t8;
-	let t9;
-	let span4;
-	let t11;
-	let div2;
-	let span5;
-	let t12_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "";
-	let t12;
-	let t13;
-	let t14;
-	let span6;
-	let t16;
-	let div3;
-	let span7;
-	let t17_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "";
-	let t17;
-	let t18;
-	let t19;
-	let span8;
-	let t21;
-	let div4;
-	let span9;
-	let t22_value = /*heat*/ ctx[9].wbgtAdjusted + "";
-	let t22;
-	let t23;
-	let t24;
-	let span10;
-	let t26;
-	let div5;
-	let span11;
-	let t27_value = (/*isNight*/ ctx[20] ? '0' : /*rawData*/ ctx[8]?.solarWm2) + "";
-	let t27;
-	let t28;
-	let t29;
-	let span12;
-	let t31;
-	let div6;
-	let span13;
-	let t32_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "";
-	let t32;
-	let t33;
-	let span14;
-	let t35;
-	let div8;
-	let t36;
-	let button;
-	let mounted;
-	let dispose;
-
-	function select_block_type_2(ctx, dirty) {
-		if (/*heat*/ ctx[9].isBanPeriod) return create_if_block_39;
-		return create_else_block_10;
-	}
-
-	let current_block_type = select_block_type_2(ctx);
-	let if_block = current_block_type(ctx);
-
-	return {
-		c() {
-			div0 = element("div");
-			span0 = element("span");
-			span0.textContent = "FieldGuard HSE";
-			t1 = space();
-			span1 = element("span");
-			t2 = text(t2_value);
-			t3 = space();
-			span2 = element("span");
-			t4 = text(/*currentTime*/ ctx[6]);
-			t5 = space();
-			t6 = text(t6_value);
-			t7 = space();
-			div7 = element("div");
-			div1 = element("div");
-			span3 = element("span");
-			t8 = text(t8_value);
-			t9 = space();
-			span4 = element("span");
-			span4.textContent = "App.Temp";
-			t11 = space();
-			div2 = element("div");
-			span5 = element("span");
-			t12 = text(t12_value);
-			t13 = text(" m/s");
-			t14 = space();
-			span6 = element("span");
-			span6.textContent = "Wind";
-			t16 = space();
-			div3 = element("div");
-			span7 = element("span");
-			t17 = text(t17_value);
-			t18 = text(" mm/h");
-			t19 = space();
-			span8 = element("span");
-			span8.textContent = "Rain";
-			t21 = space();
-			div4 = element("div");
-			span9 = element("span");
-			t22 = text(t22_value);
-			t23 = text("°C");
-			t24 = space();
-			span10 = element("span");
-			span10.textContent = "WBGT+PPE";
-			t26 = space();
-			div5 = element("div");
-			span11 = element("span");
-			t27 = text(t27_value);
-			t28 = text(" W/m²");
-			t29 = space();
-			span12 = element("span");
-			span12.textContent = "Solar";
-			t31 = space();
-			div6 = element("div");
-			span13 = element("span");
-			t32 = text(t32_value);
-			t33 = space();
-			span14 = element("span");
-			span14.textContent = "Zone";
-			t35 = space();
-			div8 = element("div");
-			if_block.c();
-			t36 = space();
-			button = element("button");
-			button.textContent = "↻";
-			attr(span0, "class", "fg-summary-name svelte-apo8v3");
-			attr(span1, "class", "fg-summary-loc svelte-apo8v3");
-			attr(span2, "class", "fg-summary-time svelte-apo8v3");
-			attr(div0, "class", "fg-summary-hd svelte-apo8v3");
-			attr(span3, "class", "fg-sg-v svelte-apo8v3");
-			set_style(span3, "color", /*heat*/ ctx[9].zoneInfo.color);
-			attr(span4, "class", "fg-sg-l svelte-apo8v3");
-			attr(div1, "class", "fg-sg svelte-apo8v3");
-			attr(span5, "class", "fg-sg-v svelte-apo8v3");
-			set_style(span5, "color", /*windResult*/ ctx[10]?.riskColor);
-			attr(span6, "class", "fg-sg-l svelte-apo8v3");
-			attr(div2, "class", "fg-sg svelte-apo8v3");
-			attr(span7, "class", "fg-sg-v svelte-apo8v3");
-			set_style(span7, "color", /*rainResult*/ ctx[11]?.riskColor);
-			attr(span8, "class", "fg-sg-l svelte-apo8v3");
-			attr(div3, "class", "fg-sg svelte-apo8v3");
-			attr(span9, "class", "fg-sg-v svelte-apo8v3");
-			attr(span10, "class", "fg-sg-l svelte-apo8v3");
-			attr(div4, "class", "fg-sg svelte-apo8v3");
-			attr(span11, "class", "fg-sg-v svelte-apo8v3");
-			set_style(span11, "color", /*solarColor*/ ctx[27]);
-			attr(span12, "class", "fg-sg-l svelte-apo8v3");
-			attr(div5, "class", "fg-sg svelte-apo8v3");
-			attr(span13, "class", "fg-sg-v svelte-apo8v3");
-			set_style(span13, "color", /*heat*/ ctx[9].zoneInfo.color);
-			set_style(span13, "font-weight", "800");
-			attr(span14, "class", "fg-sg-l svelte-apo8v3");
-			attr(div6, "class", "fg-sg svelte-apo8v3");
-			attr(div7, "class", "fg-summary-grid svelte-apo8v3");
-			attr(button, "class", "fg-rfr svelte-apo8v3");
-			attr(div8, "class", "fg-summary-ft svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div0, anchor);
-			append(div0, span0);
-			append(div0, t1);
-			append(div0, span1);
-			append(span1, t2);
-			append(div0, t3);
-			append(div0, span2);
-			append(span2, t4);
-			append(span2, t5);
-			append(span2, t6);
-			insert(target, t7, anchor);
-			insert(target, div7, anchor);
-			append(div7, div1);
-			append(div1, span3);
-			append(span3, t8);
-			append(div1, t9);
-			append(div1, span4);
-			append(div7, t11);
-			append(div7, div2);
-			append(div2, span5);
-			append(span5, t12);
-			append(span5, t13);
-			append(div2, t14);
-			append(div2, span6);
-			append(div7, t16);
-			append(div7, div3);
-			append(div3, span7);
-			append(span7, t17);
-			append(span7, t18);
-			append(div3, t19);
-			append(div3, span8);
-			append(div7, t21);
-			append(div7, div4);
-			append(div4, span9);
-			append(span9, t22);
-			append(span9, t23);
-			append(div4, t24);
-			append(div4, span10);
-			append(div7, t26);
-			append(div7, div5);
-			append(div5, span11);
-			append(span11, t27);
-			append(span11, t28);
-			append(div5, t29);
-			append(div5, span12);
-			append(div7, t31);
-			append(div7, div6);
-			append(div6, span13);
-			append(span13, t32);
-			append(div6, t33);
-			append(div6, span14);
-			insert(target, t35, anchor);
-			insert(target, div8, anchor);
-			if_block.m(div8, null);
-			append(div8, t36);
-			append(div8, button);
-
-			if (!mounted) {
-				dispose = [
-					listen(div1, "click", /*click_handler_1*/ ctx[52]),
-					listen(div2, "click", /*click_handler_2*/ ctx[53]),
-					listen(div3, "click", /*click_handler_3*/ ctx[54]),
-					listen(div4, "click", /*click_handler_4*/ ctx[55]),
-					listen(div5, "click", /*click_handler_5*/ ctx[56]),
-					listen(div6, "click", /*click_handler_6*/ ctx[57]),
-					listen(button, "click", /*refreshData*/ ctx[43])
-				];
-
-				mounted = true;
-			}
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*lat, lon*/ 6 && t2_value !== (t2_value = (/*lat*/ ctx[1].toFixed(2) + ', ' + /*lon*/ ctx[2].toFixed(2)) + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*currentTime*/ 64) set_data(t4, /*currentTime*/ ctx[6]);
-			if (dirty[0] & /*isNight*/ 1048576 && t6_value !== (t6_value = (/*isNight*/ ctx[20] ? '🌙' : '☀') + "")) set_data(t6, t6_value);
-
-			if (dirty[0] & /*heat*/ 512 && t8_value !== (t8_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-			? 'NW'
-			: /*heat*/ ctx[9].apparentTempFinal + '°C') + "")) set_data(t8, t8_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(span3, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if (dirty[0] & /*rawData*/ 256 && t12_value !== (t12_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "")) set_data(t12, t12_value);
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(span5, "color", /*windResult*/ ctx[10]?.riskColor);
-			}
-
-			if (dirty[0] & /*rawData*/ 256 && t17_value !== (t17_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "")) set_data(t17, t17_value);
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(span7, "color", /*rainResult*/ ctx[11]?.riskColor);
-			}
-
-			if (dirty[0] & /*heat*/ 512 && t22_value !== (t22_value = /*heat*/ ctx[9].wbgtAdjusted + "")) set_data(t22, t22_value);
-			if (dirty[0] & /*isNight, rawData*/ 1048832 && t27_value !== (t27_value = (/*isNight*/ ctx[20] ? '0' : /*rawData*/ ctx[8]?.solarWm2) + "")) set_data(t27, t27_value);
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(span11, "color", /*solarColor*/ ctx[27]);
-			}
-
-			if (dirty[0] & /*heat*/ 512 && t32_value !== (t32_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "")) set_data(t32, t32_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(span13, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if (current_block_type === (current_block_type = select_block_type_2(ctx)) && if_block) {
-				if_block.p(ctx, dirty);
-			} else {
-				if_block.d(1);
-				if_block = current_block_type(ctx);
-
-				if (if_block) {
-					if_block.c();
-					if_block.m(div8, t36);
-				}
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t7);
-				detach(div7);
-				detach(t35);
-				detach(div8);
-			}
-
-			if_block.d();
-			mounted = false;
-			run_all(dispose);
-		}
-	};
-}
-
-// (54:4) {#if loading}
-function create_if_block_37(ctx) {
-	let div1;
-
-	return {
-		c() {
-			div1 = element("div");
-			div1.innerHTML = `<div class="fg-spin svelte-apo8v3"></div><span>Loading…</span>`;
-			attr(div1, "class", "fg-summary-load svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-		}
-	};
-}
-
-// (97:8) {:else}
-function create_else_block_10(ctx) {
-	let span;
-	let mounted;
-	let dispose;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "Tap for details";
-			attr(span, "class", "fg-summary-tap svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-
-			if (!mounted) {
-				dispose = listen(span, "click", /*click_handler_7*/ ctx[58]);
-				mounted = true;
-			}
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-
-			mounted = false;
-			dispose();
-		}
-	};
-}
-
-// (95:8) {#if heat.isBanPeriod}
-function create_if_block_39(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "🚫 WORK BAN ACTIVE";
-			attr(span, "class", "fg-summary-ban svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (112:4) {#if heat}
-function create_if_block_35(ctx) {
-	let button0;
-	let span0;
-	let t1;
-	let span1;
-
-	let t2_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-	? 'NW'
-	: /*heat*/ ctx[9].apparentTempFinal + '°') + "";
-
-	let t2;
-	let t3;
-	let span2;
-	let t4_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "";
-	let t4;
-	let button0_class_value;
-	let t5;
-	let button1;
-	let span3;
-	let t7;
-	let span5;
-	let t8_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "";
-	let t8;
-	let span4;
-	let t10;
-	let span6;
-	let t11_value = /*windResult*/ ctx[10]?.riskLabel + "";
-	let t11;
-	let button1_class_value;
-	let t12;
-	let button2;
-	let span7;
-	let t14;
-	let span9;
-	let t15_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "";
-	let t15;
-	let span8;
-	let t17;
-	let span10;
-	let t18_value = /*rainResult*/ ctx[11]?.riskLabel + "";
-	let t18;
-	let button2_class_value;
-	let t19;
-	let button3;
-	let span11;
-	let t20_value = (/*isNight*/ ctx[20] ? '🌙' : '☀') + "";
-	let t20;
-	let t21;
-	let span13;
-
-	let t22_value = (/*isNight*/ ctx[20]
-	? '--'
-	: /*rawData*/ ctx[8]?.solarWm2) + "";
-
-	let t22;
-	let span12;
-	let t23_value = (/*isNight*/ ctx[20] ? '' : 'W') + "";
-	let t23;
-	let t24;
-	let span14;
-	let t25;
-	let button3_class_value;
-	let t26;
-	let t27;
-	let button4;
-	let mounted;
-	let dispose;
-	let if_block = /*heat*/ ctx[9].isBanPeriod && create_if_block_36();
-
-	return {
-		c() {
-			button0 = element("button");
-			span0 = element("span");
-			span0.textContent = "🌡";
-			t1 = space();
-			span1 = element("span");
-			t2 = text(t2_value);
-			t3 = space();
-			span2 = element("span");
-			t4 = text(t4_value);
-			t5 = space();
-			button1 = element("button");
-			span3 = element("span");
-			span3.textContent = "💨";
-			t7 = space();
-			span5 = element("span");
-			t8 = text(t8_value);
-			span4 = element("span");
-			span4.textContent = "m/s";
-			t10 = space();
-			span6 = element("span");
-			t11 = text(t11_value);
-			t12 = space();
-			button2 = element("button");
-			span7 = element("span");
-			span7.textContent = "🌧";
-			t14 = space();
-			span9 = element("span");
-			t15 = text(t15_value);
-			span8 = element("span");
-			span8.textContent = "mm";
-			t17 = space();
-			span10 = element("span");
-			t18 = text(t18_value);
-			t19 = space();
-			button3 = element("button");
-			span11 = element("span");
-			t20 = text(t20_value);
-			t21 = space();
-			span13 = element("span");
-			t22 = text(t22_value);
-			span12 = element("span");
-			t23 = text(t23_value);
-			t24 = space();
-			span14 = element("span");
-			t25 = text(/*solarLabel*/ ctx[28]);
-			t26 = space();
-			if (if_block) if_block.c();
-			t27 = space();
-			button4 = element("button");
-			button4.textContent = "↻";
-			attr(span0, "class", "fg-pill-ic svelte-apo8v3");
-			attr(span1, "class", "fg-pill-vl svelte-apo8v3");
-			attr(span2, "class", "fg-pill-lb svelte-apo8v3");
-			set_style(span2, "color", /*heat*/ ctx[9].zoneInfo.color);
-			attr(button0, "class", button0_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'heat' ? 'fg-pill-on' : '') + " svelte-apo8v3");
-			set_style(button0, "--c", /*heat*/ ctx[9].zoneInfo.color);
-			attr(span3, "class", "fg-pill-ic svelte-apo8v3");
-			attr(span4, "class", "fg-pill-u svelte-apo8v3");
-			attr(span5, "class", "fg-pill-vl svelte-apo8v3");
-			attr(span6, "class", "fg-pill-lb svelte-apo8v3");
-			set_style(span6, "color", /*windResult*/ ctx[10]?.riskColor);
-			attr(button1, "class", button1_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'wind' ? 'fg-pill-on' : '') + " svelte-apo8v3");
-			set_style(button1, "--c", /*windResult*/ ctx[10]?.riskColor);
-			attr(span7, "class", "fg-pill-ic svelte-apo8v3");
-			attr(span8, "class", "fg-pill-u svelte-apo8v3");
-			attr(span9, "class", "fg-pill-vl svelte-apo8v3");
-			attr(span10, "class", "fg-pill-lb svelte-apo8v3");
-			set_style(span10, "color", /*rainResult*/ ctx[11]?.riskColor);
-			attr(button2, "class", button2_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'rain' ? 'fg-pill-on' : '') + " svelte-apo8v3");
-			set_style(button2, "--c", /*rainResult*/ ctx[11]?.riskColor);
-			attr(span11, "class", "fg-pill-ic svelte-apo8v3");
-			attr(span12, "class", "fg-pill-u svelte-apo8v3");
-			attr(span13, "class", "fg-pill-vl svelte-apo8v3");
-			attr(span14, "class", "fg-pill-lb svelte-apo8v3");
-			set_style(span14, "color", /*solarColor*/ ctx[27]);
-			attr(button3, "class", button3_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'solar' ? 'fg-pill-on' : '') + " svelte-apo8v3");
-			set_style(button3, "--c", /*solarColor*/ ctx[27]);
-			attr(button4, "class", "fg-rfr svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, button0, anchor);
-			append(button0, span0);
-			append(button0, t1);
-			append(button0, span1);
-			append(span1, t2);
-			append(button0, t3);
-			append(button0, span2);
-			append(span2, t4);
-			insert(target, t5, anchor);
-			insert(target, button1, anchor);
-			append(button1, span3);
-			append(button1, t7);
-			append(button1, span5);
-			append(span5, t8);
-			append(span5, span4);
-			append(button1, t10);
-			append(button1, span6);
-			append(span6, t11);
-			insert(target, t12, anchor);
-			insert(target, button2, anchor);
-			append(button2, span7);
-			append(button2, t14);
-			append(button2, span9);
-			append(span9, t15);
-			append(span9, span8);
-			append(button2, t17);
-			append(button2, span10);
-			append(span10, t18);
-			insert(target, t19, anchor);
-			insert(target, button3, anchor);
-			append(button3, span11);
-			append(span11, t20);
-			append(button3, t21);
-			append(button3, span13);
-			append(span13, t22);
-			append(span13, span12);
-			append(span12, t23);
-			append(button3, t24);
-			append(button3, span14);
-			append(span14, t25);
-			insert(target, t26, anchor);
-			if (if_block) if_block.m(target, anchor);
-			insert(target, t27, anchor);
-			insert(target, button4, anchor);
-
-			if (!mounted) {
-				dispose = [
-					listen(button0, "click", /*click_handler_8*/ ctx[59]),
-					listen(button1, "click", /*click_handler_9*/ ctx[60]),
-					listen(button2, "click", /*click_handler_10*/ ctx[61]),
-					listen(button3, "click", /*click_handler_11*/ ctx[62]),
-					listen(button4, "click", /*refreshData*/ ctx[43])
-				];
-
-				mounted = true;
-			}
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512 && t2_value !== (t2_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-			? 'NW'
-			: /*heat*/ ctx[9].apparentTempFinal + '°') + "")) set_data(t2, t2_value);
-
-			if (dirty[0] & /*heat*/ 512 && t4_value !== (t4_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "")) set_data(t4, t4_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(span2, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if (dirty[0] & /*activeCard*/ 128 && button0_class_value !== (button0_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'heat' ? 'fg-pill-on' : '') + " svelte-apo8v3")) {
-				attr(button0, "class", button0_class_value);
-			}
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(button0, "--c", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if (dirty[0] & /*rawData*/ 256 && t8_value !== (t8_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "")) set_data(t8, t8_value);
-			if (dirty[0] & /*windResult*/ 1024 && t11_value !== (t11_value = /*windResult*/ ctx[10]?.riskLabel + "")) set_data(t11, t11_value);
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(span6, "color", /*windResult*/ ctx[10]?.riskColor);
-			}
-
-			if (dirty[0] & /*activeCard*/ 128 && button1_class_value !== (button1_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'wind' ? 'fg-pill-on' : '') + " svelte-apo8v3")) {
-				attr(button1, "class", button1_class_value);
-			}
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(button1, "--c", /*windResult*/ ctx[10]?.riskColor);
-			}
-
-			if (dirty[0] & /*rawData*/ 256 && t15_value !== (t15_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "")) set_data(t15, t15_value);
-			if (dirty[0] & /*rainResult*/ 2048 && t18_value !== (t18_value = /*rainResult*/ ctx[11]?.riskLabel + "")) set_data(t18, t18_value);
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(span10, "color", /*rainResult*/ ctx[11]?.riskColor);
-			}
-
-			if (dirty[0] & /*activeCard*/ 128 && button2_class_value !== (button2_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'rain' ? 'fg-pill-on' : '') + " svelte-apo8v3")) {
-				attr(button2, "class", button2_class_value);
-			}
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(button2, "--c", /*rainResult*/ ctx[11]?.riskColor);
-			}
-
-			if (dirty[0] & /*isNight*/ 1048576 && t20_value !== (t20_value = (/*isNight*/ ctx[20] ? '🌙' : '☀') + "")) set_data(t20, t20_value);
-
-			if (dirty[0] & /*isNight, rawData*/ 1048832 && t22_value !== (t22_value = (/*isNight*/ ctx[20]
-			? '--'
-			: /*rawData*/ ctx[8]?.solarWm2) + "")) set_data(t22, t22_value);
-
-			if (dirty[0] & /*isNight*/ 1048576 && t23_value !== (t23_value = (/*isNight*/ ctx[20] ? '' : 'W') + "")) set_data(t23, t23_value);
-			if (dirty[0] & /*solarLabel*/ 268435456) set_data(t25, /*solarLabel*/ ctx[28]);
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(span14, "color", /*solarColor*/ ctx[27]);
-			}
-
-			if (dirty[0] & /*activeCard*/ 128 && button3_class_value !== (button3_class_value = "fg-pill " + (/*activeCard*/ ctx[7] === 'solar' ? 'fg-pill-on' : '') + " svelte-apo8v3")) {
-				attr(button3, "class", button3_class_value);
-			}
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(button3, "--c", /*solarColor*/ ctx[27]);
-			}
-
-			if (/*heat*/ ctx[9].isBanPeriod) {
-				if (if_block) ; else {
-					if_block = create_if_block_36();
-					if_block.c();
-					if_block.m(t27.parentNode, t27);
-				}
-			} else if (if_block) {
-				if_block.d(1);
-				if_block = null;
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(button0);
-				detach(t5);
-				detach(button1);
-				detach(t12);
-				detach(button2);
-				detach(t19);
-				detach(button3);
-				detach(t26);
-				detach(t27);
-				detach(button4);
-			}
-
-			if (if_block) if_block.d(detaching);
-			mounted = false;
-			run_all(dispose);
-		}
-	};
-}
-
-// (137:6) {#if heat.isBanPeriod}
-function create_if_block_36(ctx) {
-	let div;
-
-	return {
-		c() {
-			div = element("div");
-			div.textContent = "🚫";
-			attr(div, "class", "fg-pill-ban svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (149:6) {#each TABS as t}
-function create_each_block_8(ctx) {
-	let button;
-	let span0;
-	let span1;
-	let t2;
 	let button_class_value;
 	let mounted;
 	let dispose;
 
-	function click_handler_12() {
-		return /*click_handler_12*/ ctx[63](/*t*/ ctx[129]);
+	function click_handler_1() {
+		return /*click_handler_1*/ ctx[59](/*t*/ ctx[153]);
 	}
 
 	return {
 		c() {
 			button = element("button");
-			span0 = element("span");
-			span0.textContent = `${/*t*/ ctx[129].icon}`;
-			span1 = element("span");
-			span1.textContent = `${/*t*/ ctx[129].label}`;
-			t2 = space();
-			attr(span0, "class", "svelte-apo8v3");
-			attr(span1, "class", "svelte-apo8v3");
-			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[0] === /*t*/ ctx[129].id ? 'fg-tab-on' : '') + " svelte-apo8v3");
+			t0 = text(t0_value);
+			t1 = space();
+			t2 = text(t2_value);
+			t3 = space();
+			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[153].id ? 'active' : '') + " svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, button, anchor);
-			append(button, span0);
-			append(button, span1);
+			append(button, t0);
+			append(button, t1);
 			append(button, t2);
+			append(button, t3);
 
 			if (!mounted) {
-				dispose = listen(button, "click", click_handler_12);
+				dispose = listen(button, "click", click_handler_1);
 				mounted = true;
 			}
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[0] & /*tab*/ 1 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[0] === /*t*/ ctx[129].id ? 'fg-tab-on' : '') + " svelte-apo8v3")) {
+			if (dirty[0] & /*tab*/ 16 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[153].id ? 'active' : '') + " svelte-fq6k1p")) {
 				attr(button, "class", button_class_value);
 			}
 		},
@@ -3984,141 +3442,761 @@ function create_each_block_8(ctx) {
 	};
 }
 
-// (440:33) 
-function create_if_block_30(ctx) {
-	let div1;
+// (480:31) 
+function create_if_block_35(ctx) {
 	let div0;
 	let t1;
-	let t2;
-	let div3;
 	let div2;
+	let div1;
+	let t3;
 	let t4;
 	let t5;
-	let t6;
 	let div5;
-	let div4;
-	let t8;
+	let div3;
+	let t6;
+	let t7;
 	let label0;
 	let input0;
-	let t9;
-	let t10;
+	let input0_disabled_value;
+	let t8;
+	let span1;
+	let t11;
 	let label1;
 	let input1;
 	let input1_disabled_value;
-	let t11;
-	let label1_class_value;
+	let t12;
+	let span3;
+	let t15;
+	let div4;
+	let t17;
+	let div8;
+	let div6;
+	let t18;
+	let t19;
+	let div7;
+	let t21;
+	let label2;
+	let input2;
+	let input2_disabled_value;
+	let t22;
+	let span5;
+	let t25;
+	let label3;
+	let input3;
+	let input3_disabled_value;
+	let t26;
+	let span6;
+	let t28;
+	let label4;
+	let input4;
+	let input4_disabled_value;
+	let t29;
+	let span7;
+	let t31;
+	let div10;
+	let div9;
+	let t33;
+	let t34;
+	let div15;
+	let div11;
+	let t35;
+	let t36;
+	let div12;
+	let t38;
+	let label5;
+	let t39;
+	let t40_value = (/*units*/ ctx[38] === 'imperial' ? '°F' : '°C') + "";
+	let t40;
+	let t41;
+	let div13;
+	let input5;
+	let input5_disabled_value;
+	let t42;
+	let span8;
+	let t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[38]) + "";
+	let t43;
+	let t44;
+	let label6;
+	let t45;
+	let t46_value = (/*units*/ ctx[38] === 'imperial' ? '°F' : '°C') + "";
+	let t46;
+	let t47;
+	let div14;
+	let input6;
+	let input6_disabled_value;
+	let t48;
+	let span9;
+	let t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[38]) + "";
+	let t49;
+	let t50;
+	let div19;
+	let div16;
+	let t51;
+	let t52;
+	let label7;
+	let t53;
+	let t54_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t54;
+	let t55;
+	let div17;
+	let input7;
+	let input7_disabled_value;
+	let t56;
+	let span10;
+	let t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[38]) + "";
+	let t57;
+	let t58;
+	let label8;
+	let t59;
+	let t60_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t60;
+	let t61;
+	let div18;
+	let input8;
+	let input8_disabled_value;
+	let t62;
+	let span11;
+	let t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[38]) + "";
+	let t63;
+	let t64;
+	let div23;
+	let div20;
+	let t65;
+	let t66;
+	let label9;
+	let t67;
+	let t68_value = (/*units*/ ctx[38] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t68;
+	let t69;
+	let div21;
+	let input9;
+	let input9_disabled_value;
+	let t70;
+	let span12;
+	let t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[38]) + "";
+	let t71;
+	let t72;
+	let label10;
+	let t73;
+	let t74_value = (/*units*/ ctx[38] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t74;
+	let t75;
+	let div22;
+	let input10;
+	let input10_disabled_value;
+	let t76;
+	let span13;
+	let t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[38]) + "";
+	let t77;
+	let t78;
+	let div27;
+	let div24;
+	let t79;
+	let t80;
+	let div25;
+	let t82;
+	let label11;
+	let t83;
+	let t84_value = (/*units*/ ctx[38] === 'imperial' ? 'mi' : 'km') + "";
+	let t84;
+	let t85;
+	let div26;
+	let input11;
+	let input11_disabled_value;
+	let t86;
+	let span14;
+	let t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[38]) + "";
+	let t87;
+	let t88;
+	let t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[38]) + "";
+	let t89;
+	let t90;
+	let div29;
+	let div28;
+	let t92;
+	let label12;
+	let input12;
+	let t93;
+	let t94;
+	let label13;
+	let input13;
+	let input13_disabled_value;
+	let t95;
+	let t96;
+	let button;
+	let binding_group;
+	let binding_group_1;
 	let mounted;
 	let dispose;
 
-	function select_block_type_15(ctx, dirty) {
-		if (/*license*/ ctx[29].valid) return create_if_block_33;
+	function select_block_type_13(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_44;
 		return create_else_block_9;
 	}
 
-	let current_block_type = select_block_type_15(ctx);
+	let current_block_type = select_block_type_13(ctx);
 	let if_block0 = current_block_type(ctx);
-	let each_value_7 = ensure_array_like(Object.entries(PPE_PROFILES));
+	let if_block1 = /*licenseMsg*/ ctx[25] && create_if_block_43(ctx);
+	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_42();
+	let if_block3 = !/*isPro*/ ctx[3] && create_if_block_41();
+	let each_value_9 = ensure_array_like(Object.entries(PPE_PROFILES));
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_7.length; i += 1) {
-		each_blocks[i] = create_each_block_7(get_each_context_7(ctx, each_value_7, i));
+	for (let i = 0; i < each_value_9.length; i += 1) {
+		each_blocks[i] = create_each_block_9(get_each_context_9(ctx, each_value_9, i));
 	}
 
-	let if_block1 = /*license*/ ctx[29].valid && create_if_block_32(ctx);
-	let if_block2 = !/*license*/ ctx[29].valid && create_if_block_31();
+	let if_block4 = !/*isPro*/ ctx[3] && create_if_block_40();
+	let if_block5 = !/*isPro*/ ctx[3] && create_if_block_39();
+	let if_block6 = !/*isPro*/ ctx[3] && create_if_block_38();
+	let if_block7 = !/*isPro*/ ctx[3] && create_if_block_37();
+	let if_block8 = !/*isPro*/ ctx[3] && create_if_block_36();
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[90][1]);
+	binding_group_1 = init_binding_group(/*$$binding_groups*/ ctx[90][2]);
 
 	return {
 		c() {
-			div1 = element("div");
 			div0 = element("div");
-			div0.textContent = "🔑 License";
+			div0.textContent = "⚙ Configuration";
 			t1 = space();
-			if_block0.c();
-			t2 = space();
-			div3 = element("div");
 			div2 = element("div");
-			div2.textContent = "👷 PPE Profile (ISO 7933)";
+			div1 = element("div");
+			div1.textContent = "🔑 License";
+			t3 = space();
+			if_block0.c();
 			t4 = space();
+			if (if_block1) if_block1.c();
+			t5 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t6 = text("🌐 Units & Display ");
+			if (if_block2) if_block2.c();
+			t7 = space();
+			label0 = element("label");
+			input0 = element("input");
+			t8 = space();
+			span1 = element("span");
+			span1.innerHTML = `Metric <span class="fg-adj svelte-fq6k1p">°C · m/s · mm/h</span>`;
+			t11 = space();
+			label1 = element("label");
+			input1 = element("input");
+			t12 = space();
+			span3 = element("span");
+			span3.innerHTML = `Imperial <span class="fg-adj svelte-fq6k1p">°F · mph · in/h</span>`;
+			t15 = space();
+			div4 = element("div");
+			div4.textContent = "WBGT/heat-stress standards (ISO 7933/7243) are defined in °C; values are converted for display.";
+			t17 = space();
+			div8 = element("div");
+			div6 = element("div");
+			t18 = text("❄ Winter / Cold-Stress Monitoring ");
+			if (if_block3) if_block3.c();
+			t19 = space();
+			div7 = element("div");
+			div7.textContent = "Wind chill (Environment Canada) + ACGIH cold-stress zones & frostbite times.";
+			t21 = space();
+			label2 = element("label");
+			input2 = element("input");
+			t22 = space();
+			span5 = element("span");
+			span5.innerHTML = `Auto <span class="fg-adj svelte-fq6k1p">show when ≤ 10°C</span>`;
+			t25 = space();
+			label3 = element("label");
+			input3 = element("input");
+			t26 = space();
+			span6 = element("span");
+			span6.textContent = "Always on";
+			t28 = space();
+			label4 = element("label");
+			input4 = element("input");
+			t29 = space();
+			span7 = element("span");
+			span7.textContent = "Off";
+			t31 = space();
+			div10 = element("div");
+			div9 = element("div");
+			div9.textContent = "👷 PPE Profile (ISO 7933:2004)";
+			t33 = space();
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
-			t5 = space();
-			if (if_block1) if_block1.c();
-			t6 = space();
-			div5 = element("div");
-			div4 = element("div");
-			div4.textContent = "🔔 Alerts";
-			t8 = space();
-			label0 = element("label");
-			input0 = element("input");
-			t9 = text("Browser notifications");
-			t10 = space();
-			label1 = element("label");
-			input1 = element("input");
-			t11 = text("Auto-refresh 15 min ");
-			if (if_block2) if_block2.c();
-			attr(div0, "class", "fg-grp-hd svelte-apo8v3");
-			attr(div1, "class", "fg-grp svelte-apo8v3");
-			attr(div2, "class", "fg-grp-hd svelte-apo8v3");
-			attr(div3, "class", "fg-grp svelte-apo8v3");
-			attr(div4, "class", "fg-grp-hd svelte-apo8v3");
-			attr(input0, "type", "checkbox");
-			attr(input0, "class", "svelte-apo8v3");
-			attr(label0, "class", "fg-tog svelte-apo8v3");
-			attr(input1, "type", "checkbox");
-			input1.disabled = input1_disabled_value = !/*license*/ ctx[29].valid;
-			attr(input1, "class", "svelte-apo8v3");
-			attr(label1, "class", label1_class_value = "fg-tog " + (!/*license*/ ctx[29].valid ? 'fg-dis' : '') + " svelte-apo8v3");
-			attr(div5, "class", "fg-grp svelte-apo8v3");
+			t34 = space();
+			div15 = element("div");
+			div11 = element("div");
+			t35 = text("🌡 WBGT Custom Thresholds (ISO 7933) ");
+			if (if_block4) if_block4.c();
+			t36 = space();
+			div12 = element("div");
+			div12.textContent = "Zone system uses a 2-step Apparent Temperature method. WBGT thresholds are used for FIDIC reports.";
+			t38 = space();
+			label5 = element("label");
+			t39 = text("Warning (");
+			t40 = text(t40_value);
+			t41 = text(")\n        ");
+			div13 = element("div");
+			input5 = element("input");
+			t42 = space();
+			span8 = element("span");
+			t43 = text(t43_value);
+			t44 = space();
+			label6 = element("label");
+			t45 = text("Danger (");
+			t46 = text(t46_value);
+			t47 = text(")\n        ");
+			div14 = element("div");
+			input6 = element("input");
+			t48 = space();
+			span9 = element("span");
+			t49 = text(t49_value);
+			t50 = space();
+			div19 = element("div");
+			div16 = element("div");
+			t51 = text("💨 Wind Thresholds ");
+			if (if_block5) if_block5.c();
+			t52 = space();
+			label7 = element("label");
+			t53 = text("Warning (");
+			t54 = text(t54_value);
+			t55 = text(")\n        ");
+			div17 = element("div");
+			input7 = element("input");
+			t56 = space();
+			span10 = element("span");
+			t57 = text(t57_value);
+			t58 = space();
+			label8 = element("label");
+			t59 = text("Danger (");
+			t60 = text(t60_value);
+			t61 = text(")\n        ");
+			div18 = element("div");
+			input8 = element("input");
+			t62 = space();
+			span11 = element("span");
+			t63 = text(t63_value);
+			t64 = space();
+			div23 = element("div");
+			div20 = element("div");
+			t65 = text("🌧 Rain Thresholds ");
+			if (if_block6) if_block6.c();
+			t66 = space();
+			label9 = element("label");
+			t67 = text("Warning (");
+			t68 = text(t68_value);
+			t69 = text(")\n        ");
+			div21 = element("div");
+			input9 = element("input");
+			t70 = space();
+			span12 = element("span");
+			t71 = text(t71_value);
+			t72 = space();
+			label10 = element("label");
+			t73 = text("Danger (");
+			t74 = text(t74_value);
+			t75 = text(")\n        ");
+			div22 = element("div");
+			input10 = element("input");
+			t76 = space();
+			span13 = element("span");
+			t77 = text(t77_value);
+			t78 = space();
+			div27 = element("div");
+			div24 = element("div");
+			t79 = text("⛈ Lightning ");
+			if (if_block7) if_block7.c();
+			t80 = space();
+			div25 = element("div");
+			div25.textContent = "Safety radius for the lightning warning zone (10 km ≈ the 30-30 rule). Shown on the Thunderstorm card.";
+			t82 = space();
+			label11 = element("label");
+			t83 = text("Warning radius (");
+			t84 = text(t84_value);
+			t85 = text(")\n        ");
+			div26 = element("div");
+			input11 = element("input");
+			t86 = space();
+			span14 = element("span");
+			t87 = text(t87_value);
+			t88 = text(" · ⌀ ");
+			t89 = text(t89_value);
+			t90 = space();
+			div29 = element("div");
+			div28 = element("div");
+			div28.textContent = "🔔 Alerts";
+			t92 = space();
+			label12 = element("label");
+			input12 = element("input");
+			t93 = text("\n        Browser notifications for danger zones");
+			t94 = space();
+			label13 = element("label");
+			input13 = element("input");
+			t95 = text("\n        Auto-refresh + background site monitor (every 15 min, tab open)");
+			if (if_block8) if_block8.c();
+			t96 = space();
+			button = element("button");
+			button.textContent = "↩ Reset to Defaults";
+			attr(div0, "class", "fg-section-title svelte-fq6k1p");
+			attr(div1, "class", "fg-settings-label svelte-fq6k1p");
+			attr(div2, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div3, "class", "fg-settings-label svelte-fq6k1p");
+			attr(input0, "type", "radio");
+			input0.__value = "metric";
+			set_input_value(input0, input0.__value);
+			input0.disabled = input0_disabled_value = !/*isPro*/ ctx[3];
+			attr(input0, "class", "svelte-fq6k1p");
+			attr(span1, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label0, "class", "fg-radio-label svelte-fq6k1p");
+			attr(input1, "type", "radio");
+			input1.__value = "imperial";
+			set_input_value(input1, input1.__value);
+			input1.disabled = input1_disabled_value = !/*isPro*/ ctx[3];
+			attr(input1, "class", "svelte-fq6k1p");
+			attr(span3, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label1, "class", "fg-radio-label svelte-fq6k1p");
+			attr(div4, "class", "fg-note svelte-fq6k1p");
+			attr(div5, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div6, "class", "fg-settings-label svelte-fq6k1p");
+			attr(div7, "class", "fg-note svelte-fq6k1p");
+			attr(input2, "type", "radio");
+			input2.__value = "auto";
+			set_input_value(input2, input2.__value);
+			input2.disabled = input2_disabled_value = !/*isPro*/ ctx[3];
+			attr(input2, "class", "svelte-fq6k1p");
+			attr(span5, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label2, "class", "fg-radio-label svelte-fq6k1p");
+			attr(input3, "type", "radio");
+			input3.__value = "on";
+			set_input_value(input3, input3.__value);
+			input3.disabled = input3_disabled_value = !/*isPro*/ ctx[3];
+			attr(input3, "class", "svelte-fq6k1p");
+			attr(span6, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label3, "class", "fg-radio-label svelte-fq6k1p");
+			attr(input4, "type", "radio");
+			input4.__value = "off";
+			set_input_value(input4, input4.__value);
+			input4.disabled = input4_disabled_value = !/*isPro*/ ctx[3];
+			attr(input4, "class", "svelte-fq6k1p");
+			attr(span7, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label4, "class", "fg-radio-label svelte-fq6k1p");
+			attr(div8, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div9, "class", "fg-settings-label svelte-fq6k1p");
+			attr(div10, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div11, "class", "fg-settings-label svelte-fq6k1p");
+			attr(div12, "class", "fg-note svelte-fq6k1p");
+			attr(input5, "type", "range");
+			attr(input5, "min", "28");
+			attr(input5, "max", "38");
+			attr(input5, "step", "0.5");
+			input5.disabled = input5_disabled_value = !/*isPro*/ ctx[3];
+			attr(input5, "class", "svelte-fq6k1p");
+			attr(span8, "class", "svelte-fq6k1p");
+			attr(div13, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label5, "class", "svelte-fq6k1p");
+			attr(input6, "type", "range");
+			attr(input6, "min", "30");
+			attr(input6, "max", "42");
+			attr(input6, "step", "0.5");
+			input6.disabled = input6_disabled_value = !/*isPro*/ ctx[3];
+			attr(input6, "class", "svelte-fq6k1p");
+			attr(span9, "class", "svelte-fq6k1p");
+			attr(div14, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label6, "class", "svelte-fq6k1p");
+			attr(div15, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div16, "class", "fg-settings-label svelte-fq6k1p");
+			attr(input7, "type", "range");
+			attr(input7, "min", "5");
+			attr(input7, "max", "25");
+			attr(input7, "step", "0.5");
+			input7.disabled = input7_disabled_value = !/*isPro*/ ctx[3];
+			attr(input7, "class", "svelte-fq6k1p");
+			attr(span10, "class", "svelte-fq6k1p");
+			attr(div17, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label7, "class", "svelte-fq6k1p");
+			attr(input8, "type", "range");
+			attr(input8, "min", "10");
+			attr(input8, "max", "35");
+			attr(input8, "step", "0.5");
+			input8.disabled = input8_disabled_value = !/*isPro*/ ctx[3];
+			attr(input8, "class", "svelte-fq6k1p");
+			attr(span11, "class", "svelte-fq6k1p");
+			attr(div18, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label8, "class", "svelte-fq6k1p");
+			attr(div19, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div20, "class", "fg-settings-label svelte-fq6k1p");
+			attr(input9, "type", "range");
+			attr(input9, "min", "1");
+			attr(input9, "max", "25");
+			attr(input9, "step", "0.5");
+			input9.disabled = input9_disabled_value = !/*isPro*/ ctx[3];
+			attr(input9, "class", "svelte-fq6k1p");
+			attr(span12, "class", "svelte-fq6k1p");
+			attr(div21, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label9, "class", "svelte-fq6k1p");
+			attr(input10, "type", "range");
+			attr(input10, "min", "5");
+			attr(input10, "max", "60");
+			attr(input10, "step", "1");
+			input10.disabled = input10_disabled_value = !/*isPro*/ ctx[3];
+			attr(input10, "class", "svelte-fq6k1p");
+			attr(span13, "class", "svelte-fq6k1p");
+			attr(div22, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label10, "class", "svelte-fq6k1p");
+			attr(div23, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div24, "class", "fg-settings-label svelte-fq6k1p");
+			attr(div25, "class", "fg-note svelte-fq6k1p");
+			attr(input11, "type", "range");
+			attr(input11, "min", "5");
+			attr(input11, "max", "25");
+			attr(input11, "step", "1");
+			input11.disabled = input11_disabled_value = !/*isPro*/ ctx[3];
+			attr(input11, "class", "svelte-fq6k1p");
+			attr(span14, "class", "svelte-fq6k1p");
+			attr(div26, "class", "fg-slider-row svelte-fq6k1p");
+			attr(label11, "class", "svelte-fq6k1p");
+			attr(div27, "class", "fg-settings-section svelte-fq6k1p");
+			attr(div28, "class", "fg-settings-label svelte-fq6k1p");
+			attr(input12, "type", "checkbox");
+			attr(input12, "class", "svelte-fq6k1p");
+			attr(label12, "class", "fg-toggle-label svelte-fq6k1p");
+			attr(input13, "type", "checkbox");
+			input13.disabled = input13_disabled_value = !/*isPro*/ ctx[3];
+			attr(input13, "class", "svelte-fq6k1p");
+			attr(label13, "class", "fg-toggle-label svelte-fq6k1p");
+			attr(div29, "class", "fg-settings-section svelte-fq6k1p");
+			attr(button, "class", "fg-btn fg-btn-secondary svelte-fq6k1p");
+			binding_group.p(input2, input3, input4);
+			binding_group_1.p(input0, input1);
 		},
 		m(target, anchor) {
-			insert(target, div1, anchor);
-			append(div1, div0);
-			append(div1, t1);
-			if_block0.m(div1, null);
-			insert(target, t2, anchor);
-			insert(target, div3, anchor);
-			append(div3, div2);
-			append(div3, t4);
+			insert(target, div0, anchor);
+			insert(target, t1, anchor);
+			insert(target, div2, anchor);
+			append(div2, div1);
+			append(div2, t3);
+			if_block0.m(div2, null);
+			append(div2, t4);
+			if (if_block1) if_block1.m(div2, null);
+			insert(target, t5, anchor);
+			insert(target, div5, anchor);
+			append(div5, div3);
+			append(div3, t6);
+			if (if_block2) if_block2.m(div3, null);
+			append(div5, t7);
+			append(div5, label0);
+			append(label0, input0);
+			input0.checked = input0.__value === /*settings*/ ctx[2].units;
+			append(label0, t8);
+			append(label0, span1);
+			append(div5, t11);
+			append(div5, label1);
+			append(label1, input1);
+			input1.checked = input1.__value === /*settings*/ ctx[2].units;
+			append(label1, t12);
+			append(label1, span3);
+			append(div5, t15);
+			append(div5, div4);
+			insert(target, t17, anchor);
+			insert(target, div8, anchor);
+			append(div8, div6);
+			append(div6, t18);
+			if (if_block3) if_block3.m(div6, null);
+			append(div8, t19);
+			append(div8, div7);
+			append(div8, t21);
+			append(div8, label2);
+			append(label2, input2);
+			input2.checked = input2.__value === /*settings*/ ctx[2].winterMode;
+			append(label2, t22);
+			append(label2, span5);
+			append(div8, t25);
+			append(div8, label3);
+			append(label3, input3);
+			input3.checked = input3.__value === /*settings*/ ctx[2].winterMode;
+			append(label3, t26);
+			append(label3, span6);
+			append(div8, t28);
+			append(div8, label4);
+			append(label4, input4);
+			input4.checked = input4.__value === /*settings*/ ctx[2].winterMode;
+			append(label4, t29);
+			append(label4, span7);
+			insert(target, t31, anchor);
+			insert(target, div10, anchor);
+			append(div10, div9);
+			append(div10, t33);
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				if (each_blocks[i]) {
-					each_blocks[i].m(div3, null);
+					each_blocks[i].m(div10, null);
 				}
 			}
 
-			insert(target, t5, anchor);
-			if (if_block1) if_block1.m(target, anchor);
-			insert(target, t6, anchor);
-			insert(target, div5, anchor);
-			append(div5, div4);
-			append(div5, t8);
-			append(div5, label0);
-			append(label0, input0);
-			input0.checked = /*settings*/ ctx[33].soundAlerts;
-			append(label0, t9);
-			append(div5, t10);
-			append(div5, label1);
-			append(label1, input1);
-			input1.checked = /*settings*/ ctx[33].autoRefresh;
-			append(label1, t11);
-			if (if_block2) if_block2.m(label1, null);
+			insert(target, t34, anchor);
+			insert(target, div15, anchor);
+			append(div15, div11);
+			append(div11, t35);
+			if (if_block4) if_block4.m(div11, null);
+			append(div15, t36);
+			append(div15, div12);
+			append(div15, t38);
+			append(div15, label5);
+			append(label5, t39);
+			append(label5, t40);
+			append(label5, t41);
+			append(label5, div13);
+			append(div13, input5);
+			set_input_value(input5, /*settings*/ ctx[2].wbgtWarnC);
+			append(div13, t42);
+			append(div13, span8);
+			append(span8, t43);
+			append(div15, t44);
+			append(div15, label6);
+			append(label6, t45);
+			append(label6, t46);
+			append(label6, t47);
+			append(label6, div14);
+			append(div14, input6);
+			set_input_value(input6, /*settings*/ ctx[2].wbgtDangerC);
+			append(div14, t48);
+			append(div14, span9);
+			append(span9, t49);
+			insert(target, t50, anchor);
+			insert(target, div19, anchor);
+			append(div19, div16);
+			append(div16, t51);
+			if (if_block5) if_block5.m(div16, null);
+			append(div19, t52);
+			append(div19, label7);
+			append(label7, t53);
+			append(label7, t54);
+			append(label7, t55);
+			append(label7, div17);
+			append(div17, input7);
+			set_input_value(input7, /*settings*/ ctx[2].windWarnMs);
+			append(div17, t56);
+			append(div17, span10);
+			append(span10, t57);
+			append(div19, t58);
+			append(div19, label8);
+			append(label8, t59);
+			append(label8, t60);
+			append(label8, t61);
+			append(label8, div18);
+			append(div18, input8);
+			set_input_value(input8, /*settings*/ ctx[2].windDangerMs);
+			append(div18, t62);
+			append(div18, span11);
+			append(span11, t63);
+			insert(target, t64, anchor);
+			insert(target, div23, anchor);
+			append(div23, div20);
+			append(div20, t65);
+			if (if_block6) if_block6.m(div20, null);
+			append(div23, t66);
+			append(div23, label9);
+			append(label9, t67);
+			append(label9, t68);
+			append(label9, t69);
+			append(label9, div21);
+			append(div21, input9);
+			set_input_value(input9, /*settings*/ ctx[2].rainWarnMmh);
+			append(div21, t70);
+			append(div21, span12);
+			append(span12, t71);
+			append(div23, t72);
+			append(div23, label10);
+			append(label10, t73);
+			append(label10, t74);
+			append(label10, t75);
+			append(label10, div22);
+			append(div22, input10);
+			set_input_value(input10, /*settings*/ ctx[2].rainDangerMmh);
+			append(div22, t76);
+			append(div22, span13);
+			append(span13, t77);
+			insert(target, t78, anchor);
+			insert(target, div27, anchor);
+			append(div27, div24);
+			append(div24, t79);
+			if (if_block7) if_block7.m(div24, null);
+			append(div27, t80);
+			append(div27, div25);
+			append(div27, t82);
+			append(div27, label11);
+			append(label11, t83);
+			append(label11, t84);
+			append(label11, t85);
+			append(label11, div26);
+			append(div26, input11);
+			set_input_value(input11, /*settings*/ ctx[2].lightningRadiusKm);
+			append(div26, t86);
+			append(div26, span14);
+			append(span14, t87);
+			append(span14, t88);
+			append(span14, t89);
+			insert(target, t90, anchor);
+			insert(target, div29, anchor);
+			append(div29, div28);
+			append(div29, t92);
+			append(div29, label12);
+			append(label12, input12);
+			input12.checked = /*settings*/ ctx[2].soundAlerts;
+			append(label12, t93);
+			append(div29, t94);
+			append(div29, label13);
+			append(label13, input13);
+			input13.checked = /*settings*/ ctx[2].autoRefresh;
+			append(label13, t95);
+			if (if_block8) if_block8.m(label13, null);
+			insert(target, t96, anchor);
+			insert(target, button, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "change", /*input0_change_handler*/ ctx[88]),
-					listen(input0, "change", /*saveSettings*/ ctx[44]),
-					listen(input1, "change", /*input1_change_handler*/ ctx[89]),
-					listen(input1, "change", /*setupAutoRefresh*/ ctx[46])
+					listen(input0, "change", /*input0_change_handler*/ ctx[89]),
+					listen(input0, "change", /*saveSettings*/ ctx[45]),
+					listen(input1, "change", /*input1_change_handler*/ ctx[91]),
+					listen(input1, "change", /*saveSettings*/ ctx[45]),
+					listen(input2, "change", /*input2_change_handler*/ ctx[92]),
+					listen(input2, "change", /*saveSettings*/ ctx[45]),
+					listen(input3, "change", /*input3_change_handler*/ ctx[93]),
+					listen(input3, "change", /*saveSettings*/ ctx[45]),
+					listen(input4, "change", /*input4_change_handler*/ ctx[94]),
+					listen(input4, "change", /*saveSettings*/ ctx[45]),
+					listen(input5, "change", /*input5_change_input_handler*/ ctx[96]),
+					listen(input5, "input", /*input5_change_input_handler*/ ctx[96]),
+					listen(input5, "change", /*saveSettings*/ ctx[45]),
+					listen(input6, "change", /*input6_change_input_handler*/ ctx[97]),
+					listen(input6, "input", /*input6_change_input_handler*/ ctx[97]),
+					listen(input6, "change", /*saveSettings*/ ctx[45]),
+					listen(input7, "change", /*input7_change_input_handler*/ ctx[98]),
+					listen(input7, "input", /*input7_change_input_handler*/ ctx[98]),
+					listen(input7, "change", /*saveSettings*/ ctx[45]),
+					listen(input8, "change", /*input8_change_input_handler*/ ctx[99]),
+					listen(input8, "input", /*input8_change_input_handler*/ ctx[99]),
+					listen(input8, "change", /*saveSettings*/ ctx[45]),
+					listen(input9, "change", /*input9_change_input_handler*/ ctx[100]),
+					listen(input9, "input", /*input9_change_input_handler*/ ctx[100]),
+					listen(input9, "change", /*saveSettings*/ ctx[45]),
+					listen(input10, "change", /*input10_change_input_handler*/ ctx[101]),
+					listen(input10, "input", /*input10_change_input_handler*/ ctx[101]),
+					listen(input10, "change", /*saveSettings*/ ctx[45]),
+					listen(input11, "change", /*input11_change_input_handler*/ ctx[102]),
+					listen(input11, "input", /*input11_change_input_handler*/ ctx[102]),
+					listen(input11, "change", /*saveSettings*/ ctx[45]),
+					listen(input12, "change", /*input12_change_handler*/ ctx[103]),
+					listen(input12, "change", /*saveSettings*/ ctx[45]),
+					listen(input13, "change", /*input13_change_handler*/ ctx[104]),
+					listen(input13, "change", /*setupAutoRefresh*/ ctx[47]),
+					listen(button, "click", /*resetSettings*/ ctx[46])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_15(ctx)) && if_block0) {
+			if (current_block_type === (current_block_type = select_block_type_13(ctx)) && if_block0) {
 				if_block0.p(ctx, dirty);
 			} else {
 				if_block0.d(1);
@@ -4126,23 +4204,98 @@ function create_if_block_30(ctx) {
 
 				if (if_block0) {
 					if_block0.c();
-					if_block0.m(div1, null);
+					if_block0.m(div2, t4);
 				}
 			}
 
-			if (dirty[1] & /*settings, saveSettings*/ 8196) {
-				each_value_7 = ensure_array_like(Object.entries(PPE_PROFILES));
+			if (/*licenseMsg*/ ctx[25]) {
+				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block_43(ctx);
+					if_block1.c();
+					if_block1.m(div2, null);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
+			}
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block2) ; else {
+					if_block2 = create_if_block_42();
+					if_block2.c();
+					if_block2.m(div3, null);
+				}
+			} else if (if_block2) {
+				if_block2.d(1);
+				if_block2 = null;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input0_disabled_value !== (input0_disabled_value = !/*isPro*/ ctx[3])) {
+				input0.disabled = input0_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input0.checked = input0.__value === /*settings*/ ctx[2].units;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input1_disabled_value !== (input1_disabled_value = !/*isPro*/ ctx[3])) {
+				input1.disabled = input1_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input1.checked = input1.__value === /*settings*/ ctx[2].units;
+			}
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block3) ; else {
+					if_block3 = create_if_block_41();
+					if_block3.c();
+					if_block3.m(div6, null);
+				}
+			} else if (if_block3) {
+				if_block3.d(1);
+				if_block3 = null;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input2_disabled_value !== (input2_disabled_value = !/*isPro*/ ctx[3])) {
+				input2.disabled = input2_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input2.checked = input2.__value === /*settings*/ ctx[2].winterMode;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input3_disabled_value !== (input3_disabled_value = !/*isPro*/ ctx[3])) {
+				input3.disabled = input3_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input3.checked = input3.__value === /*settings*/ ctx[2].winterMode;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input4_disabled_value !== (input4_disabled_value = !/*isPro*/ ctx[3])) {
+				input4.disabled = input4_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input4.checked = input4.__value === /*settings*/ ctx[2].winterMode;
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*saveSettings*/ 16384) {
+				each_value_9 = ensure_array_like(Object.entries(PPE_PROFILES));
 				let i;
 
-				for (i = 0; i < each_value_7.length; i += 1) {
-					const child_ctx = get_each_context_7(ctx, each_value_7, i);
+				for (i = 0; i < each_value_9.length; i += 1) {
+					const child_ctx = get_each_context_9(ctx, each_value_9, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_7(child_ctx);
+						each_blocks[i] = create_each_block_9(child_ctx);
 						each_blocks[i].c();
-						each_blocks[i].m(div3, null);
+						each_blocks[i].m(div10, null);
 					}
 				}
 
@@ -4150,120 +4303,212 @@ function create_if_block_30(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_7.length;
+				each_blocks.length = each_value_9.length;
 			}
 
-			if (/*license*/ ctx[29].valid) {
-				if (if_block1) {
-					if_block1.p(ctx, dirty);
-				} else {
-					if_block1 = create_if_block_32(ctx);
-					if_block1.c();
-					if_block1.m(t6.parentNode, t6);
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block4) ; else {
+					if_block4 = create_if_block_40();
+					if_block4.c();
+					if_block4.m(div11, null);
 				}
-			} else if (if_block1) {
-				if_block1.d(1);
-				if_block1 = null;
+			} else if (if_block4) {
+				if_block4.d(1);
+				if_block4 = null;
 			}
 
-			if (dirty[1] & /*settings*/ 4) {
-				input0.checked = /*settings*/ ctx[33].soundAlerts;
+			if (dirty[1] & /*units*/ 128 && t40_value !== (t40_value = (/*units*/ ctx[38] === 'imperial' ? '°F' : '°C') + "")) set_data(t40, t40_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input5_disabled_value !== (input5_disabled_value = !/*isPro*/ ctx[3])) {
+				input5.disabled = input5_disabled_value;
 			}
 
-			if (dirty[0] & /*license*/ 536870912 && input1_disabled_value !== (input1_disabled_value = !/*license*/ ctx[29].valid)) {
-				input1.disabled = input1_disabled_value;
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input5, /*settings*/ ctx[2].wbgtWarnC);
 			}
 
-			if (dirty[1] & /*settings*/ 4) {
-				input1.checked = /*settings*/ ctx[33].autoRefresh;
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t43_value !== (t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[38]) + "")) set_data(t43, t43_value);
+			if (dirty[1] & /*units*/ 128 && t46_value !== (t46_value = (/*units*/ ctx[38] === 'imperial' ? '°F' : '°C') + "")) set_data(t46, t46_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input6_disabled_value !== (input6_disabled_value = !/*isPro*/ ctx[3])) {
+				input6.disabled = input6_disabled_value;
 			}
 
-			if (!/*license*/ ctx[29].valid) {
-				if (if_block2) ; else {
-					if_block2 = create_if_block_31();
-					if_block2.c();
-					if_block2.m(label1, null);
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input6, /*settings*/ ctx[2].wbgtDangerC);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t49_value !== (t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[38]) + "")) set_data(t49, t49_value);
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block5) ; else {
+					if_block5 = create_if_block_39();
+					if_block5.c();
+					if_block5.m(div16, null);
 				}
-			} else if (if_block2) {
-				if_block2.d(1);
-				if_block2 = null;
+			} else if (if_block5) {
+				if_block5.d(1);
+				if_block5 = null;
 			}
 
-			if (dirty[0] & /*license*/ 536870912 && label1_class_value !== (label1_class_value = "fg-tog " + (!/*license*/ ctx[29].valid ? 'fg-dis' : '') + " svelte-apo8v3")) {
-				attr(label1, "class", label1_class_value);
+			if (dirty[1] & /*units*/ 128 && t54_value !== (t54_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t54, t54_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input7_disabled_value !== (input7_disabled_value = !/*isPro*/ ctx[3])) {
+				input7.disabled = input7_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input7, /*settings*/ ctx[2].windWarnMs);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t57_value !== (t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[38]) + "")) set_data(t57, t57_value);
+			if (dirty[1] & /*units*/ 128 && t60_value !== (t60_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t60, t60_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input8_disabled_value !== (input8_disabled_value = !/*isPro*/ ctx[3])) {
+				input8.disabled = input8_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input8, /*settings*/ ctx[2].windDangerMs);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t63_value !== (t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[38]) + "")) set_data(t63, t63_value);
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block6) ; else {
+					if_block6 = create_if_block_38();
+					if_block6.c();
+					if_block6.m(div20, null);
+				}
+			} else if (if_block6) {
+				if_block6.d(1);
+				if_block6 = null;
+			}
+
+			if (dirty[1] & /*units*/ 128 && t68_value !== (t68_value = (/*units*/ ctx[38] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t68, t68_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input9_disabled_value !== (input9_disabled_value = !/*isPro*/ ctx[3])) {
+				input9.disabled = input9_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input9, /*settings*/ ctx[2].rainWarnMmh);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t71_value !== (t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[38]) + "")) set_data(t71, t71_value);
+			if (dirty[1] & /*units*/ 128 && t74_value !== (t74_value = (/*units*/ ctx[38] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t74, t74_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input10_disabled_value !== (input10_disabled_value = !/*isPro*/ ctx[3])) {
+				input10.disabled = input10_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input10, /*settings*/ ctx[2].rainDangerMmh);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t77_value !== (t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[38]) + "")) set_data(t77, t77_value);
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block7) ; else {
+					if_block7 = create_if_block_37();
+					if_block7.c();
+					if_block7.m(div24, null);
+				}
+			} else if (if_block7) {
+				if_block7.d(1);
+				if_block7 = null;
+			}
+
+			if (dirty[1] & /*units*/ 128 && t84_value !== (t84_value = (/*units*/ ctx[38] === 'imperial' ? 'mi' : 'km') + "")) set_data(t84, t84_value);
+
+			if (dirty[0] & /*isPro*/ 8 && input11_disabled_value !== (input11_disabled_value = !/*isPro*/ ctx[3])) {
+				input11.disabled = input11_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				set_input_value(input11, /*settings*/ ctx[2].lightningRadiusKm);
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t87_value !== (t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[38]) + "")) set_data(t87, t87_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t89_value !== (t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[38]) + "")) set_data(t89, t89_value);
+
+			if (dirty[0] & /*settings*/ 4) {
+				input12.checked = /*settings*/ ctx[2].soundAlerts;
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input13_disabled_value !== (input13_disabled_value = !/*isPro*/ ctx[3])) {
+				input13.disabled = input13_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input13.checked = /*settings*/ ctx[2].autoRefresh;
+			}
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block8) ; else {
+					if_block8 = create_if_block_36();
+					if_block8.c();
+					if_block8.m(label13, null);
+				}
+			} else if (if_block8) {
+				if_block8.d(1);
+				if_block8 = null;
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(div1);
-				detach(t2);
-				detach(div3);
+				detach(div0);
+				detach(t1);
+				detach(div2);
 				detach(t5);
-				detach(t6);
 				detach(div5);
+				detach(t17);
+				detach(div8);
+				detach(t31);
+				detach(div10);
+				detach(t34);
+				detach(div15);
+				detach(t50);
+				detach(div19);
+				detach(t64);
+				detach(div23);
+				detach(t78);
+				detach(div27);
+				detach(t90);
+				detach(div29);
+				detach(t96);
+				detach(button);
 			}
 
 			if_block0.d();
-			destroy_each(each_blocks, detaching);
-			if (if_block1) if_block1.d(detaching);
+			if (if_block1) if_block1.d();
 			if (if_block2) if_block2.d();
+			if (if_block3) if_block3.d();
+			destroy_each(each_blocks, detaching);
+			if (if_block4) if_block4.d();
+			if (if_block5) if_block5.d();
+			if (if_block6) if_block6.d();
+			if (if_block7) if_block7.d();
+			if (if_block8) if_block8.d();
+			binding_group.r();
+			binding_group_1.r();
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (332:31) 
-function create_if_block_21(ctx) {
-	let if_block_anchor;
-
-	function select_block_type_13(ctx, dirty) {
-		if (!/*license*/ ctx[29].valid) return create_if_block_22;
-		return create_else_block_8;
-	}
-
-	let current_block_type = select_block_type_13(ctx);
-	let if_block = current_block_type(ctx);
-
-	return {
-		c() {
-			if_block.c();
-			if_block_anchor = empty();
-		},
-		m(target, anchor) {
-			if_block.m(target, anchor);
-			insert(target, if_block_anchor, anchor);
-		},
-		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_13(ctx)) && if_block) {
-				if_block.p(ctx, dirty);
-			} else {
-				if_block.d(1);
-				if_block = current_block_type(ctx);
-
-				if (if_block) {
-					if_block.c();
-					if_block.m(if_block_anchor.parentNode, if_block_anchor);
-				}
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(if_block_anchor);
-			}
-
-			if_block.d(detaching);
-		}
-	};
-}
-
-// (306:28) 
-function create_if_block_18(ctx) {
+// (437:29) 
+function create_if_block_32(ctx) {
+	let div0;
+	let t1;
+	let div1;
+	let t3;
 	let if_block_anchor;
 
 	function select_block_type_12(ctx, dirty) {
-		if (!/*license*/ ctx[29].valid) return create_if_block_19;
-		return create_else_block_7;
+		if (!/*isPro*/ ctx[3]) return create_if_block_33;
+		return create_else_block_8;
 	}
 
 	let current_block_type = select_block_type_12(ctx);
@@ -4271,10 +4516,22 @@ function create_if_block_18(ctx) {
 
 	return {
 		c() {
+			div0 = element("div");
+			div0.textContent = "📄 Weekly ISO 7933 Report";
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Aligned to ISO 7933:2004 / ISO 7243:2017 / ACGIH TLV / FIDIC Clause 8.4";
+			t3 = space();
 			if_block.c();
 			if_block_anchor = empty();
+			attr(div0, "class", "fg-section-title svelte-fq6k1p");
+			attr(div1, "class", "fg-report-note svelte-fq6k1p");
 		},
 		m(target, anchor) {
+			insert(target, div0, anchor);
+			insert(target, t1, anchor);
+			insert(target, div1, anchor);
+			insert(target, t3, anchor);
 			if_block.m(target, anchor);
 			insert(target, if_block_anchor, anchor);
 		},
@@ -4293,6 +4550,10 @@ function create_if_block_18(ctx) {
 		},
 		d(detaching) {
 			if (detaching) {
+				detach(div0);
+				detach(t1);
+				detach(div1);
+				detach(t3);
 				detach(if_block_anchor);
 			}
 
@@ -4301,34 +4562,33 @@ function create_if_block_18(ctx) {
 	};
 }
 
-// (156:4) {#if tab === 'dashboard'}
-function create_if_block(ctx) {
+// (387:32) 
+function create_if_block_28(ctx) {
 	let if_block_anchor;
 
-	function select_block_type_4(ctx, dirty) {
-		if (/*loading*/ ctx[4]) return create_if_block_1;
-		if (/*error*/ ctx[5]) return create_if_block_2;
-		if (/*heat*/ ctx[9]) return create_if_block_3;
+	function select_block_type_10(ctx, dirty) {
+		if (!/*isPro*/ ctx[3]) return create_if_block_29;
+		return create_else_block_6;
 	}
 
-	let current_block_type = select_block_type_4(ctx);
-	let if_block = current_block_type && current_block_type(ctx);
+	let current_block_type = select_block_type_10(ctx);
+	let if_block = current_block_type(ctx);
 
 	return {
 		c() {
-			if (if_block) if_block.c();
+			if_block.c();
 			if_block_anchor = empty();
 		},
 		m(target, anchor) {
-			if (if_block) if_block.m(target, anchor);
+			if_block.m(target, anchor);
 			insert(target, if_block_anchor, anchor);
 		},
 		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_4(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_10(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
-				if (if_block) if_block.d(1);
-				if_block = current_block_type && current_block_type(ctx);
+				if_block.d(1);
+				if_block = current_block_type(ctx);
 
 				if (if_block) {
 					if_block.c();
@@ -4341,124 +4601,479 @@ function create_if_block(ctx) {
 				detach(if_block_anchor);
 			}
 
-			if (if_block) {
-				if_block.d(detaching);
-			}
+			if_block.d(detaching);
 		}
 	};
 }
 
-// (445:8) {:else}
-function create_else_block_9(ctx) {
-	let div2;
+// (26:2) {#if tab === 'dashboard'}
+function create_if_block(ctx) {
+	let div0;
+	let span0;
+	let t1;
+	let span1;
+	let t2_value = (/*locationName*/ ctx[7] || /*lat*/ ctx[5].toFixed(3) + ', ' + /*lon*/ ctx[6].toFixed(3)) + "";
+	let t2;
 	let t3;
-	let div3;
-	let input;
-	let button;
-	let t4_value = (/*licenseLoading*/ ctx[31] ? '…' : 'Activate') + "";
+	let span2;
+	let t4_value = (/*isDay*/ ctx[12] ? '☀ Day' : '🌙 Night') + "";
 	let t4;
-	let button_disabled_value;
+	let span2_class_value;
 	let t5;
-	let if_block_anchor;
+	let button0;
+	let t6_value = (/*locked*/ ctx[11] ? '🔒' : '🔓') + "";
+	let t6;
+	let button0_class_value;
+	let button0_title_value;
+	let t7;
+	let button1;
+	let t9;
+	let div1;
+	let t10;
+	let show_if;
+	let t11;
+	let t12;
+	let div2;
+	let label0;
+	let t14;
+	let select;
+	let t15;
+	let label1;
+	let input;
+	let input_disabled_value;
+	let t16;
+	let t17;
+	let if_block3_anchor;
 	let mounted;
 	let dispose;
-	let if_block = /*licenseError*/ ctx[32] && create_if_block_34(ctx);
+	let each_value_5 = ensure_array_like(/*savedSites*/ ctx[31]);
+	let each_blocks_1 = [];
+
+	for (let i = 0; i < each_value_5.length; i += 1) {
+		each_blocks_1[i] = create_each_block_5(get_each_context_5(ctx, each_value_5, i));
+	}
+
+	function select_block_type_1(ctx, dirty) {
+		if (show_if == null) show_if = !!/*canAddSite*/ ctx[40]();
+		if (show_if) return create_if_block_26;
+		if (/*isPro*/ ctx[3]) return create_if_block_27;
+		return create_else_block_5;
+	}
+
+	let current_block_type = select_block_type_1(ctx);
+	let if_block0 = current_block_type(ctx);
+	let if_block1 = /*isStale*/ ctx[34] && create_if_block_25(ctx);
+	let each_value_4 = ensure_array_like(/*MODELS*/ ctx[42]);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_4.length; i += 1) {
+		each_blocks[i] = create_each_block_4(get_each_context_4(ctx, each_value_4, i));
+	}
+
+	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_24();
+
+	function select_block_type_2(ctx, dirty) {
+		if (/*loading*/ ctx[8]) return create_if_block_1;
+		if (/*error*/ ctx[9]) return create_if_block_2;
+		if (/*heat*/ ctx[16]) return create_if_block_3;
+	}
+
+	let current_block_type_1 = select_block_type_2(ctx);
+	let if_block3 = current_block_type_1 && current_block_type_1(ctx);
 
 	return {
 		c() {
-			div2 = element("div");
-			div2.innerHTML = `<div class="fg-lic-ft svelte-apo8v3">FREE TIER</div><div class="fg-lic-fl svelte-apo8v3">⚡ Worst-case · 📄 Reports · 🚨 SOS · 🎛 Thresholds</div><a class="fg-btn-amb svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Get Pro — fieldguard-hse.com</a>`;
+			div0 = element("div");
+			span0 = element("span");
+			span0.textContent = "📍";
+			t1 = space();
+			span1 = element("span");
+			t2 = text(t2_value);
 			t3 = space();
-			div3 = element("div");
-			input = element("input");
-			button = element("button");
+			span2 = element("span");
 			t4 = text(t4_value);
 			t5 = space();
-			if (if_block) if_block.c();
-			if_block_anchor = empty();
-			attr(div2, "class", "fg-lic-free svelte-apo8v3");
-			attr(input, "class", "fg-lic-in svelte-apo8v3");
-			attr(input, "placeholder", "Paste license key…");
-			input.disabled = /*licenseLoading*/ ctx[31];
-			attr(button, "class", "fg-lic-ab svelte-apo8v3");
-			button.disabled = button_disabled_value = /*licenseLoading*/ ctx[31] || !/*licenseKeyInput*/ ctx[30].trim();
-			attr(div3, "class", "fg-lic-row svelte-apo8v3");
+			button0 = element("button");
+			t6 = text(t6_value);
+			t7 = space();
+			button1 = element("button");
+			button1.textContent = "🔄";
+			t9 = space();
+			div1 = element("div");
+
+			for (let i = 0; i < each_blocks_1.length; i += 1) {
+				each_blocks_1[i].c();
+			}
+
+			t10 = space();
+			if_block0.c();
+			t11 = space();
+			if (if_block1) if_block1.c();
+			t12 = space();
+			div2 = element("div");
+			label0 = element("label");
+			label0.textContent = "Model:";
+			t14 = space();
+			select = element("select");
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			t15 = space();
+			label1 = element("label");
+			input = element("input");
+			t16 = text("\n        Worst-case ⚡");
+			if (if_block2) if_block2.c();
+			t17 = space();
+			if (if_block3) if_block3.c();
+			if_block3_anchor = empty();
+			attr(span1, "class", "fg-loc-text svelte-fq6k1p");
+			attr(span2, "class", span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-fq6k1p");
+			attr(button0, "class", button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-fq6k1p");
+
+			attr(button0, "title", button0_title_value = /*locked*/ ctx[11]
+			? 'Unlock pin (map clicks move it)'
+			: 'Lock pin to this location');
+
+			attr(button1, "class", "fg-mini-btn svelte-fq6k1p");
+			attr(button1, "title", "Refresh");
+			attr(div0, "class", "fg-location-row svelte-fq6k1p");
+			attr(div1, "class", "fg-sites svelte-fq6k1p");
+			set_style(label0, "margin", "0");
+			attr(label0, "class", "svelte-fq6k1p");
+			attr(select, "class", "svelte-fq6k1p");
+			if (/*selectedModel*/ ctx[28] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[64].call(select));
+			attr(input, "type", "checkbox");
+			input.disabled = input_disabled_value = !/*isPro*/ ctx[3];
+			attr(input, "class", "svelte-fq6k1p");
+			attr(label1, "class", "fg-worst-label svelte-fq6k1p");
+			set_style(label1, "margin", "0");
+			attr(div2, "class", "fg-model-row svelte-fq6k1p");
 		},
 		m(target, anchor) {
+			insert(target, div0, anchor);
+			append(div0, span0);
+			append(div0, t1);
+			append(div0, span1);
+			append(span1, t2);
+			append(div0, t3);
+			append(div0, span2);
+			append(span2, t4);
+			append(div0, t5);
+			append(div0, button0);
+			append(button0, t6);
+			append(div0, t7);
+			append(div0, button1);
+			insert(target, t9, anchor);
+			insert(target, div1, anchor);
+
+			for (let i = 0; i < each_blocks_1.length; i += 1) {
+				if (each_blocks_1[i]) {
+					each_blocks_1[i].m(div1, null);
+				}
+			}
+
+			append(div1, t10);
+			if_block0.m(div1, null);
+			insert(target, t11, anchor);
+			if (if_block1) if_block1.m(target, anchor);
+			insert(target, t12, anchor);
 			insert(target, div2, anchor);
-			insert(target, t3, anchor);
-			insert(target, div3, anchor);
-			append(div3, input);
-			set_input_value(input, /*licenseKeyInput*/ ctx[30]);
-			append(div3, button);
-			append(button, t4);
-			insert(target, t5, anchor);
-			if (if_block) if_block.m(target, anchor);
-			insert(target, if_block_anchor, anchor);
+			append(div2, label0);
+			append(div2, t14);
+			append(div2, select);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(select, null);
+				}
+			}
+
+			select_option(select, /*selectedModel*/ ctx[28], true);
+			append(div2, t15);
+			append(div2, label1);
+			append(label1, input);
+			input.checked = /*worstCaseMode*/ ctx[1];
+			append(label1, t16);
+			if (if_block2) if_block2.m(label1, null);
+			insert(target, t17, anchor);
+			if (if_block3) if_block3.m(target, anchor);
+			insert(target, if_block3_anchor, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler*/ ctx[81]),
-					listen(button, "click", /*activateLicense*/ ctx[39])
+					listen(button0, "click", /*click_handler_2*/ ctx[60]),
+					listen(button1, "click", /*refreshData*/ ctx[44]),
+					listen(select, "change", /*select_change_handler*/ ctx[64]),
+					listen(select, "change", /*refreshData*/ ctx[44]),
+					listen(input, "change", /*input_change_handler*/ ctx[65]),
+					listen(input, "change", /*refreshData*/ ctx[44])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*licenseLoading*/ 1) {
-				input.disabled = /*licenseLoading*/ ctx[31];
+			if (dirty[0] & /*locationName, lat, lon*/ 224 && t2_value !== (t2_value = (/*locationName*/ ctx[7] || /*lat*/ ctx[5].toFixed(3) + ', ' + /*lon*/ ctx[6].toFixed(3)) + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*isDay*/ 4096 && t4_value !== (t4_value = (/*isDay*/ ctx[12] ? '☀ Day' : '🌙 Night') + "")) set_data(t4, t4_value);
+
+			if (dirty[0] & /*isDay*/ 4096 && span2_class_value !== (span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-fq6k1p")) {
+				attr(span2, "class", span2_class_value);
 			}
 
-			if (dirty[0] & /*licenseKeyInput*/ 1073741824 && input.value !== /*licenseKeyInput*/ ctx[30]) {
-				set_input_value(input, /*licenseKeyInput*/ ctx[30]);
+			if (dirty[0] & /*locked*/ 2048 && t6_value !== (t6_value = (/*locked*/ ctx[11] ? '🔒' : '🔓') + "")) set_data(t6, t6_value);
+
+			if (dirty[0] & /*locked*/ 2048 && button0_class_value !== (button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-fq6k1p")) {
+				attr(button0, "class", button0_class_value);
 			}
 
-			if (dirty[1] & /*licenseLoading*/ 1 && t4_value !== (t4_value = (/*licenseLoading*/ ctx[31] ? '…' : 'Activate') + "")) set_data(t4, t4_value);
-
-			if (dirty[0] & /*licenseKeyInput*/ 1073741824 | dirty[1] & /*licenseLoading*/ 1 && button_disabled_value !== (button_disabled_value = /*licenseLoading*/ ctx[31] || !/*licenseKeyInput*/ ctx[30].trim())) {
-				button.disabled = button_disabled_value;
+			if (dirty[0] & /*locked*/ 2048 && button0_title_value !== (button0_title_value = /*locked*/ ctx[11]
+			? 'Unlock pin (map clicks move it)'
+			: 'Lock pin to this location')) {
+				attr(button0, "title", button0_title_value);
 			}
 
-			if (/*licenseError*/ ctx[32]) {
-				if (if_block) {
-					if_block.p(ctx, dirty);
-				} else {
-					if_block = create_if_block_34(ctx);
-					if_block.c();
-					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+			if (dirty[1] & /*savedSites, activeSiteId, selectSite, removeSite, bgStatus*/ 25165859) {
+				each_value_5 = ensure_array_like(/*savedSites*/ ctx[31]);
+				let i;
+
+				for (i = 0; i < each_value_5.length; i += 1) {
+					const child_ctx = get_each_context_5(ctx, each_value_5, i);
+
+					if (each_blocks_1[i]) {
+						each_blocks_1[i].p(child_ctx, dirty);
+					} else {
+						each_blocks_1[i] = create_each_block_5(child_ctx);
+						each_blocks_1[i].c();
+						each_blocks_1[i].m(div1, t10);
+					}
 				}
-			} else if (if_block) {
-				if_block.d(1);
-				if_block = null;
+
+				for (; i < each_blocks_1.length; i += 1) {
+					each_blocks_1[i].d(1);
+				}
+
+				each_blocks_1.length = each_value_5.length;
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_1(ctx)) && if_block0) {
+				if_block0.p(ctx, dirty);
+			} else {
+				if_block0.d(1);
+				if_block0 = current_block_type(ctx);
+
+				if (if_block0) {
+					if_block0.c();
+					if_block0.m(div1, null);
+				}
+			}
+
+			if (/*isStale*/ ctx[34]) {
+				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block_25(ctx);
+					if_block1.c();
+					if_block1.m(t12.parentNode, t12);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
+			}
+
+			if (dirty[1] & /*MODELS*/ 2048) {
+				each_value_4 = ensure_array_like(/*MODELS*/ ctx[42]);
+				let i;
+
+				for (i = 0; i < each_value_4.length; i += 1) {
+					const child_ctx = get_each_context_4(ctx, each_value_4, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_4(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(select, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_4.length;
+			}
+
+			if (dirty[0] & /*selectedModel*/ 268435456 | dirty[1] & /*MODELS*/ 2048) {
+				select_option(select, /*selectedModel*/ ctx[28]);
+			}
+
+			if (dirty[0] & /*isPro*/ 8 && input_disabled_value !== (input_disabled_value = !/*isPro*/ ctx[3])) {
+				input.disabled = input_disabled_value;
+			}
+
+			if (dirty[0] & /*worstCaseMode*/ 2) {
+				input.checked = /*worstCaseMode*/ ctx[1];
+			}
+
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block2) ; else {
+					if_block2 = create_if_block_24();
+					if_block2.c();
+					if_block2.m(label1, null);
+				}
+			} else if (if_block2) {
+				if_block2.d(1);
+				if_block2 = null;
+			}
+
+			if (current_block_type_1 === (current_block_type_1 = select_block_type_2(ctx)) && if_block3) {
+				if_block3.p(ctx, dirty);
+			} else {
+				if (if_block3) if_block3.d(1);
+				if_block3 = current_block_type_1 && current_block_type_1(ctx);
+
+				if (if_block3) {
+					if_block3.c();
+					if_block3.m(if_block3_anchor.parentNode, if_block3_anchor);
+				}
 			}
 		},
 		d(detaching) {
 			if (detaching) {
+				detach(div0);
+				detach(t9);
+				detach(div1);
+				detach(t11);
+				detach(t12);
 				detach(div2);
-				detach(t3);
-				detach(div3);
-				detach(t5);
-				detach(if_block_anchor);
+				detach(t17);
+				detach(if_block3_anchor);
 			}
 
-			if (if_block) if_block.d(detaching);
+			destroy_each(each_blocks_1, detaching);
+			if_block0.d();
+			if (if_block1) if_block1.d(detaching);
+			destroy_each(each_blocks, detaching);
+			if (if_block2) if_block2.d();
+
+			if (if_block3) {
+				if_block3.d(detaching);
+			}
+
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (443:8) {#if license.valid}
-function create_if_block_33(ctx) {
+// (491:6) {:else}
+function create_else_block_9(ctx) {
+	let div0;
+	let t1;
+	let div1;
+	let input;
+	let t2;
+	let button;
+	let t3_value = (/*licenseChecking*/ ctx[26] ? '…' : 'Activate') + "";
+	let t3;
+	let t4;
+	let a;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div0 = element("div");
+			div0.textContent = "Free tier. A license key unlocks Pro: imperial units, worst-case engine, cold-stress/winter, lightning, custom thresholds & ISO 7933 reports.";
+			t1 = space();
+			div1 = element("div");
+			input = element("input");
+			t2 = space();
+			button = element("button");
+			t3 = text(t3_value);
+			t4 = space();
+			a = element("a");
+			a.textContent = "Get a license →";
+			attr(div0, "class", "fg-note svelte-fq6k1p");
+			attr(input, "class", "fg-license-input svelte-fq6k1p");
+			attr(input, "type", "text");
+			attr(input, "placeholder", "FG-XXXX-XXXX-XXXX");
+			attr(input, "spellcheck", "false");
+			attr(button, "class", "fg-btn-inline svelte-fq6k1p");
+			button.disabled = /*licenseChecking*/ ctx[26];
+			attr(div1, "class", "fg-license-row svelte-fq6k1p");
+			attr(a, "class", "fg-buy-link svelte-fq6k1p");
+			attr(a, "href", "https://fieldguard-hse.com/#pricing");
+			attr(a, "target", "_blank");
+			attr(a, "rel", "noopener");
+		},
+		m(target, anchor) {
+			insert(target, div0, anchor);
+			insert(target, t1, anchor);
+			insert(target, div1, anchor);
+			append(div1, input);
+			set_input_value(input, /*licenseKey*/ ctx[23]);
+			append(div1, t2);
+			append(div1, button);
+			append(button, t3);
+			insert(target, t4, anchor);
+			insert(target, a, anchor);
+
+			if (!mounted) {
+				dispose = [
+					listen(input, "input", /*input_input_handler_1*/ ctx[87]),
+					listen(input, "keydown", /*keydown_handler*/ ctx[88]),
+					listen(button, "click", /*activateLicense*/ ctx[48])
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*licenseKey*/ 8388608 && input.value !== /*licenseKey*/ ctx[23]) {
+				set_input_value(input, /*licenseKey*/ ctx[23]);
+			}
+
+			if (dirty[0] & /*licenseChecking*/ 67108864 && t3_value !== (t3_value = (/*licenseChecking*/ ctx[26] ? '…' : 'Activate') + "")) set_data(t3, t3_value);
+
+			if (dirty[0] & /*licenseChecking*/ 67108864) {
+				button.disabled = /*licenseChecking*/ ctx[26];
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div0);
+				detach(t1);
+				detach(div1);
+				detach(t4);
+				detach(a);
+			}
+
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+// (485:6) {#if isPro}
+function create_if_block_44(ctx) {
 	let div;
 	let span0;
-	let span1;
-	let t1_value = /*license*/ ctx[29].tier?.toUpperCase() + "";
+	let t0;
+	let t1_value = (/*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO') + "";
 	let t1;
 	let t2;
-	let t3_value = /*license*/ ctx[29].expires?.slice(0, 10) + "";
+	let span1;
 	let t3;
+
+	let t4_value = (/*licenseExpires*/ ctx[24]
+	? ' · expires ' + /*licenseExpires*/ ctx[24]
+	: '') + "";
+
+	let t4;
+	let t5;
 	let button;
 	let mounted;
 	let dispose;
@@ -4467,35 +5082,43 @@ function create_if_block_33(ctx) {
 		c() {
 			div = element("div");
 			span0 = element("span");
-			span0.textContent = "✓ PRO";
-			span1 = element("span");
+			t0 = text("✓ ");
 			t1 = text(t1_value);
-			t2 = text(" · ");
-			t3 = text(t3_value);
+			t2 = space();
+			span1 = element("span");
+			t3 = text("Active");
+			t4 = text(t4_value);
+			t5 = space();
 			button = element("button");
 			button.textContent = "Deactivate";
-			attr(span0, "class", "fg-lic-b svelte-apo8v3");
-			attr(span1, "class", "fg-lic-i svelte-apo8v3");
-			attr(button, "class", "fg-lic-d svelte-apo8v3");
-			attr(div, "class", "fg-lic-act svelte-apo8v3");
+			attr(span0, "class", "fg-pro-badge svelte-fq6k1p");
+			set_style(span1, "flex", "1");
+			attr(button, "class", "fg-mini-btn svelte-fq6k1p");
+			attr(div, "class", "fg-license-active svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, span0);
+			append(span0, t0);
+			append(span0, t1);
+			append(div, t2);
 			append(div, span1);
-			append(span1, t1);
-			append(span1, t2);
 			append(span1, t3);
+			append(span1, t4);
+			append(div, t5);
 			append(div, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*deactivateLicense*/ ctx[40]);
+				dispose = listen(button, "click", /*deactivateLicense*/ ctx[49]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*license*/ 536870912 && t1_value !== (t1_value = /*license*/ ctx[29].tier?.toUpperCase() + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*license*/ 536870912 && t3_value !== (t3_value = /*license*/ ctx[29].expires?.slice(0, 10) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*licenseTier*/ 1 && t1_value !== (t1_value = (/*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO') + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*licenseExpires*/ 16777216 && t4_value !== (t4_value = (/*licenseExpires*/ ctx[24]
+			? ' · expires ' + /*licenseExpires*/ ctx[24]
+			: '') + "")) set_data(t4, t4_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -4508,26 +5131,23 @@ function create_if_block_33(ctx) {
 	};
 }
 
-// (448:10) {#if licenseError}
-function create_if_block_34(ctx) {
+// (500:6) {#if licenseMsg}
+function create_if_block_43(ctx) {
 	let div;
-	let t0;
-	let t1;
+	let t_1;
 
 	return {
 		c() {
 			div = element("div");
-			t0 = text("⚠ ");
-			t1 = text(/*licenseError*/ ctx[32]);
-			attr(div, "class", "fg-lic-err svelte-apo8v3");
+			t_1 = text(/*licenseMsg*/ ctx[25]);
+			attr(div, "class", "fg-license-msg svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
-			append(div, t0);
-			append(div, t1);
+			append(div, t_1);
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*licenseError*/ 2) set_data(t1, /*licenseError*/ ctx[32]);
+			if (dirty[0] & /*licenseMsg*/ 33554432) set_data(t_1, /*licenseMsg*/ ctx[25]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -4537,53 +5157,107 @@ function create_if_block_34(ctx) {
 	};
 }
 
-// (453:8) {#each Object.entries(PPE_PROFILES) as [key, prof]}
-function create_each_block_7(ctx) {
+// (504:60) {#if !isPro}
+function create_if_block_42(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (517:71) {#if !isPro}
+function create_if_block_41(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (535:6) {#each Object.entries(PPE_PROFILES) as [key, prof]}
+function create_each_block_9(ctx) {
 	let label;
 	let input;
-	let span0;
+	let t0;
 	let span1;
+	let t1_value = /*prof*/ ctx[150].label + "";
+	let t1;
+	let t2;
+	let span0;
+	let t6;
 	let binding_group;
 	let mounted;
 	let dispose;
-	binding_group = init_binding_group(/*$$binding_groups*/ ctx[83][0]);
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[90][0]);
 
 	return {
 		c() {
 			label = element("label");
 			input = element("input");
-			span0 = element("span");
-			span0.textContent = `${/*prof*/ ctx[126].label}`;
+			t0 = space();
 			span1 = element("span");
-			span1.textContent = `+${/*prof*/ ctx[126].adjustment}°C`;
+			t1 = text(t1_value);
+			t2 = space();
+			span0 = element("span");
+			span0.textContent = `+${/*prof*/ ctx[150].adjustment}°C`;
+			t6 = space();
 			attr(input, "type", "radio");
-			input.__value = /*key*/ ctx[125];
+			input.__value = /*key*/ ctx[149];
 			set_input_value(input, input.__value);
-			attr(input, "class", "svelte-apo8v3");
-			attr(span0, "class", "svelte-apo8v3");
-			attr(span1, "class", "fg-adjch svelte-apo8v3");
-			attr(label, "class", "fg-radio svelte-apo8v3");
+			attr(input, "class", "svelte-fq6k1p");
+			attr(span0, "class", "fg-adj svelte-fq6k1p");
+			attr(span1, "class", "fg-radio-text svelte-fq6k1p");
+			attr(label, "class", "fg-radio-label svelte-fq6k1p");
 			binding_group.p(input);
 		},
 		m(target, anchor) {
 			insert(target, label, anchor);
 			append(label, input);
-			input.checked = input.__value === /*settings*/ ctx[33].ppeProfile;
-			append(label, span0);
+			input.checked = input.__value === /*settings*/ ctx[2].ppeProfile;
+			append(label, t0);
 			append(label, span1);
+			append(span1, t1);
+			append(span1, t2);
+			append(span1, span0);
+			append(label, t6);
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "change", /*input_change_handler_1*/ ctx[82]),
-					listen(input, "change", /*saveSettings*/ ctx[44])
+					listen(input, "change", /*input_change_handler_1*/ ctx[95]),
+					listen(input, "change", /*saveSettings*/ ctx[45])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*settings*/ 4) {
-				input.checked = input.__value === /*settings*/ ctx[33].ppeProfile;
+			if (dirty[0] & /*settings*/ 4) {
+				input.checked = input.__value === /*settings*/ ctx[2].ppeProfile;
 			}
 		},
 		d(detaching) {
@@ -4598,234 +5272,15 @@ function create_each_block_7(ctx) {
 	};
 }
 
-// (457:6) {#if license.valid}
-function create_if_block_32(ctx) {
-	let div5;
-	let div0;
-	let t1;
-	let label0;
-	let t2;
-	let div1;
-	let input0;
-	let span0;
-	let t3_value = /*settings*/ ctx[33].wbgtWarnC + "";
-	let t3;
-	let t4;
-	let t5;
-	let label1;
-	let t6;
-	let div2;
-	let input1;
-	let span1;
-	let t7_value = /*settings*/ ctx[33].wbgtDangerC + "";
-	let t7;
-	let t8;
-	let t9;
-	let label2;
-	let t10;
-	let div3;
-	let input2;
-	let span2;
-	let t11_value = /*settings*/ ctx[33].windWarnMs + "";
-	let t11;
-	let t12;
-	let t13;
-	let label3;
-	let t14;
-	let div4;
-	let input3;
-	let span3;
-	let t15_value = /*settings*/ ctx[33].rainWarnMmh + "";
-	let t15;
-	let t16;
-	let t17;
-	let button;
-	let mounted;
-	let dispose;
-
-	return {
-		c() {
-			div5 = element("div");
-			div0 = element("div");
-			div0.textContent = "🌡 Thresholds";
-			t1 = space();
-			label0 = element("label");
-			t2 = text("WBGT Warn");
-			div1 = element("div");
-			input0 = element("input");
-			span0 = element("span");
-			t3 = text(t3_value);
-			t4 = text("°C");
-			t5 = space();
-			label1 = element("label");
-			t6 = text("WBGT Danger");
-			div2 = element("div");
-			input1 = element("input");
-			span1 = element("span");
-			t7 = text(t7_value);
-			t8 = text("°C");
-			t9 = space();
-			label2 = element("label");
-			t10 = text("Wind Warn");
-			div3 = element("div");
-			input2 = element("input");
-			span2 = element("span");
-			t11 = text(t11_value);
-			t12 = text(" m/s");
-			t13 = space();
-			label3 = element("label");
-			t14 = text("Rain Warn");
-			div4 = element("div");
-			input3 = element("input");
-			span3 = element("span");
-			t15 = text(t15_value);
-			t16 = text(" mm/h");
-			t17 = space();
-			button = element("button");
-			button.textContent = "↩ Reset Defaults";
-			attr(div0, "class", "fg-grp-hd svelte-apo8v3");
-			attr(input0, "type", "range");
-			attr(input0, "min", "28");
-			attr(input0, "max", "38");
-			attr(input0, "step", "0.5");
-			attr(input0, "class", "svelte-apo8v3");
-			attr(span0, "class", "svelte-apo8v3");
-			attr(div1, "class", "fg-srow svelte-apo8v3");
-			attr(label0, "class", "fg-slbl svelte-apo8v3");
-			attr(input1, "type", "range");
-			attr(input1, "min", "30");
-			attr(input1, "max", "42");
-			attr(input1, "step", "0.5");
-			attr(input1, "class", "svelte-apo8v3");
-			attr(span1, "class", "svelte-apo8v3");
-			attr(div2, "class", "fg-srow svelte-apo8v3");
-			attr(label1, "class", "fg-slbl svelte-apo8v3");
-			attr(input2, "type", "range");
-			attr(input2, "min", "5");
-			attr(input2, "max", "25");
-			attr(input2, "step", "0.5");
-			attr(input2, "class", "svelte-apo8v3");
-			attr(span2, "class", "svelte-apo8v3");
-			attr(div3, "class", "fg-srow svelte-apo8v3");
-			attr(label2, "class", "fg-slbl svelte-apo8v3");
-			attr(input3, "type", "range");
-			attr(input3, "min", "1");
-			attr(input3, "max", "25");
-			attr(input3, "step", "0.5");
-			attr(input3, "class", "svelte-apo8v3");
-			attr(span3, "class", "svelte-apo8v3");
-			attr(div4, "class", "fg-srow svelte-apo8v3");
-			attr(label3, "class", "fg-slbl svelte-apo8v3");
-			attr(button, "class", "fg-btn fg-btn-sec svelte-apo8v3");
-			attr(div5, "class", "fg-grp svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div5, anchor);
-			append(div5, div0);
-			append(div5, t1);
-			append(div5, label0);
-			append(label0, t2);
-			append(label0, div1);
-			append(div1, input0);
-			set_input_value(input0, /*settings*/ ctx[33].wbgtWarnC);
-			append(div1, span0);
-			append(span0, t3);
-			append(span0, t4);
-			append(div5, t5);
-			append(div5, label1);
-			append(label1, t6);
-			append(label1, div2);
-			append(div2, input1);
-			set_input_value(input1, /*settings*/ ctx[33].wbgtDangerC);
-			append(div2, span1);
-			append(span1, t7);
-			append(span1, t8);
-			append(div5, t9);
-			append(div5, label2);
-			append(label2, t10);
-			append(label2, div3);
-			append(div3, input2);
-			set_input_value(input2, /*settings*/ ctx[33].windWarnMs);
-			append(div3, span2);
-			append(span2, t11);
-			append(span2, t12);
-			append(div5, t13);
-			append(div5, label3);
-			append(label3, t14);
-			append(label3, div4);
-			append(div4, input3);
-			set_input_value(input3, /*settings*/ ctx[33].rainWarnMmh);
-			append(div4, span3);
-			append(span3, t15);
-			append(span3, t16);
-			append(div5, t17);
-			append(div5, button);
-
-			if (!mounted) {
-				dispose = [
-					listen(input0, "change", /*input0_change_input_handler*/ ctx[84]),
-					listen(input0, "input", /*input0_change_input_handler*/ ctx[84]),
-					listen(input0, "change", /*saveSettings*/ ctx[44]),
-					listen(input1, "change", /*input1_change_input_handler*/ ctx[85]),
-					listen(input1, "input", /*input1_change_input_handler*/ ctx[85]),
-					listen(input1, "change", /*saveSettings*/ ctx[44]),
-					listen(input2, "change", /*input2_change_input_handler*/ ctx[86]),
-					listen(input2, "input", /*input2_change_input_handler*/ ctx[86]),
-					listen(input2, "change", /*saveSettings*/ ctx[44]),
-					listen(input3, "change", /*input3_change_input_handler*/ ctx[87]),
-					listen(input3, "input", /*input3_change_input_handler*/ ctx[87]),
-					listen(input3, "change", /*saveSettings*/ ctx[44]),
-					listen(button, "click", /*resetSettings*/ ctx[45])
-				];
-
-				mounted = true;
-			}
-		},
-		p(ctx, dirty) {
-			if (dirty[1] & /*settings*/ 4) {
-				set_input_value(input0, /*settings*/ ctx[33].wbgtWarnC);
-			}
-
-			if (dirty[1] & /*settings*/ 4 && t3_value !== (t3_value = /*settings*/ ctx[33].wbgtWarnC + "")) set_data(t3, t3_value);
-
-			if (dirty[1] & /*settings*/ 4) {
-				set_input_value(input1, /*settings*/ ctx[33].wbgtDangerC);
-			}
-
-			if (dirty[1] & /*settings*/ 4 && t7_value !== (t7_value = /*settings*/ ctx[33].wbgtDangerC + "")) set_data(t7, t7_value);
-
-			if (dirty[1] & /*settings*/ 4) {
-				set_input_value(input2, /*settings*/ ctx[33].windWarnMs);
-			}
-
-			if (dirty[1] & /*settings*/ 4 && t11_value !== (t11_value = /*settings*/ ctx[33].windWarnMs + "")) set_data(t11, t11_value);
-
-			if (dirty[1] & /*settings*/ 4) {
-				set_input_value(input3, /*settings*/ ctx[33].rainWarnMmh);
-			}
-
-			if (dirty[1] & /*settings*/ 4 && t15_value !== (t15_value = /*settings*/ ctx[33].rainWarnMmh + "")) set_data(t15, t15_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div5);
-			}
-
-			mounted = false;
-			run_all(dispose);
-		}
-	};
-}
-
-// (470:194) {#if !license.valid}
-function create_if_block_31(ctx) {
+// (544:74) {#if !isPro}
+function create_if_block_40(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
 			span.textContent = "PRO";
-			attr(span, "class", "fg-proch svelte-apo8v3");
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
@@ -4838,9 +5293,93 @@ function create_if_block_31(ctx) {
 	};
 }
 
-// (335:6) {:else}
+// (561:56) {#if !isPro}
+function create_if_block_39(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (577:56) {#if !isPro}
+function create_if_block_38(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (593:49) {#if !isPro}
+function create_if_block_37(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (611:71) {#if !isPro}
+function create_if_block_36(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (445:4) {:else}
 function create_else_block_8(ctx) {
-	let div0;
+	let div;
 	let label0;
 	let t0;
 	let input0;
@@ -4863,70 +5402,87 @@ function create_else_block_8(ctx) {
 	let t9;
 	let label5;
 	let t10;
+	let input5;
+	let t11;
+	let label6;
+	let t12;
+	let input6;
+	let t13;
+	let label7;
+	let t14;
+	let input7;
+	let t15;
+	let label8;
+	let t16;
+	let input8;
+	let t17;
+	let label9;
+	let t18;
+	let input9;
+	let t19;
+	let label10;
+	let t20;
 	let select;
 	let option0;
 	let option1;
 	let option2;
-	let t14;
-	let div2;
-	let div1;
-	let span1;
-	let t15;
-	let span0;
-	let t16_value = /*suspensions*/ ctx[17].length + "";
-	let t16;
-	let t17;
-	let button0;
-
-	let t18_value = (/*showSuspForm*/ ctx[19]
-	? '✕ Cancel'
-	: '+ Log Suspension') + "";
-
-	let t18;
-	let t19;
-	let t20;
-	let t21;
-	let button1;
-	let t23;
-	let if_block2_anchor;
+	let t24;
+	let label11;
+	let t25;
+	let input10;
+	let t26;
+	let button;
+	let t28;
+	let if_block_anchor;
 	let mounted;
 	let dispose;
-	let if_block0 = /*showSuspForm*/ ctx[19] && create_if_block_28(ctx);
-
-	function select_block_type_14(ctx, dirty) {
-		if (/*suspensions*/ ctx[17].length > 0) return create_if_block_24;
-		if (!/*showSuspForm*/ ctx[19]) return create_if_block_27;
-	}
-
-	let current_block_type = select_block_type_14(ctx);
-	let if_block1 = current_block_type && current_block_type(ctx);
-	let if_block2 = /*reportText*/ ctx[16] && create_if_block_23(ctx);
+	let if_block = /*reportText*/ ctx[30] && create_if_block_34(ctx);
 
 	return {
 		c() {
-			div0 = element("div");
+			div = element("div");
 			label0 = element("label");
-			t0 = text("Project");
+			t0 = text("Project Name");
 			input0 = element("input");
 			t1 = space();
 			label1 = element("label");
-			t2 = text("Country");
+			t2 = text("Contract No.");
 			input1 = element("input");
 			t3 = space();
 			label2 = element("label");
-			t4 = text("Client");
+			t4 = text("Country / Jurisdiction");
 			input2 = element("input");
 			t5 = space();
 			label3 = element("label");
-			t6 = text("Contractor");
+			t6 = text("Client / Employer");
 			input3 = element("input");
 			t7 = space();
 			label4 = element("label");
-			t8 = text("HSE Manager");
+			t8 = text("Main Contractor");
 			input4 = element("input");
 			t9 = space();
 			label5 = element("label");
-			t10 = text("FIDIC");
+			t10 = text("HSE Manager");
+			input5 = element("input");
+			t11 = space();
+			label6 = element("label");
+			t12 = text("Regulatory Reference");
+			input6 = element("input");
+			t13 = space();
+			label7 = element("label");
+			t14 = text("Work Ban Start");
+			input7 = element("input");
+			t15 = space();
+			label8 = element("label");
+			t16 = text("Work Ban End");
+			input8 = element("input");
+			t17 = space();
+			label9 = element("label");
+			t18 = text("Ban Months");
+			input9 = element("input");
+			t19 = space();
+			label10 = element("label");
+			t20 = text("FIDIC Assessment\n        ");
 			select = element("select");
 			option0 = element("option");
 			option0.textContent = "ELIGIBLE";
@@ -4934,530 +5490,239 @@ function create_else_block_8(ctx) {
 			option1.textContent = "NOT ELIGIBLE";
 			option2 = element("option");
 			option2.textContent = "UNDER REVIEW";
-			t14 = space();
-			div2 = element("div");
-			div1 = element("div");
-			span1 = element("span");
-			t15 = text("🚫 Work Suspensions ");
-			span0 = element("span");
-			t16 = text(t16_value);
-			t17 = space();
-			button0 = element("button");
-			t18 = text(t18_value);
-			t19 = space();
-			if (if_block0) if_block0.c();
-			t20 = space();
-			if (if_block1) if_block1.c();
-			t21 = space();
-			button1 = element("button");
-			button1.textContent = "📋 Generate ISO 7933 Report";
-			t23 = space();
-			if (if_block2) if_block2.c();
-			if_block2_anchor = empty();
-			attr(input0, "placeholder", "Project Name");
-			attr(input0, "class", "svelte-apo8v3");
-			attr(label0, "class", "svelte-apo8v3");
-			attr(input1, "placeholder", "Oman, UAE…");
-			attr(input1, "class", "svelte-apo8v3");
-			attr(label1, "class", "svelte-apo8v3");
-			attr(input2, "class", "svelte-apo8v3");
-			attr(label2, "class", "svelte-apo8v3");
-			attr(input3, "class", "svelte-apo8v3");
-			attr(label3, "class", "svelte-apo8v3");
-			attr(input4, "class", "svelte-apo8v3");
-			attr(label4, "class", "svelte-apo8v3");
+			t24 = space();
+			label11 = element("label");
+			t25 = text("Est. Delay Days");
+			input10 = element("input");
+			t26 = space();
+			button = element("button");
+			button.textContent = "📋 Generate ISO 7933 Report";
+			t28 = space();
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+			attr(input0, "placeholder", "Site/Project Name");
+			attr(input0, "class", "svelte-fq6k1p");
+			attr(label0, "class", "svelte-fq6k1p");
+			attr(input1, "placeholder", "CONTRACT-001");
+			attr(input1, "class", "svelte-fq6k1p");
+			attr(label1, "class", "svelte-fq6k1p");
+			attr(input2, "placeholder", "Oman, UAE, Qatar…");
+			attr(input2, "class", "svelte-fq6k1p");
+			attr(label2, "class", "svelte-fq6k1p");
+			attr(input3, "placeholder", "Client Name");
+			attr(input3, "class", "svelte-fq6k1p");
+			attr(label3, "class", "svelte-fq6k1p");
+			attr(input4, "placeholder", "Contractor Name");
+			attr(input4, "class", "svelte-fq6k1p");
+			attr(label4, "class", "svelte-fq6k1p");
+			attr(input5, "placeholder", "Name, Cert. No.");
+			attr(input5, "class", "svelte-fq6k1p");
+			attr(label5, "class", "svelte-fq6k1p");
+			attr(input6, "placeholder", "e.g. Min. Decision 286/2008");
+			attr(input6, "class", "svelte-fq6k1p");
+			attr(label6, "class", "svelte-fq6k1p");
+			attr(input7, "placeholder", "12:30");
+			attr(input7, "class", "svelte-fq6k1p");
+			attr(label7, "class", "svelte-fq6k1p");
+			attr(input8, "placeholder", "15:30");
+			attr(input8, "class", "svelte-fq6k1p");
+			attr(label8, "class", "svelte-fq6k1p");
+			attr(input9, "placeholder", "June, July, August");
+			attr(input9, "class", "svelte-fq6k1p");
+			attr(label9, "class", "svelte-fq6k1p");
 			option0.__value = "ELIGIBLE";
 			set_input_value(option0, option0.__value);
 			option1.__value = "NOT ELIGIBLE";
 			set_input_value(option1, option1.__value);
 			option2.__value = "UNDER REVIEW";
 			set_input_value(option2, option2.__value);
-			attr(select, "class", "svelte-apo8v3");
-			if (/*reportMeta*/ ctx[34].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[71].call(select));
-			attr(label5, "class", "svelte-apo8v3");
-			attr(div0, "class", "fg-rform svelte-apo8v3");
-			attr(span0, "class", "fg-susp-count svelte-apo8v3");
-			attr(button0, "class", "fg-susp-add-btn svelte-apo8v3");
-			attr(div1, "class", "fg-susp-hd svelte-apo8v3");
-			attr(div2, "class", "fg-susp-section svelte-apo8v3");
-			attr(button1, "class", "fg-btn svelte-apo8v3");
+			attr(select, "class", "svelte-fq6k1p");
+			if (/*reportMeta*/ ctx[37].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[85].call(select));
+			attr(label10, "class", "svelte-fq6k1p");
+			attr(input10, "type", "number");
+			attr(input10, "min", "0");
+			attr(input10, "class", "svelte-fq6k1p");
+			attr(label11, "class", "svelte-fq6k1p");
+			attr(div, "class", "fg-form svelte-fq6k1p");
+			attr(button, "class", "fg-btn fg-btn-primary svelte-fq6k1p");
 		},
 		m(target, anchor) {
-			insert(target, div0, anchor);
-			append(div0, label0);
+			insert(target, div, anchor);
+			append(div, label0);
 			append(label0, t0);
 			append(label0, input0);
-			set_input_value(input0, /*reportMeta*/ ctx[34].projectName);
-			append(div0, t1);
-			append(div0, label1);
+			set_input_value(input0, /*reportMeta*/ ctx[37].projectName);
+			append(div, t1);
+			append(div, label1);
 			append(label1, t2);
 			append(label1, input1);
-			set_input_value(input1, /*reportMeta*/ ctx[34].country);
-			append(div0, t3);
-			append(div0, label2);
+			set_input_value(input1, /*reportMeta*/ ctx[37].contractNumber);
+			append(div, t3);
+			append(div, label2);
 			append(label2, t4);
 			append(label2, input2);
-			set_input_value(input2, /*reportMeta*/ ctx[34].clientName);
-			append(div0, t5);
-			append(div0, label3);
+			set_input_value(input2, /*reportMeta*/ ctx[37].country);
+			append(div, t5);
+			append(div, label3);
 			append(label3, t6);
 			append(label3, input3);
-			set_input_value(input3, /*reportMeta*/ ctx[34].contractorName);
-			append(div0, t7);
-			append(div0, label4);
+			set_input_value(input3, /*reportMeta*/ ctx[37].clientName);
+			append(div, t7);
+			append(div, label4);
 			append(label4, t8);
 			append(label4, input4);
-			set_input_value(input4, /*reportMeta*/ ctx[34].hseManagerName);
-			append(div0, t9);
-			append(div0, label5);
+			set_input_value(input4, /*reportMeta*/ ctx[37].contractorName);
+			append(div, t9);
+			append(div, label5);
 			append(label5, t10);
-			append(label5, select);
+			append(label5, input5);
+			set_input_value(input5, /*reportMeta*/ ctx[37].hseManagerName);
+			append(div, t11);
+			append(div, label6);
+			append(label6, t12);
+			append(label6, input6);
+			set_input_value(input6, /*reportMeta*/ ctx[37].regulatoryRef);
+			append(div, t13);
+			append(div, label7);
+			append(label7, t14);
+			append(label7, input7);
+			set_input_value(input7, /*reportMeta*/ ctx[37].banStart);
+			append(div, t15);
+			append(div, label8);
+			append(label8, t16);
+			append(label8, input8);
+			set_input_value(input8, /*reportMeta*/ ctx[37].banEnd);
+			append(div, t17);
+			append(div, label9);
+			append(label9, t18);
+			append(label9, input9);
+			set_input_value(input9, /*reportMeta*/ ctx[37].banMonths);
+			append(div, t19);
+			append(div, label10);
+			append(label10, t20);
+			append(label10, select);
 			append(select, option0);
 			append(select, option1);
 			append(select, option2);
-			select_option(select, /*reportMeta*/ ctx[34].fidic, true);
-			insert(target, t14, anchor);
-			insert(target, div2, anchor);
-			append(div2, div1);
-			append(div1, span1);
-			append(span1, t15);
-			append(span1, span0);
-			append(span0, t16);
-			append(div1, t17);
-			append(div1, button0);
-			append(button0, t18);
-			append(div2, t19);
-			if (if_block0) if_block0.m(div2, null);
-			append(div2, t20);
-			if (if_block1) if_block1.m(div2, null);
-			insert(target, t21, anchor);
-			insert(target, button1, anchor);
-			insert(target, t23, anchor);
-			if (if_block2) if_block2.m(target, anchor);
-			insert(target, if_block2_anchor, anchor);
+			select_option(select, /*reportMeta*/ ctx[37].fidic, true);
+			append(div, t24);
+			append(div, label11);
+			append(label11, t25);
+			append(label11, input10);
+			set_input_value(input10, /*reportMeta*/ ctx[37].delayDays);
+			insert(target, t26, anchor);
+			insert(target, button, anchor);
+			insert(target, t28, anchor);
+			if (if_block) if_block.m(target, anchor);
+			insert(target, if_block_anchor, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "input", /*input0_input_handler*/ ctx[66]),
-					listen(input1, "input", /*input1_input_handler*/ ctx[67]),
-					listen(input2, "input", /*input2_input_handler*/ ctx[68]),
-					listen(input3, "input", /*input3_input_handler*/ ctx[69]),
-					listen(input4, "input", /*input4_input_handler*/ ctx[70]),
-					listen(select, "change", /*select_change_handler_1*/ ctx[71]),
-					listen(button0, "click", /*click_handler_13*/ ctx[72]),
-					listen(button1, "click", /*generateReport*/ ctx[47])
+					listen(input0, "input", /*input0_input_handler*/ ctx[75]),
+					listen(input1, "input", /*input1_input_handler*/ ctx[76]),
+					listen(input2, "input", /*input2_input_handler*/ ctx[77]),
+					listen(input3, "input", /*input3_input_handler*/ ctx[78]),
+					listen(input4, "input", /*input4_input_handler*/ ctx[79]),
+					listen(input5, "input", /*input5_input_handler*/ ctx[80]),
+					listen(input6, "input", /*input6_input_handler*/ ctx[81]),
+					listen(input7, "input", /*input7_input_handler*/ ctx[82]),
+					listen(input8, "input", /*input8_input_handler*/ ctx[83]),
+					listen(input9, "input", /*input9_input_handler*/ ctx[84]),
+					listen(select, "change", /*select_change_handler_1*/ ctx[85]),
+					listen(input10, "input", /*input10_input_handler*/ ctx[86]),
+					listen(button, "click", /*generateReport*/ ctx[50])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*reportMeta*/ 8 && input0.value !== /*reportMeta*/ ctx[34].projectName) {
-				set_input_value(input0, /*reportMeta*/ ctx[34].projectName);
+			if (dirty[1] & /*reportMeta*/ 64 && input0.value !== /*reportMeta*/ ctx[37].projectName) {
+				set_input_value(input0, /*reportMeta*/ ctx[37].projectName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8 && input1.value !== /*reportMeta*/ ctx[34].country) {
-				set_input_value(input1, /*reportMeta*/ ctx[34].country);
+			if (dirty[1] & /*reportMeta*/ 64 && input1.value !== /*reportMeta*/ ctx[37].contractNumber) {
+				set_input_value(input1, /*reportMeta*/ ctx[37].contractNumber);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8 && input2.value !== /*reportMeta*/ ctx[34].clientName) {
-				set_input_value(input2, /*reportMeta*/ ctx[34].clientName);
+			if (dirty[1] & /*reportMeta*/ 64 && input2.value !== /*reportMeta*/ ctx[37].country) {
+				set_input_value(input2, /*reportMeta*/ ctx[37].country);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8 && input3.value !== /*reportMeta*/ ctx[34].contractorName) {
-				set_input_value(input3, /*reportMeta*/ ctx[34].contractorName);
+			if (dirty[1] & /*reportMeta*/ 64 && input3.value !== /*reportMeta*/ ctx[37].clientName) {
+				set_input_value(input3, /*reportMeta*/ ctx[37].clientName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8 && input4.value !== /*reportMeta*/ ctx[34].hseManagerName) {
-				set_input_value(input4, /*reportMeta*/ ctx[34].hseManagerName);
+			if (dirty[1] & /*reportMeta*/ 64 && input4.value !== /*reportMeta*/ ctx[37].contractorName) {
+				set_input_value(input4, /*reportMeta*/ ctx[37].contractorName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8) {
-				select_option(select, /*reportMeta*/ ctx[34].fidic);
+			if (dirty[1] & /*reportMeta*/ 64 && input5.value !== /*reportMeta*/ ctx[37].hseManagerName) {
+				set_input_value(input5, /*reportMeta*/ ctx[37].hseManagerName);
 			}
 
-			if (dirty[0] & /*suspensions*/ 131072 && t16_value !== (t16_value = /*suspensions*/ ctx[17].length + "")) set_data(t16, t16_value);
-
-			if (dirty[0] & /*showSuspForm*/ 524288 && t18_value !== (t18_value = (/*showSuspForm*/ ctx[19]
-			? '✕ Cancel'
-			: '+ Log Suspension') + "")) set_data(t18, t18_value);
-
-			if (/*showSuspForm*/ ctx[19]) {
-				if (if_block0) {
-					if_block0.p(ctx, dirty);
-				} else {
-					if_block0 = create_if_block_28(ctx);
-					if_block0.c();
-					if_block0.m(div2, t20);
-				}
-			} else if (if_block0) {
-				if_block0.d(1);
-				if_block0 = null;
+			if (dirty[1] & /*reportMeta*/ 64 && input6.value !== /*reportMeta*/ ctx[37].regulatoryRef) {
+				set_input_value(input6, /*reportMeta*/ ctx[37].regulatoryRef);
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_14(ctx)) && if_block1) {
-				if_block1.p(ctx, dirty);
-			} else {
-				if (if_block1) if_block1.d(1);
-				if_block1 = current_block_type && current_block_type(ctx);
-
-				if (if_block1) {
-					if_block1.c();
-					if_block1.m(div2, null);
-				}
+			if (dirty[1] & /*reportMeta*/ 64 && input7.value !== /*reportMeta*/ ctx[37].banStart) {
+				set_input_value(input7, /*reportMeta*/ ctx[37].banStart);
 			}
 
-			if (/*reportText*/ ctx[16]) {
-				if (if_block2) {
-					if_block2.p(ctx, dirty);
-				} else {
-					if_block2 = create_if_block_23(ctx);
-					if_block2.c();
-					if_block2.m(if_block2_anchor.parentNode, if_block2_anchor);
-				}
-			} else if (if_block2) {
-				if_block2.d(1);
-				if_block2 = null;
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t14);
-				detach(div2);
-				detach(t21);
-				detach(button1);
-				detach(t23);
-				detach(if_block2_anchor);
+			if (dirty[1] & /*reportMeta*/ 64 && input8.value !== /*reportMeta*/ ctx[37].banEnd) {
+				set_input_value(input8, /*reportMeta*/ ctx[37].banEnd);
 			}
 
-			if (if_block0) if_block0.d();
-
-			if (if_block1) {
-				if_block1.d();
+			if (dirty[1] & /*reportMeta*/ 64 && input9.value !== /*reportMeta*/ ctx[37].banMonths) {
+				set_input_value(input9, /*reportMeta*/ ctx[37].banMonths);
 			}
 
-			if (if_block2) if_block2.d(detaching);
-			mounted = false;
-			run_all(dispose);
-		}
-	};
-}
-
-// (333:6) {#if !license.valid}
-function create_if_block_22(ctx) {
-	let div2;
-
-	return {
-		c() {
-			div2 = element("div");
-			div2.innerHTML = `<div class="fg-gate-ic svelte-apo8v3">📄</div><div class="fg-gate-ti svelte-apo8v3">Reports — Pro Feature</div><a class="fg-gate-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade</a>`;
-			attr(div2, "class", "fg-gate svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div2, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(div2);
-			}
-		}
-	};
-}
-
-// (355:10) {#if showSuspForm}
-function create_if_block_28(ctx) {
-	let div3;
-	let div0;
-	let label0;
-	let t0;
-	let input0;
-	let t1;
-	let label1;
-	let t2;
-	let input1;
-	let t3;
-	let label2;
-	let t4;
-	let input2;
-	let t5;
-	let div1;
-	let label3;
-	let t6;
-	let select;
-	let option0;
-	let option1;
-	let option2;
-	let option3;
-	let option4;
-	let option5;
-	let option6;
-	let t14;
-	let label4;
-	let t15;
-	let input3;
-	let t16;
-	let label5;
-	let t17;
-	let input4;
-	let t18;
-	let div2;
-	let t19;
-	let button;
-	let t20;
-	let button_disabled_value;
-	let mounted;
-	let dispose;
-	let if_block = /*suspForm*/ ctx[18].startTime && /*suspForm*/ ctx[18].endTime && create_if_block_29(ctx);
-
-	return {
-		c() {
-			div3 = element("div");
-			div0 = element("div");
-			label0 = element("label");
-			t0 = text("Date\n                  ");
-			input0 = element("input");
-			t1 = space();
-			label1 = element("label");
-			t2 = text("Start\n                  ");
-			input1 = element("input");
-			t3 = space();
-			label2 = element("label");
-			t4 = text("End\n                  ");
-			input2 = element("input");
-			t5 = space();
-			div1 = element("div");
-			label3 = element("label");
-			t6 = text("Trigger\n                  ");
-			select = element("select");
-			option0 = element("option");
-			option0.textContent = "RED zone";
-			option1 = element("option");
-			option1.textContent = "PURPLE zone";
-			option2 = element("option");
-			option2.textContent = "BLACK zone";
-			option3 = element("option");
-			option3.textContent = "Legal ban 12:30–15:30";
-			option4 = element("option");
-			option4.textContent = "Wind alert";
-			option5 = element("option");
-			option5.textContent = "Rain alert";
-			option6 = element("option");
-			option6.textContent = "HSE manager decision";
-			t14 = space();
-			label4 = element("label");
-			t15 = text("Trades\n                  ");
-			input3 = element("input");
-			t16 = space();
-			label5 = element("label");
-			t17 = text("Workers\n                  ");
-			input4 = element("input");
-			t18 = space();
-			div2 = element("div");
-			if (if_block) if_block.c();
-			t19 = space();
-			button = element("button");
-			t20 = text("✓ Save Suspension");
-			attr(input0, "type", "date");
-			attr(input0, "class", "fg-susp-input svelte-apo8v3");
-			attr(label0, "class", "fg-susp-lbl svelte-apo8v3");
-			attr(input1, "type", "time");
-			attr(input1, "class", "fg-susp-input svelte-apo8v3");
-			attr(label1, "class", "fg-susp-lbl svelte-apo8v3");
-			attr(input2, "type", "time");
-			attr(input2, "class", "fg-susp-input svelte-apo8v3");
-			attr(label2, "class", "fg-susp-lbl svelte-apo8v3");
-			attr(div0, "class", "fg-susp-form-row svelte-apo8v3");
-			option0.__value = "RED zone";
-			set_input_value(option0, option0.__value);
-			option1.__value = "PURPLE zone";
-			set_input_value(option1, option1.__value);
-			option2.__value = "BLACK zone";
-			set_input_value(option2, option2.__value);
-			option3.__value = "Legal ban 12:30–15:30";
-			set_input_value(option3, option3.__value);
-			option4.__value = "Wind alert";
-			set_input_value(option4, option4.__value);
-			option5.__value = "Rain alert";
-			set_input_value(option5, option5.__value);
-			option6.__value = "HSE manager decision";
-			set_input_value(option6, option6.__value);
-			attr(select, "class", "fg-susp-input svelte-apo8v3");
-			if (/*suspForm*/ ctx[18].trigger === void 0) add_render_callback(() => /*select_change_handler_2*/ ctx[76].call(select));
-			attr(label3, "class", "fg-susp-lbl svelte-apo8v3");
-			set_style(label3, "flex", "2");
-			attr(input3, "placeholder", "Civil, Steel, All…");
-			attr(input3, "class", "fg-susp-input svelte-apo8v3");
-			attr(label4, "class", "fg-susp-lbl svelte-apo8v3");
-			set_style(label4, "flex", "2");
-			attr(input4, "type", "number");
-			attr(input4, "min", "0");
-			attr(input4, "class", "fg-susp-input svelte-apo8v3");
-			attr(label5, "class", "fg-susp-lbl svelte-apo8v3");
-			attr(div1, "class", "fg-susp-form-row svelte-apo8v3");
-			attr(button, "class", "fg-susp-save-btn svelte-apo8v3");
-			button.disabled = button_disabled_value = !/*suspForm*/ ctx[18].date || !/*suspForm*/ ctx[18].startTime || !/*suspForm*/ ctx[18].endTime;
-			attr(div2, "class", "fg-susp-form-footer svelte-apo8v3");
-			attr(div3, "class", "fg-susp-form svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div3, anchor);
-			append(div3, div0);
-			append(div0, label0);
-			append(label0, t0);
-			append(label0, input0);
-			set_input_value(input0, /*suspForm*/ ctx[18].date);
-			append(div0, t1);
-			append(div0, label1);
-			append(label1, t2);
-			append(label1, input1);
-			set_input_value(input1, /*suspForm*/ ctx[18].startTime);
-			append(div0, t3);
-			append(div0, label2);
-			append(label2, t4);
-			append(label2, input2);
-			set_input_value(input2, /*suspForm*/ ctx[18].endTime);
-			append(div3, t5);
-			append(div3, div1);
-			append(div1, label3);
-			append(label3, t6);
-			append(label3, select);
-			append(select, option0);
-			append(select, option1);
-			append(select, option2);
-			append(select, option3);
-			append(select, option4);
-			append(select, option5);
-			append(select, option6);
-			select_option(select, /*suspForm*/ ctx[18].trigger, true);
-			append(div1, t14);
-			append(div1, label4);
-			append(label4, t15);
-			append(label4, input3);
-			set_input_value(input3, /*suspForm*/ ctx[18].trades);
-			append(div1, t16);
-			append(div1, label5);
-			append(label5, t17);
-			append(label5, input4);
-			set_input_value(input4, /*suspForm*/ ctx[18].workers);
-			append(div3, t18);
-			append(div3, div2);
-			if (if_block) if_block.m(div2, null);
-			append(div2, t19);
-			append(div2, button);
-			append(button, t20);
-
-			if (!mounted) {
-				dispose = [
-					listen(input0, "input", /*input0_input_handler_1*/ ctx[73]),
-					listen(input1, "input", /*input1_input_handler_1*/ ctx[74]),
-					listen(input2, "input", /*input2_input_handler_1*/ ctx[75]),
-					listen(select, "change", /*select_change_handler_2*/ ctx[76]),
-					listen(input3, "input", /*input3_input_handler_1*/ ctx[77]),
-					listen(input4, "input", /*input4_input_handler_1*/ ctx[78]),
-					listen(button, "click", /*addSuspension*/ ctx[35])
-				];
-
-				mounted = true;
-			}
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*suspForm*/ 262144) {
-				set_input_value(input0, /*suspForm*/ ctx[18].date);
+			if (dirty[1] & /*reportMeta*/ 64) {
+				select_option(select, /*reportMeta*/ ctx[37].fidic);
 			}
 
-			if (dirty[0] & /*suspForm*/ 262144) {
-				set_input_value(input1, /*suspForm*/ ctx[18].startTime);
+			if (dirty[1] & /*reportMeta*/ 64 && to_number(input10.value) !== /*reportMeta*/ ctx[37].delayDays) {
+				set_input_value(input10, /*reportMeta*/ ctx[37].delayDays);
 			}
 
-			if (dirty[0] & /*suspForm*/ 262144) {
-				set_input_value(input2, /*suspForm*/ ctx[18].endTime);
-			}
-
-			if (dirty[0] & /*suspForm*/ 262144) {
-				select_option(select, /*suspForm*/ ctx[18].trigger);
-			}
-
-			if (dirty[0] & /*suspForm*/ 262144 && input3.value !== /*suspForm*/ ctx[18].trades) {
-				set_input_value(input3, /*suspForm*/ ctx[18].trades);
-			}
-
-			if (dirty[0] & /*suspForm*/ 262144 && to_number(input4.value) !== /*suspForm*/ ctx[18].workers) {
-				set_input_value(input4, /*suspForm*/ ctx[18].workers);
-			}
-
-			if (/*suspForm*/ ctx[18].startTime && /*suspForm*/ ctx[18].endTime) {
+			if (/*reportText*/ ctx[30]) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_29(ctx);
+					if_block = create_if_block_34(ctx);
 					if_block.c();
-					if_block.m(div2, t19);
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
 				}
 			} else if (if_block) {
 				if_block.d(1);
 				if_block = null;
 			}
-
-			if (dirty[0] & /*suspForm*/ 262144 && button_disabled_value !== (button_disabled_value = !/*suspForm*/ ctx[18].date || !/*suspForm*/ ctx[18].startTime || !/*suspForm*/ ctx[18].endTime)) {
-				button.disabled = button_disabled_value;
-			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(div3);
+				detach(div);
+				detach(t26);
+				detach(button);
+				detach(t28);
+				detach(if_block_anchor);
 			}
 
-			if (if_block) if_block.d();
+			if (if_block) if_block.d(detaching);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (388:16) {#if suspForm.startTime && suspForm.endTime}
-function create_if_block_29(ctx) {
-	let span;
-	let t0;
-	let t1_value = calcHours(/*suspForm*/ ctx[18].startTime, /*suspForm*/ ctx[18].endTime).toFixed(1) + "";
-	let t1;
-	let t2;
-
-	return {
-		c() {
-			span = element("span");
-			t0 = text("Duration: ");
-			t1 = text(t1_value);
-			t2 = text(" hrs");
-			attr(span, "class", "fg-susp-dur svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-			append(span, t0);
-			append(span, t1);
-			append(span, t2);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*suspForm*/ 262144 && t1_value !== (t1_value = calcHours(/*suspForm*/ ctx[18].startTime, /*suspForm*/ ctx[18].endTime).toFixed(1) + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (421:34) 
-function create_if_block_27(ctx) {
+// (443:4) {#if !isPro}
+function create_if_block_33(ctx) {
 	let div;
 
 	return {
 		c() {
 			div = element("div");
-			div.textContent = "No suspensions logged yet. Tap \"+ Log Suspension\" to add one.";
-			attr(div, "class", "fg-susp-empty svelte-apo8v3");
+			div.innerHTML = `🔒 ISO 7933 report generation is a <b>Pro</b> feature. Activate a license in <b>Config</b> to produce defensible weekly reports &amp; FIDIC 8.4 evidence.`;
+			attr(div, "class", "fg-upgrade svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -5471,318 +5736,18 @@ function create_if_block_27(ctx) {
 	};
 }
 
-// (400:10) {#if suspensions.length > 0}
-function create_if_block_24(ctx) {
-	let div1;
-	let t0;
-	let div0;
-	let t1;
-	let t2_value = /*suspensions*/ ctx[17].reduce(/*func*/ ctx[80], 0).toFixed(1) + "";
-	let t2;
-	let t3;
-	let each_value_6 = ensure_array_like(/*suspensions*/ ctx[17]);
-	let each_blocks = [];
-
-	for (let i = 0; i < each_value_6.length; i += 1) {
-		each_blocks[i] = create_each_block_6(get_each_context_6(ctx, each_value_6, i));
-	}
-
-	return {
-		c() {
-			div1 = element("div");
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				each_blocks[i].c();
-			}
-
-			t0 = space();
-			div0 = element("div");
-			t1 = text("Total: ");
-			t2 = text(t2_value);
-			t3 = text(" suspension hours logged");
-			attr(div0, "class", "fg-susp-total svelte-apo8v3");
-			attr(div1, "class", "fg-susp-list svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				if (each_blocks[i]) {
-					each_blocks[i].m(div1, null);
-				}
-			}
-
-			append(div1, t0);
-			append(div1, div0);
-			append(div0, t1);
-			append(div0, t2);
-			append(div0, t3);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*suspensions*/ 131072 | dirty[1] & /*deleteSuspension*/ 32) {
-				each_value_6 = ensure_array_like(/*suspensions*/ ctx[17]);
-				let i;
-
-				for (i = 0; i < each_value_6.length; i += 1) {
-					const child_ctx = get_each_context_6(ctx, each_value_6, i);
-
-					if (each_blocks[i]) {
-						each_blocks[i].p(child_ctx, dirty);
-					} else {
-						each_blocks[i] = create_each_block_6(child_ctx);
-						each_blocks[i].c();
-						each_blocks[i].m(div1, t0);
-					}
-				}
-
-				for (; i < each_blocks.length; i += 1) {
-					each_blocks[i].d(1);
-				}
-
-				each_blocks.length = each_value_6.length;
-			}
-
-			if (dirty[0] & /*suspensions*/ 131072 && t2_value !== (t2_value = /*suspensions*/ ctx[17].reduce(/*func*/ ctx[80], 0).toFixed(1) + "")) set_data(t2, t2_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-
-			destroy_each(each_blocks, detaching);
-		}
-	};
-}
-
-// (411:20) {#if s.trades}
-function create_if_block_26(ctx) {
-	let span;
-	let t0;
-	let t1_value = /*s*/ ctx[120].trades + "";
-	let t1;
-
-	return {
-		c() {
-			span = element("span");
-			t0 = text("🏗 ");
-			t1 = text(t1_value);
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-			append(span, t0);
-			append(span, t1);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*suspensions*/ 131072 && t1_value !== (t1_value = /*s*/ ctx[120].trades + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (412:20) {#if s.workers > 0}
-function create_if_block_25(ctx) {
-	let span;
-	let t0;
-	let t1_value = /*s*/ ctx[120].workers + "";
-	let t1;
-	let t2;
-
-	return {
-		c() {
-			span = element("span");
-			t0 = text("👷 ");
-			t1 = text(t1_value);
-			t2 = text(" workers");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-			append(span, t0);
-			append(span, t1);
-			append(span, t2);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*suspensions*/ 131072 && t1_value !== (t1_value = /*s*/ ctx[120].workers + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (402:14) {#each suspensions as s}
-function create_each_block_6(ctx) {
-	let div2;
-	let div0;
-	let span0;
-	let t0_value = /*s*/ ctx[120].date + "";
-	let t0;
-	let t1;
-	let span1;
-	let t2_value = /*s*/ ctx[120].startTime + "";
-	let t2;
-	let t3;
-	let t4_value = /*s*/ ctx[120].endTime + "";
-	let t4;
-	let t5;
-	let span2;
-	let t6_value = calcHours(/*s*/ ctx[120].startTime, /*s*/ ctx[120].endTime).toFixed(1) + "";
-	let t6;
-	let t7;
-	let t8;
-	let span3;
-	let t9_value = /*s*/ ctx[120].trigger + "";
-	let t9;
-	let t10;
-	let div1;
-	let t11;
-	let t12;
-	let button;
-	let mounted;
-	let dispose;
-	let if_block0 = /*s*/ ctx[120].trades && create_if_block_26(ctx);
-	let if_block1 = /*s*/ ctx[120].workers > 0 && create_if_block_25(ctx);
-
-	function click_handler_14() {
-		return /*click_handler_14*/ ctx[79](/*s*/ ctx[120]);
-	}
-
-	return {
-		c() {
-			div2 = element("div");
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = space();
-			span1 = element("span");
-			t2 = text(t2_value);
-			t3 = text("–");
-			t4 = text(t4_value);
-			t5 = space();
-			span2 = element("span");
-			t6 = text(t6_value);
-			t7 = text("h");
-			t8 = space();
-			span3 = element("span");
-			t9 = text(t9_value);
-			t10 = space();
-			div1 = element("div");
-			if (if_block0) if_block0.c();
-			t11 = space();
-			if (if_block1) if_block1.c();
-			t12 = space();
-			button = element("button");
-			button.textContent = "✕";
-			attr(span0, "class", "fg-susp-item-date svelte-apo8v3");
-			attr(span1, "class", "fg-susp-item-time svelte-apo8v3");
-			attr(span2, "class", "fg-susp-item-dur svelte-apo8v3");
-			attr(span3, "class", "fg-susp-item-trigger svelte-apo8v3");
-			attr(div0, "class", "fg-susp-item-main svelte-apo8v3");
-			attr(button, "class", "fg-susp-del svelte-apo8v3");
-			attr(div1, "class", "fg-susp-item-sub svelte-apo8v3");
-			attr(div2, "class", "fg-susp-item svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div2, anchor);
-			append(div2, div0);
-			append(div0, span0);
-			append(span0, t0);
-			append(div0, t1);
-			append(div0, span1);
-			append(span1, t2);
-			append(span1, t3);
-			append(span1, t4);
-			append(div0, t5);
-			append(div0, span2);
-			append(span2, t6);
-			append(span2, t7);
-			append(div0, t8);
-			append(div0, span3);
-			append(span3, t9);
-			append(div2, t10);
-			append(div2, div1);
-			if (if_block0) if_block0.m(div1, null);
-			append(div1, t11);
-			if (if_block1) if_block1.m(div1, null);
-			append(div1, t12);
-			append(div1, button);
-
-			if (!mounted) {
-				dispose = listen(button, "click", click_handler_14);
-				mounted = true;
-			}
-		},
-		p(new_ctx, dirty) {
-			ctx = new_ctx;
-			if (dirty[0] & /*suspensions*/ 131072 && t0_value !== (t0_value = /*s*/ ctx[120].date + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*suspensions*/ 131072 && t2_value !== (t2_value = /*s*/ ctx[120].startTime + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*suspensions*/ 131072 && t4_value !== (t4_value = /*s*/ ctx[120].endTime + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*suspensions*/ 131072 && t6_value !== (t6_value = calcHours(/*s*/ ctx[120].startTime, /*s*/ ctx[120].endTime).toFixed(1) + "")) set_data(t6, t6_value);
-			if (dirty[0] & /*suspensions*/ 131072 && t9_value !== (t9_value = /*s*/ ctx[120].trigger + "")) set_data(t9, t9_value);
-
-			if (/*s*/ ctx[120].trades) {
-				if (if_block0) {
-					if_block0.p(ctx, dirty);
-				} else {
-					if_block0 = create_if_block_26(ctx);
-					if_block0.c();
-					if_block0.m(div1, t11);
-				}
-			} else if (if_block0) {
-				if_block0.d(1);
-				if_block0 = null;
-			}
-
-			if (/*s*/ ctx[120].workers > 0) {
-				if (if_block1) {
-					if_block1.p(ctx, dirty);
-				} else {
-					if_block1 = create_if_block_25(ctx);
-					if_block1.c();
-					if_block1.m(div1, t12);
-				}
-			} else if (if_block1) {
-				if_block1.d(1);
-				if_block1 = null;
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div2);
-			}
-
-			if (if_block0) if_block0.d();
-			if (if_block1) if_block1.d();
-			mounted = false;
-			dispose();
-		}
-	};
-}
-
-// (428:8) {#if reportText}
-function create_if_block_23(ctx) {
+// (467:4) {#if reportText}
+function create_if_block_34(ctx) {
 	let div1;
 	let div0;
 	let span;
-	let t0;
-	let t1_value = /*suspensions*/ ctx[17].length + "";
 	let t1;
-	let t2;
-	let t3_value = (/*suspensions*/ ctx[17].length !== 1 ? 's' : '') + "";
-	let t3;
-	let t4;
-	let t5;
 	let button0;
-	let t7;
+	let t3;
 	let button1;
-	let t9;
+	let t5;
 	let pre;
-	let t10;
+	let t6;
 	let mounted;
 	let dispose;
 
@@ -5791,57 +5756,46 @@ function create_if_block_23(ctx) {
 			div1 = element("div");
 			div0 = element("div");
 			span = element("span");
-			t0 = text("Report ready · ");
-			t1 = text(t1_value);
-			t2 = text(" suspension");
-			t3 = text(t3_value);
-			t4 = text(" included");
-			t5 = space();
+			span.textContent = "Report Ready";
+			t1 = space();
 			button0 = element("button");
-			button0.textContent = "Copy";
-			t7 = space();
+			button0.textContent = "📋 Copy";
+			t3 = space();
 			button1 = element("button");
-			button1.textContent = ".txt";
-			t9 = space();
+			button1.textContent = "⬇ Download .txt";
+			t5 = space();
 			pre = element("pre");
-			t10 = text(/*reportText*/ ctx[16]);
-			attr(span, "class", "svelte-apo8v3");
-			attr(button0, "class", "fg-rep-btn svelte-apo8v3");
-			attr(button1, "class", "fg-rep-btn svelte-apo8v3");
-			attr(div0, "class", "fg-rep-bar svelte-apo8v3");
-			attr(pre, "class", "fg-rep-txt svelte-apo8v3");
-			attr(div1, "class", "fg-rep svelte-apo8v3");
+			t6 = text(/*reportText*/ ctx[30]);
+			attr(span, "class", "svelte-fq6k1p");
+			attr(button0, "class", "fg-mini-btn svelte-fq6k1p");
+			attr(button1, "class", "fg-mini-btn svelte-fq6k1p");
+			attr(div0, "class", "fg-report-toolbar svelte-fq6k1p");
+			attr(pre, "class", "fg-report-text svelte-fq6k1p");
+			attr(div1, "class", "fg-report-preview svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div1, anchor);
 			append(div1, div0);
 			append(div0, span);
-			append(span, t0);
-			append(span, t1);
-			append(span, t2);
-			append(span, t3);
-			append(span, t4);
-			append(div0, t5);
+			append(div0, t1);
 			append(div0, button0);
-			append(div0, t7);
+			append(div0, t3);
 			append(div0, button1);
-			append(div1, t9);
+			append(div1, t5);
 			append(div1, pre);
-			append(pre, t10);
+			append(pre, t6);
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*copyReport*/ ctx[48]),
-					listen(button1, "click", /*downloadReport*/ ctx[49])
+					listen(button0, "click", /*copyReport*/ ctx[51]),
+					listen(button1, "click", /*downloadReport*/ ctx[52])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*suspensions*/ 131072 && t1_value !== (t1_value = /*suspensions*/ ctx[17].length + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*suspensions*/ 131072 && t3_value !== (t3_value = (/*suspensions*/ ctx[17].length !== 1 ? 's' : '') + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*reportText*/ 65536) set_data(t10, /*reportText*/ ctx[16]);
+			if (dirty[0] & /*reportText*/ 1073741824) set_data(t6, /*reportText*/ ctx[30]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -5854,162 +5808,257 @@ function create_if_block_23(ctx) {
 	};
 }
 
-// (309:6) {:else}
-function create_else_block_7(ctx) {
-	let div3;
+// (394:4) {:else}
+function create_else_block_6(ctx) {
 	let div0;
 	let t1;
+	let div7;
 	let div1;
-	let t2;
+	let t3;
 	let div2;
-	let t4;
 	let t5;
-	let if_block_anchor;
-	let each_value_5 = ensure_array_like(HEAT_STRESS_SYMPTOMS);
+	let div4;
+	let div3;
+	let t7;
+	let t8;
+	let div6;
+	let div5;
+	let t10;
+	let t11;
+	let div9;
+	let div8;
+	let t12;
+	let t13;
+	let each_value_8 = ensure_array_like(HEAT_STRESS_SYMPTOMS);
 	let each_blocks_1 = [];
 
-	for (let i = 0; i < each_value_5.length; i += 1) {
-		each_blocks_1[i] = create_each_block_5(get_each_context_5(ctx, each_value_5, i));
+	for (let i = 0; i < each_value_8.length; i += 1) {
+		each_blocks_1[i] = create_each_block_8(get_each_context_8(ctx, each_value_8, i));
 	}
 
-	let each_value_4 = ensure_array_like(EMERGENCY_RESPONSE);
+	let each_value_7 = ensure_array_like(EMERGENCY_RESPONSE);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_4.length; i += 1) {
-		each_blocks[i] = create_each_block_4(get_each_context_4(ctx, each_value_4, i));
+	for (let i = 0; i < each_value_7.length; i += 1) {
+		each_blocks[i] = create_each_block_7(get_each_context_7(ctx, each_value_7, i));
 	}
 
-	let if_block = /*alertLog*/ ctx[15].length > 0 && create_if_block_20(ctx);
+	let if_block0 = /*alertLog*/ ctx[29].length > 0 && create_if_block_31(ctx);
+
+	function select_block_type_11(ctx, dirty) {
+		if (/*alertLog*/ ctx[29].length === 0) return create_if_block_30;
+		return create_else_block_7;
+	}
+
+	let current_block_type = select_block_type_11(ctx);
+	let if_block1 = current_block_type(ctx);
 
 	return {
 		c() {
-			div3 = element("div");
 			div0 = element("div");
-			div0.textContent = "⚠ Heat Stress Is Life-Threatening";
+			div0.textContent = "🚨 Emergency Response";
 			t1 = space();
+			div7 = element("div");
 			div1 = element("div");
+			div1.textContent = "⚠ Heat Stress Is Life-Threatening";
+			t3 = space();
+			div2 = element("div");
+			div2.textContent = "The body starts shutting down and cannot recover without help.";
+			t5 = space();
+			div4 = element("div");
+			div3 = element("div");
+			div3.textContent = "🔴 SYMPTOMS TO MONITOR (every 2 hours)";
+			t7 = space();
 
 			for (let i = 0; i < each_blocks_1.length; i += 1) {
 				each_blocks_1[i].c();
 			}
 
-			t2 = space();
-			div2 = element("div");
-			div2.textContent = "🚑 Response Steps";
-			t4 = space();
+			t8 = space();
+			div6 = element("div");
+			div5 = element("div");
+			div5.textContent = "🚑 IMMEDIATE RESPONSE STEPS";
+			t10 = space();
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
-			t5 = space();
-			if (if_block) if_block.c();
-			if_block_anchor = empty();
-			attr(div0, "class", "fg-emg-w svelte-apo8v3");
-			attr(div1, "class", "fg-emg-syms svelte-apo8v3");
-			attr(div2, "class", "fg-emg-hd svelte-apo8v3");
-			attr(div3, "class", "fg-emg svelte-apo8v3");
+			t11 = space();
+			div9 = element("div");
+			div8 = element("div");
+			t12 = text("📋 Alerts Log (This Session)\n        ");
+			if (if_block0) if_block0.c();
+			t13 = space();
+			if_block1.c();
+			attr(div0, "class", "fg-section-title svelte-fq6k1p");
+			attr(div1, "class", "fg-emg-title svelte-fq6k1p");
+			attr(div2, "class", "fg-emg-sub svelte-fq6k1p");
+			attr(div3, "class", "fg-emg-label svelte-fq6k1p");
+			attr(div4, "class", "fg-emg-section svelte-fq6k1p");
+			attr(div5, "class", "fg-emg-label svelte-fq6k1p");
+			attr(div6, "class", "fg-emg-section svelte-fq6k1p");
+			attr(div7, "class", "fg-emergency-card svelte-fq6k1p");
+			attr(div8, "class", "fg-card-header svelte-fq6k1p");
+			attr(div9, "class", "fg-card svelte-fq6k1p");
+			set_style(div9, "border-color", "#d97706");
 		},
 		m(target, anchor) {
-			insert(target, div3, anchor);
-			append(div3, div0);
-			append(div3, t1);
-			append(div3, div1);
+			insert(target, div0, anchor);
+			insert(target, t1, anchor);
+			insert(target, div7, anchor);
+			append(div7, div1);
+			append(div7, t3);
+			append(div7, div2);
+			append(div7, t5);
+			append(div7, div4);
+			append(div4, div3);
+			append(div4, t7);
 
 			for (let i = 0; i < each_blocks_1.length; i += 1) {
 				if (each_blocks_1[i]) {
-					each_blocks_1[i].m(div1, null);
+					each_blocks_1[i].m(div4, null);
 				}
 			}
 
-			append(div3, t2);
-			append(div3, div2);
-			append(div3, t4);
+			append(div7, t8);
+			append(div7, div6);
+			append(div6, div5);
+			append(div6, t10);
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				if (each_blocks[i]) {
-					each_blocks[i].m(div3, null);
+					each_blocks[i].m(div6, null);
 				}
 			}
 
-			insert(target, t5, anchor);
-			if (if_block) if_block.m(target, anchor);
-			insert(target, if_block_anchor, anchor);
+			insert(target, t11, anchor);
+			insert(target, div9, anchor);
+			append(div9, div8);
+			append(div8, t12);
+			if (if_block0) if_block0.m(div8, null);
+			append(div9, t13);
+			if_block1.m(div9, null);
 		},
 		p(ctx, dirty) {
-			if (/*alertLog*/ ctx[15].length > 0) {
-				if (if_block) {
-					if_block.p(ctx, dirty);
+			if (/*alertLog*/ ctx[29].length > 0) {
+				if (if_block0) {
+					if_block0.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_20(ctx);
-					if_block.c();
-					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+					if_block0 = create_if_block_31(ctx);
+					if_block0.c();
+					if_block0.m(div8, null);
 				}
-			} else if (if_block) {
-				if_block.d(1);
-				if_block = null;
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_11(ctx)) && if_block1) {
+				if_block1.p(ctx, dirty);
+			} else {
+				if_block1.d(1);
+				if_block1 = current_block_type(ctx);
+
+				if (if_block1) {
+					if_block1.c();
+					if_block1.m(div9, null);
+				}
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(div3);
-				detach(t5);
-				detach(if_block_anchor);
+				detach(div0);
+				detach(t1);
+				detach(div7);
+				detach(t11);
+				detach(div9);
 			}
 
 			destroy_each(each_blocks_1, detaching);
 			destroy_each(each_blocks, detaching);
-			if (if_block) if_block.d(detaching);
+			if (if_block0) if_block0.d();
+			if_block1.d();
 		}
 	};
 }
 
-// (307:6) {#if !license.valid}
-function create_if_block_19(ctx) {
+// (388:4) {#if !isPro}
+function create_if_block_29(ctx) {
 	let div2;
+	let div0;
+	let t1;
+	let div1;
+	let t3;
+	let button;
+	let mounted;
+	let dispose;
 
 	return {
 		c() {
 			div2 = element("div");
-			div2.innerHTML = `<div class="fg-gate-ic svelte-apo8v3">🚨</div><div class="fg-gate-ti svelte-apo8v3">SOS — Pro Feature</div><a class="fg-gate-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade</a>`;
-			attr(div2, "class", "fg-gate svelte-apo8v3");
+			div0 = element("div");
+			div0.textContent = "🚨";
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "SOS — Pro Feature";
+			t3 = space();
+			button = element("button");
+			button.textContent = "Upgrade";
+			attr(div0, "class", "pf-ic svelte-fq6k1p");
+			attr(div1, "class", "pf-t svelte-fq6k1p");
+			attr(button, "class", "pf-btn svelte-fq6k1p");
+			attr(div2, "class", "fg-pro-feature svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div2, anchor);
+			append(div2, div0);
+			append(div2, t1);
+			append(div2, div1);
+			append(div2, t3);
+			append(div2, button);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_13*/ ctx[74]);
+				mounted = true;
+			}
 		},
 		p: noop,
 		d(detaching) {
 			if (detaching) {
 				detach(div2);
 			}
+
+			mounted = false;
+			dispose();
 		}
 	};
 }
 
-// (312:35) {#each HEAT_STRESS_SYMPTOMS as s}
-function create_each_block_5(ctx) {
-	let span;
+// (403:8) {#each HEAT_STRESS_SYMPTOMS as s}
+function create_each_block_8(ctx) {
+	let div;
 
 	return {
 		c() {
-			span = element("span");
-			span.textContent = `${/*s*/ ctx[120]}`;
-			attr(span, "class", "fg-sym svelte-apo8v3");
+			div = element("div");
+			div.textContent = `● ${/*s*/ ctx[138]}`;
+			attr(div, "class", "fg-emg-item svelte-fq6k1p");
 		},
 		m(target, anchor) {
-			insert(target, span, anchor);
+			insert(target, div, anchor);
 		},
 		p: noop,
 		d(detaching) {
 			if (detaching) {
-				detach(span);
+				detach(div);
 			}
 		}
 	};
 }
 
-// (314:10) {#each EMERGENCY_RESPONSE as step, i}
-function create_each_block_4(ctx) {
+// (410:8) {#each EMERGENCY_RESPONSE as step, i}
+function create_each_block_7(ctx) {
 	let div;
 	let span;
 	let t1;
@@ -6020,15 +6069,15 @@ function create_each_block_4(ctx) {
 		c() {
 			div = element("div");
 			span = element("span");
-			span.textContent = `${/*i*/ ctx[119] + 1}`;
+			span.textContent = `${/*i*/ ctx[146] + 1}`;
 			t1 = space();
-			t2 = text(/*step*/ ctx[117]);
+			t2 = text(/*step*/ ctx[144]);
 			t3 = space();
-			attr(span, "class", "fg-emg-n svelte-apo8v3");
+			attr(span, "class", "fg-emg-num svelte-fq6k1p");
 
-			attr(div, "class", "fg-emg-step " + (/*step*/ ctx[117].includes('SEVERE')
-			? 'fg-emg-crit'
-			: '') + " svelte-apo8v3");
+			attr(div, "class", "fg-emg-step " + (/*step*/ ctx[144].includes('SEVERE')
+			? 'fg-emg-critical'
+			: '') + " svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -6046,35 +6095,58 @@ function create_each_block_4(ctx) {
 	};
 }
 
-// (320:8) {#if alertLog.length > 0}
-function create_if_block_20(ctx) {
-	let div;
-	let t1;
+// (420:8) {#if alertLog.length > 0}
+function create_if_block_31(ctx) {
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			button = element("button");
+			button.textContent = "CSV";
+			attr(button, "class", "fg-mini-btn svelte-fq6k1p");
+			set_style(button, "margin-left", "auto");
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*downloadCSV*/ ctx[56]);
+				mounted = true;
+			}
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (424:6) {:else}
+function create_else_block_7(ctx) {
 	let each_1_anchor;
-	let each_value_3 = ensure_array_like([.../*alertLog*/ ctx[15]].reverse().slice(0, 15));
+	let each_value_6 = ensure_array_like([.../*alertLog*/ ctx[29]].reverse().slice(0, 15));
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_3.length; i += 1) {
-		each_blocks[i] = create_each_block_3(get_each_context_3(ctx, each_value_3, i));
+	for (let i = 0; i < each_value_6.length; i += 1) {
+		each_blocks[i] = create_each_block_6(get_each_context_6(ctx, each_value_6, i));
 	}
 
 	return {
 		c() {
-			div = element("div");
-			div.textContent = "📋 Alert Log";
-			t1 = space();
-
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
 			each_1_anchor = empty();
-			attr(div, "class", "fg-sec svelte-apo8v3");
 		},
 		m(target, anchor) {
-			insert(target, div, anchor);
-			insert(target, t1, anchor);
-
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				if (each_blocks[i]) {
 					each_blocks[i].m(target, anchor);
@@ -6084,17 +6156,17 @@ function create_if_block_20(ctx) {
 			insert(target, each_1_anchor, anchor);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*alertLog*/ 32768) {
-				each_value_3 = ensure_array_like([.../*alertLog*/ ctx[15]].reverse().slice(0, 15));
+			if (dirty[0] & /*alertLog*/ 536870912) {
+				each_value_6 = ensure_array_like([.../*alertLog*/ ctx[29]].reverse().slice(0, 15));
 				let i;
 
-				for (i = 0; i < each_value_3.length; i += 1) {
-					const child_ctx = get_each_context_3(ctx, each_value_3, i);
+				for (i = 0; i < each_value_6.length; i += 1) {
+					const child_ctx = get_each_context_6(ctx, each_value_6, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_3(child_ctx);
+						each_blocks[i] = create_each_block_6(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(each_1_anchor.parentNode, each_1_anchor);
 					}
@@ -6104,13 +6176,11 @@ function create_if_block_20(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_3.length;
+				each_blocks.length = each_value_6.length;
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(div);
-				detach(t1);
 				detach(each_1_anchor);
 			}
 
@@ -6119,19 +6189,41 @@ function create_if_block_20(ctx) {
 	};
 }
 
-// (322:10) {#each [...alertLog].reverse().slice(0,15) as a}
-function create_each_block_3(ctx) {
+// (422:6) {#if alertLog.length === 0}
+function create_if_block_30(ctx) {
+	let div;
+
+	return {
+		c() {
+			div = element("div");
+			div.textContent = "No alerts triggered yet.";
+			attr(div, "class", "fg-empty svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (425:8) {#each [...alertLog].reverse().slice(0, 15) as alert}
+function create_each_block_6(ctx) {
 	let div3;
 	let div0;
-	let t0_value = /*a*/ ctx[114].type + "";
+	let t0_value = /*alert*/ ctx[141].time + "";
 	let t0;
 	let t1;
 	let div1;
-	let t2_value = /*a*/ ctx[114].message + "";
+	let t2_value = /*alert*/ ctx[141].type + "";
 	let t2;
 	let t3;
 	let div2;
-	let t4_value = /*a*/ ctx[114].time + "";
+	let t4_value = /*alert*/ ctx[141].message + "";
 	let t4;
 	let t5;
 
@@ -6147,11 +6239,11 @@ function create_each_block_3(ctx) {
 			div2 = element("div");
 			t4 = text(t4_value);
 			t5 = space();
-			attr(div0, "class", "fg-alog-t svelte-apo8v3");
-			attr(div1, "class", "fg-alog-m svelte-apo8v3");
-			attr(div2, "class", "fg-alog-tm svelte-apo8v3");
-			attr(div3, "class", "fg-alog svelte-apo8v3");
-			set_style(div3, "border-left-color", /*a*/ ctx[114].color);
+			attr(div0, "class", "fg-alert-time svelte-fq6k1p");
+			attr(div1, "class", "fg-alert-type svelte-fq6k1p");
+			attr(div2, "class", "fg-alert-msg svelte-fq6k1p");
+			attr(div3, "class", "fg-alert-item svelte-fq6k1p");
+			set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[141].color);
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -6166,12 +6258,12 @@ function create_each_block_3(ctx) {
 			append(div3, t5);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*alertLog*/ 32768 && t0_value !== (t0_value = /*a*/ ctx[114].type + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*alertLog*/ 32768 && t2_value !== (t2_value = /*a*/ ctx[114].message + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*alertLog*/ 32768 && t4_value !== (t4_value = /*a*/ ctx[114].time + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t0_value !== (t0_value = /*alert*/ ctx[141].time + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t2_value !== (t2_value = /*alert*/ ctx[141].type + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t4_value !== (t4_value = /*alert*/ ctx[141].message + "")) set_data(t4, t4_value);
 
-			if (dirty[0] & /*alertLog*/ 32768) {
-				set_style(div3, "border-left-color", /*a*/ ctx[114].color);
+			if (dirty[0] & /*alertLog*/ 536870912) {
+				set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[141].color);
 			}
 		},
 		d(detaching) {
@@ -6182,1761 +6274,220 @@ function create_each_block_3(ctx) {
 	};
 }
 
-// (161:21) 
-function create_if_block_3(ctx) {
-	let t0;
-	let t1;
-	let div;
-	let t2;
-	let if_block3_anchor;
-	let if_block0 = /*heat*/ ctx[9].isBanPeriod && create_if_block_17();
-
-	function select_block_type_5(ctx, dirty) {
-		if (/*activeCard*/ ctx[7] === 'heat') return create_if_block_6;
-		if (/*activeCard*/ ctx[7] === 'wind') return create_if_block_10;
-		if (/*activeCard*/ ctx[7] === 'rain') return create_if_block_12;
-		if (/*activeCard*/ ctx[7] === 'solar') return create_if_block_14;
-		return create_else_block_6;
-	}
-
-	let current_block_type = select_block_type_5(ctx);
-	let if_block1 = current_block_type(ctx);
-
-	function select_block_type_11(ctx, dirty) {
-		if (/*isPro*/ ctx[38]()) return create_if_block_5;
-		return create_else_block;
-	}
-
-	let current_block_type_1 = select_block_type_11(ctx);
-	let if_block2 = current_block_type_1(ctx);
-	let if_block3 = /*worstCaseMode*/ ctx[14] && /*modelResults*/ ctx[12].length > 1 && create_if_block_4(ctx);
-
-	return {
-		c() {
-			if (if_block0) if_block0.c();
-			t0 = space();
-			if_block1.c();
-			t1 = space();
-			div = element("div");
-			if_block2.c();
-			t2 = space();
-			if (if_block3) if_block3.c();
-			if_block3_anchor = empty();
-			attr(div, "class", "fg-mr svelte-apo8v3");
-		},
-		m(target, anchor) {
-			if (if_block0) if_block0.m(target, anchor);
-			insert(target, t0, anchor);
-			if_block1.m(target, anchor);
-			insert(target, t1, anchor);
-			insert(target, div, anchor);
-			if_block2.m(div, null);
-			insert(target, t2, anchor);
-			if (if_block3) if_block3.m(target, anchor);
-			insert(target, if_block3_anchor, anchor);
-		},
-		p(ctx, dirty) {
-			if (/*heat*/ ctx[9].isBanPeriod) {
-				if (if_block0) ; else {
-					if_block0 = create_if_block_17();
-					if_block0.c();
-					if_block0.m(t0.parentNode, t0);
-				}
-			} else if (if_block0) {
-				if_block0.d(1);
-				if_block0 = null;
-			}
-
-			if (current_block_type === (current_block_type = select_block_type_5(ctx)) && if_block1) {
-				if_block1.p(ctx, dirty);
-			} else {
-				if_block1.d(1);
-				if_block1 = current_block_type(ctx);
-
-				if (if_block1) {
-					if_block1.c();
-					if_block1.m(t1.parentNode, t1);
-				}
-			}
-
-			if_block2.p(ctx, dirty);
-
-			if (/*worstCaseMode*/ ctx[14] && /*modelResults*/ ctx[12].length > 1) {
-				if (if_block3) {
-					if_block3.p(ctx, dirty);
-				} else {
-					if_block3 = create_if_block_4(ctx);
-					if_block3.c();
-					if_block3.m(if_block3_anchor.parentNode, if_block3_anchor);
-				}
-			} else if (if_block3) {
-				if_block3.d(1);
-				if_block3 = null;
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(t0);
-				detach(t1);
-				detach(div);
-				detach(t2);
-				detach(if_block3_anchor);
-			}
-
-			if (if_block0) if_block0.d(detaching);
-			if_block1.d(detaching);
-			if_block2.d();
-			if (if_block3) if_block3.d(detaching);
-		}
-	};
-}
-
-// (159:22) 
-function create_if_block_2(ctx) {
-	let div;
-	let t_1;
-
-	return {
-		c() {
-			div = element("div");
-			t_1 = text(/*error*/ ctx[5]);
-			attr(div, "class", "fg-err svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, t_1);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*error*/ 32) set_data(t_1, /*error*/ ctx[5]);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (157:6) {#if loading}
-function create_if_block_1(ctx) {
-	let div1;
-	let div0;
-	let t0;
-
-	let t1_value = (/*worstCaseMode*/ ctx[14]
-	? 'all models'
-	: /*selectedModel*/ ctx[13]) + "";
-
-	let t1;
-	let t2;
-
-	return {
-		c() {
-			div1 = element("div");
-			div0 = element("div");
-			t0 = text(" Loading ");
-			t1 = text(t1_value);
-			t2 = text("…");
-			attr(div0, "class", "fg-spin svelte-apo8v3");
-			attr(div1, "class", "fg-load svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-			append(div1, div0);
-			append(div1, t0);
-			append(div1, t1);
-			append(div1, t2);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*worstCaseMode, selectedModel*/ 24576 && t1_value !== (t1_value = (/*worstCaseMode*/ ctx[14]
-			? 'all models'
-			: /*selectedModel*/ ctx[13]) + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-		}
-	};
-}
-
-// (162:8) {#if heat.isBanPeriod}
-function create_if_block_17(ctx) {
-	let div;
-
-	return {
-		c() {
-			div = element("div");
-			div.textContent = "🚫 LEGAL WORK BAN · 12:30–15:30";
-			attr(div, "class", "fg-ban svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (270:8) {:else}
-function create_else_block_6(ctx) {
-	let div;
-
-	return {
-		c() {
-			div = element("div");
-			div.textContent = "↑ Select a card above";
-			attr(div, "class", "fg-det-hint svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (245:41) 
-function create_if_block_14(ctx) {
-	let div1;
-	let div0;
-
-	let t0_value = (/*isNight*/ ctx[20]
-	? '🌙 Night — No Solar'
-	: '☀ Solar — ' + /*solarLabel*/ ctx[28]) + "";
-
-	let t0;
-	let t1;
-	let show_if;
-
-	function select_block_type_10(ctx, dirty) {
-		if (/*isNight*/ ctx[20]) return create_if_block_15;
-		if (show_if == null) show_if = !!/*isPro*/ ctx[38]();
-		if (show_if) return create_if_block_16;
-		return create_else_block_5;
-	}
-
-	let current_block_type = select_block_type_10(ctx);
-	let if_block = current_block_type(ctx);
-
-	return {
-		c() {
-			div1 = element("div");
-			div0 = element("div");
-			t0 = text(t0_value);
-			t1 = space();
-			if_block.c();
-			attr(div0, "class", "fg-det-ti svelte-apo8v3");
-			set_style(div0, "color", /*solarColor*/ ctx[27]);
-			attr(div1, "class", "fg-det svelte-apo8v3");
-			set_style(div1, "border-color", /*solarColor*/ ctx[27]);
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-			append(div1, div0);
-			append(div0, t0);
-			append(div1, t1);
-			if_block.m(div1, null);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*isNight, solarLabel*/ 269484032 && t0_value !== (t0_value = (/*isNight*/ ctx[20]
-			? '🌙 Night — No Solar'
-			: '☀ Solar — ' + /*solarLabel*/ ctx[28]) + "")) set_data(t0, t0_value);
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(div0, "color", /*solarColor*/ ctx[27]);
-			}
-
-			if (current_block_type === (current_block_type = select_block_type_10(ctx)) && if_block) {
-				if_block.p(ctx, dirty);
-			} else {
-				if_block.d(1);
-				if_block = current_block_type(ctx);
-
-				if (if_block) {
-					if_block.c();
-					if_block.m(div1, null);
-				}
-			}
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(div1, "border-color", /*solarColor*/ ctx[27]);
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-
-			if_block.d();
-		}
-	};
-}
-
-// (228:40) 
-function create_if_block_12(ctx) {
-	let div1;
-	let div0;
-	let t0;
-	let t1_value = /*rainResult*/ ctx[11]?.riskLabel + "";
-	let t1;
-	let t2;
-
-	function select_block_type_9(ctx, dirty) {
-		if (/*isPro*/ ctx[38]()) return create_if_block_13;
-		return create_else_block_4;
-	}
-
-	let current_block_type = select_block_type_9(ctx);
-	let if_block = current_block_type(ctx);
-
-	return {
-		c() {
-			div1 = element("div");
-			div0 = element("div");
-			t0 = text("🌧 Rain — ");
-			t1 = text(t1_value);
-			t2 = space();
-			if_block.c();
-			attr(div0, "class", "fg-det-ti svelte-apo8v3");
-			set_style(div0, "color", /*rainResult*/ ctx[11]?.riskColor);
-			attr(div1, "class", "fg-det svelte-apo8v3");
-			set_style(div1, "border-color", /*rainResult*/ ctx[11]?.riskColor);
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-			append(div1, div0);
-			append(div0, t0);
-			append(div0, t1);
-			append(div1, t2);
-			if_block.m(div1, null);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rainResult*/ 2048 && t1_value !== (t1_value = /*rainResult*/ ctx[11]?.riskLabel + "")) set_data(t1, t1_value);
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(div0, "color", /*rainResult*/ ctx[11]?.riskColor);
-			}
-
-			if_block.p(ctx, dirty);
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(div1, "border-color", /*rainResult*/ ctx[11]?.riskColor);
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-
-			if_block.d();
-		}
-	};
-}
-
-// (210:40) 
-function create_if_block_10(ctx) {
-	let div1;
-	let div0;
-	let t0;
-	let t1_value = /*windResult*/ ctx[10]?.riskLabel + "";
-	let t1;
-	let t2;
-
-	function select_block_type_8(ctx, dirty) {
-		if (/*isPro*/ ctx[38]()) return create_if_block_11;
-		return create_else_block_3;
-	}
-
-	let current_block_type = select_block_type_8(ctx);
-	let if_block = current_block_type(ctx);
-
-	return {
-		c() {
-			div1 = element("div");
-			div0 = element("div");
-			t0 = text("💨 Wind — ");
-			t1 = text(t1_value);
-			t2 = space();
-			if_block.c();
-			attr(div0, "class", "fg-det-ti svelte-apo8v3");
-			set_style(div0, "color", /*windResult*/ ctx[10]?.riskColor);
-			attr(div1, "class", "fg-det svelte-apo8v3");
-			set_style(div1, "border-color", /*windResult*/ ctx[10]?.riskColor);
-		},
-		m(target, anchor) {
-			insert(target, div1, anchor);
-			append(div1, div0);
-			append(div0, t0);
-			append(div0, t1);
-			append(div1, t2);
-			if_block.m(div1, null);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*windResult*/ 1024 && t1_value !== (t1_value = /*windResult*/ ctx[10]?.riskLabel + "")) set_data(t1, t1_value);
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(div0, "color", /*windResult*/ ctx[10]?.riskColor);
-			}
-
-			if_block.p(ctx, dirty);
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(div1, "border-color", /*windResult*/ ctx[10]?.riskColor);
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div1);
-			}
-
-			if_block.d();
-		}
-	};
-}
-
-// (165:8) {#if activeCard === 'heat'}
-function create_if_block_6(ctx) {
-	let div5;
-	let div0;
-	let t0;
-	let t1_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "";
-	let t1;
-	let t2;
-	let t3;
-	let div4;
-	let div1;
+// (38:6) {#each savedSites as s}
+function create_each_block_5(ctx) {
+	let button;
 	let span0;
-	let span1;
-	let t5_value = /*heat*/ ctx[9].workRestSchedule.light + "";
-	let t5;
-	let t6;
-	let div2;
-	let span2;
-	let span3;
-	let t8_value = /*heat*/ ctx[9].workRestSchedule.heavy + "";
-	let t8;
-	let t9;
-	let div3;
-	let span4;
-	let span5;
-	let t11_value = /*heat*/ ctx[9].hydration + "";
-	let t11;
-	let t12;
-	let show_if_1 = /*isPro*/ ctx[38]();
-	let t13;
-
-	function select_block_type_6(ctx, dirty) {
-		if (/*isPro*/ ctx[38]()) return create_if_block_9;
-		return create_else_block_2;
-	}
-
-	let current_block_type = select_block_type_6(ctx);
-	let if_block0 = current_block_type(ctx);
-	let if_block1 = show_if_1 && create_if_block_8(ctx);
-
-	function select_block_type_7(ctx, dirty) {
-		if (/*isPro*/ ctx[38]()) return create_if_block_7;
-		return create_else_block_1;
-	}
-
-	let current_block_type_1 = select_block_type_7(ctx);
-	let if_block2 = current_block_type_1(ctx);
-
-	return {
-		c() {
-			div5 = element("div");
-			div0 = element("div");
-			t0 = text("🌡 Heat Stress — ");
-			t1 = text(t1_value);
-			t2 = space();
-			if_block0.c();
-			t3 = space();
-			div4 = element("div");
-			div1 = element("div");
-			span0 = element("span");
-			span0.textContent = "🕐 Light work";
-			span1 = element("span");
-			t5 = text(t5_value);
-			t6 = space();
-			div2 = element("div");
-			span2 = element("span");
-			span2.textContent = "💪 Heavy work";
-			span3 = element("span");
-			t8 = text(t8_value);
-			t9 = space();
-			div3 = element("div");
-			span4 = element("span");
-			span4.textContent = "💧 Hydration";
-			span5 = element("span");
-			t11 = text(t11_value);
-			t12 = space();
-			if (if_block1) if_block1.c();
-			t13 = space();
-			if_block2.c();
-			attr(div0, "class", "fg-det-ti svelte-apo8v3");
-			set_style(div0, "color", /*heat*/ ctx[9].zoneInfo.color);
-			attr(span0, "class", "fg-drl svelte-apo8v3");
-			attr(span1, "class", "fg-drv svelte-apo8v3");
-			attr(div1, "class", "fg-dr svelte-apo8v3");
-			attr(span2, "class", "fg-drl svelte-apo8v3");
-			attr(span3, "class", "fg-drv svelte-apo8v3");
-			attr(div2, "class", "fg-dr svelte-apo8v3");
-			attr(span4, "class", "fg-drl svelte-apo8v3");
-			attr(span5, "class", "fg-drv svelte-apo8v3");
-			attr(div3, "class", "fg-dr svelte-apo8v3");
-			attr(div4, "class", "fg-ds svelte-apo8v3");
-			attr(div5, "class", "fg-det svelte-apo8v3");
-			set_style(div5, "border-color", /*heat*/ ctx[9].zoneInfo.color);
-		},
-		m(target, anchor) {
-			insert(target, div5, anchor);
-			append(div5, div0);
-			append(div0, t0);
-			append(div0, t1);
-			append(div5, t2);
-			if_block0.m(div5, null);
-			append(div5, t3);
-			append(div5, div4);
-			append(div4, div1);
-			append(div1, span0);
-			append(div1, span1);
-			append(span1, t5);
-			append(div4, t6);
-			append(div4, div2);
-			append(div2, span2);
-			append(div2, span3);
-			append(span3, t8);
-			append(div4, t9);
-			append(div4, div3);
-			append(div3, span4);
-			append(div3, span5);
-			append(span5, t11);
-			append(div4, t12);
-			if (if_block1) if_block1.m(div4, null);
-			append(div5, t13);
-			if_block2.m(div5, null);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512 && t1_value !== (t1_value = /*heat*/ ctx[9].zoneInfo.riskLabel + "")) set_data(t1, t1_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(div0, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if_block0.p(ctx, dirty);
-			if (dirty[0] & /*heat*/ 512 && t5_value !== (t5_value = /*heat*/ ctx[9].workRestSchedule.light + "")) set_data(t5, t5_value);
-			if (dirty[0] & /*heat*/ 512 && t8_value !== (t8_value = /*heat*/ ctx[9].workRestSchedule.heavy + "")) set_data(t8, t8_value);
-			if (dirty[0] & /*heat*/ 512 && t11_value !== (t11_value = /*heat*/ ctx[9].hydration + "")) set_data(t11, t11_value);
-			if (show_if_1) if_block1.p(ctx, dirty);
-			if_block2.p(ctx, dirty);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(div5, "border-color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div5);
-			}
-
-			if_block0.d();
-			if (if_block1) if_block1.d();
-			if_block2.d();
-		}
-	};
-}
-
-// (262:12) {:else}
-function create_else_block_5(ctx) {
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.solarWm2 + "";
-	let t0;
-	let t1;
-	let t2;
-	let span1;
-	let t3;
-	let t4;
-	let div1;
-
-	return {
-		c() {
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = text(" W/m²");
-			t2 = space();
-			span1 = element("span");
-			t3 = text(/*solarLabel*/ ctx[28]);
-			t4 = space();
-			div1 = element("div");
-			div1.innerHTML = `🔒 UV index, sun angle, sunrise/sunset, WBGT solar contribution<a class="fg-pro-nudge-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade to Pro →</a>`;
-			attr(span0, "class", "fg-det-free-val svelte-apo8v3");
-			set_style(span0, "color", /*solarColor*/ ctx[27]);
-			attr(span1, "class", "fg-det-free-lbl svelte-apo8v3");
-			attr(div0, "class", "fg-det-free-row svelte-apo8v3");
-			attr(div1, "class", "fg-pro-nudge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div0, anchor);
-			append(div0, span0);
-			append(span0, t0);
-			append(span0, t1);
-			append(div0, t2);
-			append(div0, span1);
-			append(span1, t3);
-			insert(target, t4, anchor);
-			insert(target, div1, anchor);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.solarWm2 + "")) set_data(t0, t0_value);
-
-			if (dirty[0] & /*solarColor*/ 134217728) {
-				set_style(span0, "color", /*solarColor*/ ctx[27]);
-			}
-
-			if (dirty[0] & /*solarLabel*/ 268435456) set_data(t3, /*solarLabel*/ ctx[28]);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t4);
-				detach(div1);
-			}
-		}
-	};
-}
-
-// (250:30) 
-function create_if_block_16(ctx) {
-	let div3;
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.solarWm2 + "";
-	let t0;
-	let t1;
-	let span1;
-	let t3;
-	let div1;
-	let span2;
-	let t4;
-	let t5;
-	let span3;
-	let t7;
-	let div2;
-	let span4;
-	let t8;
-	let t9;
-	let span5;
-	let t11;
-	let div8;
-	let div4;
-	let span6;
-	let span7;
-	let t13;
-	let t14;
-	let div5;
-	let span8;
-	let span9;
-	let t16;
-	let t17;
-	let div6;
-	let span10;
-	let span11;
-	let t19;
-	let t20;
-	let div7;
-	let span12;
-	let span13;
-	let t22;
-	let t23;
-	let t24;
-
-	return {
-		c() {
-			div3 = element("div");
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = text(" W/m²");
-			span1 = element("span");
-			span1.textContent = "Irradiance";
-			t3 = space();
-			div1 = element("div");
-			span2 = element("span");
-			t4 = text("UV ~");
-			t5 = text(/*uvIndex*/ ctx[22]);
-			span3 = element("span");
-			span3.textContent = "Index";
-			t7 = space();
-			div2 = element("div");
-			span4 = element("span");
-			t8 = text(/*solarElevDeg*/ ctx[21]);
-			t9 = text("°");
-			span5 = element("span");
-			span5.textContent = "Sun angle";
-			t11 = space();
-			div8 = element("div");
-			div4 = element("div");
-			span6 = element("span");
-			span6.textContent = "Sunrise";
-			span7 = element("span");
-			t13 = text(/*sunriseTime*/ ctx[23]);
-			t14 = space();
-			div5 = element("div");
-			span8 = element("span");
-			span8.textContent = "Solar noon";
-			span9 = element("span");
-			t16 = text(/*solarNoonTime*/ ctx[25]);
-			t17 = space();
-			div6 = element("div");
-			span10 = element("span");
-			span10.textContent = "Sunset";
-			span11 = element("span");
-			t19 = text(/*sunsetTime*/ ctx[24]);
-			t20 = space();
-			div7 = element("div");
-			span12 = element("span");
-			span12.textContent = "WBGT solar +";
-			span13 = element("span");
-			t22 = text("+");
-			t23 = text(/*wbgtSolarContrib*/ ctx[26]);
-			t24 = text("°C");
-			attr(span0, "class", "fg-dv svelte-apo8v3");
-			attr(span1, "class", "fg-dl svelte-apo8v3");
-			attr(div0, "class", "fg-dc svelte-apo8v3");
-			attr(span2, "class", "fg-dv svelte-apo8v3");
-			attr(span3, "class", "fg-dl svelte-apo8v3");
-			attr(div1, "class", "fg-dc svelte-apo8v3");
-			attr(span4, "class", "fg-dv svelte-apo8v3");
-			attr(span5, "class", "fg-dl svelte-apo8v3");
-			attr(div2, "class", "fg-dc svelte-apo8v3");
-			attr(div3, "class", "fg-det-g svelte-apo8v3");
-			attr(span6, "class", "fg-drl svelte-apo8v3");
-			attr(span7, "class", "fg-drv svelte-apo8v3");
-			attr(div4, "class", "fg-dr svelte-apo8v3");
-			attr(span8, "class", "fg-drl svelte-apo8v3");
-			attr(span9, "class", "fg-drv svelte-apo8v3");
-			attr(div5, "class", "fg-dr svelte-apo8v3");
-			attr(span10, "class", "fg-drl svelte-apo8v3");
-			attr(span11, "class", "fg-drv svelte-apo8v3");
-			attr(div6, "class", "fg-dr svelte-apo8v3");
-			attr(span12, "class", "fg-drl svelte-apo8v3");
-			attr(span13, "class", "fg-drv svelte-apo8v3");
-			attr(div7, "class", "fg-dr svelte-apo8v3");
-			attr(div8, "class", "fg-ds svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div3, anchor);
-			append(div3, div0);
-			append(div0, span0);
-			append(span0, t0);
-			append(span0, t1);
-			append(div0, span1);
-			append(div3, t3);
-			append(div3, div1);
-			append(div1, span2);
-			append(span2, t4);
-			append(span2, t5);
-			append(div1, span3);
-			append(div3, t7);
-			append(div3, div2);
-			append(div2, span4);
-			append(span4, t8);
-			append(span4, t9);
-			append(div2, span5);
-			insert(target, t11, anchor);
-			insert(target, div8, anchor);
-			append(div8, div4);
-			append(div4, span6);
-			append(div4, span7);
-			append(span7, t13);
-			append(div8, t14);
-			append(div8, div5);
-			append(div5, span8);
-			append(div5, span9);
-			append(span9, t16);
-			append(div8, t17);
-			append(div8, div6);
-			append(div6, span10);
-			append(div6, span11);
-			append(span11, t19);
-			append(div8, t20);
-			append(div8, div7);
-			append(div7, span12);
-			append(div7, span13);
-			append(span13, t22);
-			append(span13, t23);
-			append(span13, t24);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.solarWm2 + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*uvIndex*/ 4194304) set_data(t5, /*uvIndex*/ ctx[22]);
-			if (dirty[0] & /*solarElevDeg*/ 2097152) set_data(t8, /*solarElevDeg*/ ctx[21]);
-			if (dirty[0] & /*sunriseTime*/ 8388608) set_data(t13, /*sunriseTime*/ ctx[23]);
-			if (dirty[0] & /*solarNoonTime*/ 33554432) set_data(t16, /*solarNoonTime*/ ctx[25]);
-			if (dirty[0] & /*sunsetTime*/ 16777216) set_data(t19, /*sunsetTime*/ ctx[24]);
-			if (dirty[0] & /*wbgtSolarContrib*/ 67108864) set_data(t23, /*wbgtSolarContrib*/ ctx[26]);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div3);
-				detach(t11);
-				detach(div8);
-			}
-		}
-	};
-}
-
-// (248:12) {#if isNight}
-function create_if_block_15(ctx) {
-	let div;
-	let t0;
-	let br;
-	let small;
-	let t1;
-	let t2;
-	let t3;
-	let t4;
-
-	return {
-		c() {
-			div = element("div");
-			t0 = text("🌙 Zero solar at night");
-			br = element("br");
-			small = element("small");
-			t1 = text("Sunrise: ");
-			t2 = text(/*sunriseTime*/ ctx[23]);
-			t3 = text(" · Sunset: ");
-			t4 = text(/*sunsetTime*/ ctx[24]);
-			set_style(small, "color", "#4a6090");
-			attr(div, "class", "fg-night svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, t0);
-			append(div, br);
-			append(div, small);
-			append(small, t1);
-			append(small, t2);
-			append(small, t3);
-			append(small, t4);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*sunriseTime*/ 8388608) set_data(t2, /*sunriseTime*/ ctx[23]);
-			if (dirty[0] & /*sunsetTime*/ 16777216) set_data(t4, /*sunsetTime*/ ctx[24]);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (237:12) {:else}
-function create_else_block_4(ctx) {
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "";
-	let t0;
-	let t1;
-	let t2;
-	let span1;
-	let t3_value = /*rainResult*/ ctx[11]?.riskLabel + "";
-	let t3;
-	let t4;
-	let div1;
-
-	return {
-		c() {
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = text(" mm/h");
-			t2 = space();
-			span1 = element("span");
-			t3 = text(t3_value);
-			t4 = space();
-			div1 = element("div");
-			div1.innerHTML = `🔒 Intensity scale, custom thresholds<a class="fg-pro-nudge-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade to Pro →</a>`;
-			attr(span0, "class", "fg-det-free-val svelte-apo8v3");
-			set_style(span0, "color", /*rainResult*/ ctx[11]?.riskColor);
-			attr(span1, "class", "fg-det-free-lbl svelte-apo8v3");
-			attr(div0, "class", "fg-det-free-row svelte-apo8v3");
-			attr(div1, "class", "fg-pro-nudge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div0, anchor);
-			append(div0, span0);
-			append(span0, t0);
-			append(span0, t1);
-			append(div0, t2);
-			append(div0, span1);
-			append(span1, t3);
-			insert(target, t4, anchor);
-			insert(target, div1, anchor);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "")) set_data(t0, t0_value);
-
-			if (dirty[0] & /*rainResult*/ 2048) {
-				set_style(span0, "color", /*rainResult*/ ctx[11]?.riskColor);
-			}
-
-			if (dirty[0] & /*rainResult*/ 2048 && t3_value !== (t3_value = /*rainResult*/ ctx[11]?.riskLabel + "")) set_data(t3, t3_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t4);
-				detach(div1);
-			}
-		}
-	};
-}
-
-// (231:12) {#if isPro()}
-function create_if_block_13(ctx) {
-	let div2;
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "";
+	let t0_value = /*s*/ ctx[138].name + "";
 	let t0;
 	let span1;
-	let t2;
-	let div1;
-	let span2;
-	let t3_value = /*rainResult*/ ctx[11]?.intensityLabel + "";
-	let t3;
-	let span3;
-	let t5;
-	let div3;
-	let t6;
-	let t7_value = /*settings*/ ctx[33].rainWarnMmh + "";
-	let t7;
-	let t8;
-	let t9_value = /*settings*/ ctx[33].rainDangerMmh + "";
-	let t9;
-	let t10;
-
-	return {
-		c() {
-			div2 = element("div");
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			span1 = element("span");
-			span1.textContent = "mm/h";
-			t2 = space();
-			div1 = element("div");
-			span2 = element("span");
-			t3 = text(t3_value);
-			span3 = element("span");
-			span3.textContent = "Intensity";
-			t5 = space();
-			div3 = element("div");
-			t6 = text("Warn ≥ ");
-			t7 = text(t7_value);
-			t8 = text(" mm/h · Danger ≥ ");
-			t9 = text(t9_value);
-			t10 = text(" mm/h");
-			attr(span0, "class", "fg-dv svelte-apo8v3");
-			attr(span1, "class", "fg-dl svelte-apo8v3");
-			attr(div0, "class", "fg-dc svelte-apo8v3");
-			attr(span2, "class", "fg-dv svelte-apo8v3");
-			attr(span3, "class", "fg-dl svelte-apo8v3");
-			attr(div1, "class", "fg-dc svelte-apo8v3");
-			attr(div2, "class", "fg-det-g svelte-apo8v3");
-			attr(div3, "class", "fg-dthr svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div2, anchor);
-			append(div2, div0);
-			append(div0, span0);
-			append(span0, t0);
-			append(div0, span1);
-			append(div2, t2);
-			append(div2, div1);
-			append(div1, span2);
-			append(span2, t3);
-			append(div1, span3);
-			insert(target, t5, anchor);
-			insert(target, div3, anchor);
-			append(div3, t6);
-			append(div3, t7);
-			append(div3, t8);
-			append(div3, t9);
-			append(div3, t10);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.rainMmH.toFixed(1) + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*rainResult*/ 2048 && t3_value !== (t3_value = /*rainResult*/ ctx[11]?.intensityLabel + "")) set_data(t3, t3_value);
-			if (dirty[1] & /*settings*/ 4 && t7_value !== (t7_value = /*settings*/ ctx[33].rainWarnMmh + "")) set_data(t7, t7_value);
-			if (dirty[1] & /*settings*/ 4 && t9_value !== (t9_value = /*settings*/ ctx[33].rainDangerMmh + "")) set_data(t9, t9_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div2);
-				detach(t5);
-				detach(div3);
-			}
-		}
-	};
-}
-
-// (220:12) {:else}
-function create_else_block_3(ctx) {
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "";
-	let t0;
-	let t1;
-	let t2;
-	let span1;
-	let t3_value = /*windResult*/ ctx[10]?.riskLabel + "";
-	let t3;
-	let t4;
-	let div1;
-
-	return {
-		c() {
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = text(" m/s");
-			t2 = space();
-			span1 = element("span");
-			t3 = text(t3_value);
-			t4 = space();
-			div1 = element("div");
-			div1.innerHTML = `🔒 Beaufort scale, km/h, custom thresholds<a class="fg-pro-nudge-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade to Pro →</a>`;
-			attr(span0, "class", "fg-det-free-val svelte-apo8v3");
-			set_style(span0, "color", /*windResult*/ ctx[10]?.riskColor);
-			attr(span1, "class", "fg-det-free-lbl svelte-apo8v3");
-			attr(div0, "class", "fg-det-free-row svelte-apo8v3");
-			attr(div1, "class", "fg-pro-nudge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div0, anchor);
-			append(div0, span0);
-			append(span0, t0);
-			append(span0, t1);
-			append(div0, t2);
-			append(div0, span1);
-			append(span1, t3);
-			insert(target, t4, anchor);
-			insert(target, div1, anchor);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "")) set_data(t0, t0_value);
-
-			if (dirty[0] & /*windResult*/ 1024) {
-				set_style(span0, "color", /*windResult*/ ctx[10]?.riskColor);
-			}
-
-			if (dirty[0] & /*windResult*/ 1024 && t3_value !== (t3_value = /*windResult*/ ctx[10]?.riskLabel + "")) set_data(t3, t3_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t4);
-				detach(div1);
-			}
-		}
-	};
-}
-
-// (213:12) {#if isPro()}
-function create_if_block_11(ctx) {
-	let div3;
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "";
-	let t0;
-	let span1;
-	let t2;
-	let div1;
-	let span2;
-	let t3_value = ((/*rawData*/ ctx[8]?.windMs ?? 0) * 3.6).toFixed(1) + "";
-	let t3;
-	let span3;
-	let t5;
-	let div2;
-	let span4;
-	let t6;
-	let t7_value = /*windResult*/ ctx[10]?.beaufort + "";
-	let t7;
-	let span5;
-	let t8_value = /*windResult*/ ctx[10]?.beaufortDesc + "";
-	let t8;
-	let t9;
-	let div4;
-	let t10;
-	let t11_value = /*settings*/ ctx[33].windWarnMs + "";
-	let t11;
-	let t12;
-	let t13_value = /*settings*/ ctx[33].windDangerMs + "";
-	let t13;
-	let t14;
-
-	return {
-		c() {
-			div3 = element("div");
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			span1 = element("span");
-			span1.textContent = "m/s";
-			t2 = space();
-			div1 = element("div");
-			span2 = element("span");
-			t3 = text(t3_value);
-			span3 = element("span");
-			span3.textContent = "km/h";
-			t5 = space();
-			div2 = element("div");
-			span4 = element("span");
-			t6 = text("Bft ");
-			t7 = text(t7_value);
-			span5 = element("span");
-			t8 = text(t8_value);
-			t9 = space();
-			div4 = element("div");
-			t10 = text("Warn ≥ ");
-			t11 = text(t11_value);
-			t12 = text(" m/s · Danger ≥ ");
-			t13 = text(t13_value);
-			t14 = text(" m/s");
-			attr(span0, "class", "fg-dv svelte-apo8v3");
-			attr(span1, "class", "fg-dl svelte-apo8v3");
-			attr(div0, "class", "fg-dc svelte-apo8v3");
-			attr(span2, "class", "fg-dv svelte-apo8v3");
-			attr(span3, "class", "fg-dl svelte-apo8v3");
-			attr(div1, "class", "fg-dc svelte-apo8v3");
-			attr(span4, "class", "fg-dv svelte-apo8v3");
-			attr(span5, "class", "fg-dl svelte-apo8v3");
-			attr(div2, "class", "fg-dc svelte-apo8v3");
-			attr(div3, "class", "fg-det-g svelte-apo8v3");
-			attr(div4, "class", "fg-dthr svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div3, anchor);
-			append(div3, div0);
-			append(div0, span0);
-			append(span0, t0);
-			append(div0, span1);
-			append(div3, t2);
-			append(div3, div1);
-			append(div1, span2);
-			append(span2, t3);
-			append(div1, span3);
-			append(div3, t5);
-			append(div3, div2);
-			append(div2, span4);
-			append(span4, t6);
-			append(span4, t7);
-			append(div2, span5);
-			append(span5, t8);
-			insert(target, t9, anchor);
-			insert(target, div4, anchor);
-			append(div4, t10);
-			append(div4, t11);
-			append(div4, t12);
-			append(div4, t13);
-			append(div4, t14);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.windMs.toFixed(1) + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*rawData*/ 256 && t3_value !== (t3_value = ((/*rawData*/ ctx[8]?.windMs ?? 0) * 3.6).toFixed(1) + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*windResult*/ 1024 && t7_value !== (t7_value = /*windResult*/ ctx[10]?.beaufort + "")) set_data(t7, t7_value);
-			if (dirty[0] & /*windResult*/ 1024 && t8_value !== (t8_value = /*windResult*/ ctx[10]?.beaufortDesc + "")) set_data(t8, t8_value);
-			if (dirty[1] & /*settings*/ 4 && t11_value !== (t11_value = /*settings*/ ctx[33].windWarnMs + "")) set_data(t11, t11_value);
-			if (dirty[1] & /*settings*/ 4 && t13_value !== (t13_value = /*settings*/ ctx[33].windDangerMs + "")) set_data(t13, t13_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div3);
-				detach(t9);
-				detach(div4);
-			}
-		}
-	};
-}
-
-// (179:12) {:else}
-function create_else_block_2(ctx) {
-	let div;
-	let span0;
-
-	let t0_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-	? 'No Work'
-	: /*heat*/ ctx[9].apparentTempFinal + '°C') + "";
-
-	let t0;
-	let t1;
-	let span1;
-
-	return {
-		c() {
-			div = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = space();
-			span1 = element("span");
-			span1.textContent = "Apparent Temperature";
-			attr(span0, "class", "fg-det-free-val svelte-apo8v3");
-			set_style(span0, "color", /*heat*/ ctx[9].zoneInfo.color);
-			attr(span1, "class", "fg-det-free-lbl svelte-apo8v3");
-			attr(div, "class", "fg-det-free-row svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, span0);
-			append(span0, t0);
-			append(div, t1);
-			append(div, span1);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512 && t0_value !== (t0_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-			? 'No Work'
-			: /*heat*/ ctx[9].apparentTempFinal + '°C') + "")) set_data(t0, t0_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(span0, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (169:12) {#if isPro()}
-function create_if_block_9(ctx) {
-	let div6;
-	let div0;
-	let span0;
-	let t0_value = /*rawData*/ ctx[8]?.tempC + "";
-	let t0;
-	let t1;
-	let span1;
-	let t3;
-	let div1;
-	let span2;
-	let t4_value = /*rawData*/ ctx[8]?.humidity + "";
-	let t4;
-	let t5;
-	let span3;
-	let t7;
-	let div2;
-	let span4;
-	let t8_value = /*heat*/ ctx[9].apparentTemp1 + "";
-	let t8;
-	let t9;
-	let span5;
-	let t11;
-	let div3;
-	let span6;
-
-	let t12_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-	? 'NW'
-	: /*heat*/ ctx[9].apparentTempFinal + '°C') + "";
-
-	let t12;
-	let span7;
-	let t14;
-	let div4;
-	let span8;
-	let t15_value = /*heat*/ ctx[9].wbgtBase + "";
-	let t15;
-	let t16;
-	let span9;
-	let t18;
-	let div5;
-	let span10;
-	let t19_value = /*heat*/ ctx[9].wbgtAdjusted + "";
-	let t19;
-	let t20;
-	let span11;
-
-	return {
-		c() {
-			div6 = element("div");
-			div0 = element("div");
-			span0 = element("span");
-			t0 = text(t0_value);
-			t1 = text("°C");
-			span1 = element("span");
-			span1.textContent = "Temp";
-			t3 = space();
-			div1 = element("div");
-			span2 = element("span");
-			t4 = text(t4_value);
-			t5 = text("%");
-			span3 = element("span");
-			span3.textContent = "Humidity";
-			t7 = space();
-			div2 = element("div");
-			span4 = element("span");
-			t8 = text(t8_value);
-			t9 = text("°C");
-			span5 = element("span");
-			span5.textContent = "App.T A";
-			t11 = space();
-			div3 = element("div");
-			span6 = element("span");
-			t12 = text(t12_value);
-			span7 = element("span");
-			span7.textContent = "App.T B";
-			t14 = space();
-			div4 = element("div");
-			span8 = element("span");
-			t15 = text(t15_value);
-			t16 = text("°C");
-			span9 = element("span");
-			span9.textContent = "WBGT";
-			t18 = space();
-			div5 = element("div");
-			span10 = element("span");
-			t19 = text(t19_value);
-			t20 = text("°C");
-			span11 = element("span");
-			span11.textContent = "WBGT+PPE";
-			attr(span0, "class", "fg-dv svelte-apo8v3");
-			attr(span1, "class", "fg-dl svelte-apo8v3");
-			attr(div0, "class", "fg-dc svelte-apo8v3");
-			attr(span2, "class", "fg-dv svelte-apo8v3");
-			attr(span3, "class", "fg-dl svelte-apo8v3");
-			attr(div1, "class", "fg-dc svelte-apo8v3");
-			attr(span4, "class", "fg-dv svelte-apo8v3");
-			attr(span5, "class", "fg-dl svelte-apo8v3");
-			attr(div2, "class", "fg-dc svelte-apo8v3");
-			attr(span6, "class", "fg-dv svelte-apo8v3");
-			set_style(span6, "color", /*heat*/ ctx[9].zoneInfo.color);
-			attr(span7, "class", "fg-dl svelte-apo8v3");
-			attr(div3, "class", "fg-dc svelte-apo8v3");
-			attr(span8, "class", "fg-dv svelte-apo8v3");
-			attr(span9, "class", "fg-dl svelte-apo8v3");
-			attr(div4, "class", "fg-dc svelte-apo8v3");
-			attr(span10, "class", "fg-dv svelte-apo8v3");
-			attr(span11, "class", "fg-dl svelte-apo8v3");
-			attr(div5, "class", "fg-dc svelte-apo8v3");
-			attr(div6, "class", "fg-det-g svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div6, anchor);
-			append(div6, div0);
-			append(div0, span0);
-			append(span0, t0);
-			append(span0, t1);
-			append(div0, span1);
-			append(div6, t3);
-			append(div6, div1);
-			append(div1, span2);
-			append(span2, t4);
-			append(span2, t5);
-			append(div1, span3);
-			append(div6, t7);
-			append(div6, div2);
-			append(div2, span4);
-			append(span4, t8);
-			append(span4, t9);
-			append(div2, span5);
-			append(div6, t11);
-			append(div6, div3);
-			append(div3, span6);
-			append(span6, t12);
-			append(div3, span7);
-			append(div6, t14);
-			append(div6, div4);
-			append(div4, span8);
-			append(span8, t15);
-			append(span8, t16);
-			append(div4, span9);
-			append(div6, t18);
-			append(div6, div5);
-			append(div5, span10);
-			append(span10, t19);
-			append(span10, t20);
-			append(div5, span11);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 256 && t0_value !== (t0_value = /*rawData*/ ctx[8]?.tempC + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*rawData*/ 256 && t4_value !== (t4_value = /*rawData*/ ctx[8]?.humidity + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*heat*/ 512 && t8_value !== (t8_value = /*heat*/ ctx[9].apparentTemp1 + "")) set_data(t8, t8_value);
-
-			if (dirty[0] & /*heat*/ 512 && t12_value !== (t12_value = (/*heat*/ ctx[9].apparentTempFinal === 999
-			? 'NW'
-			: /*heat*/ ctx[9].apparentTempFinal + '°C') + "")) set_data(t12, t12_value);
-
-			if (dirty[0] & /*heat*/ 512) {
-				set_style(span6, "color", /*heat*/ ctx[9].zoneInfo.color);
-			}
-
-			if (dirty[0] & /*heat*/ 512 && t15_value !== (t15_value = /*heat*/ ctx[9].wbgtBase + "")) set_data(t15, t15_value);
-			if (dirty[0] & /*heat*/ 512 && t19_value !== (t19_value = /*heat*/ ctx[9].wbgtAdjusted + "")) set_data(t19, t19_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div6);
-			}
-		}
-	};
-}
-
-// (192:14) {#if isPro()}
-function create_if_block_8(ctx) {
-	let div;
-	let span0;
-	let span1;
-	let t1_value = /*heat*/ ctx[9].zoneInfo.monitoringSchedule + "";
-	let t1;
-
-	return {
-		c() {
-			div = element("div");
-			span0 = element("span");
-			span0.textContent = "👁 Monitoring";
-			span1 = element("span");
-			t1 = text(t1_value);
-			attr(span0, "class", "fg-drl svelte-apo8v3");
-			attr(span1, "class", "fg-drv svelte-apo8v3");
-			set_style(span1, "font-size", "8px");
-			attr(div, "class", "fg-dr svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, span0);
-			append(div, span1);
-			append(span1, t1);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512 && t1_value !== (t1_value = /*heat*/ ctx[9].zoneInfo.monitoringSchedule + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (202:12) {:else}
-function create_else_block_1(ctx) {
-	let div;
-
-	return {
-		c() {
-			div = element("div");
-
-			div.innerHTML = `🔒 WBGT, App.Temp A/B, mandatory controls, monitoring schedule
-                <a class="fg-pro-nudge-btn svelte-apo8v3" href="https://fieldguard-hse.com" target="_blank">Upgrade to Pro →</a>`;
-
-			attr(div, "class", "fg-pro-nudge svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (197:12) {#if isPro()}
-function create_if_block_7(ctx) {
-	let div0;
-	let t1;
-	let t2;
-	let div1;
-	let t3;
-	let t4_value = PPE_PROFILES[/*settings*/ ctx[33].ppeProfile].label + "";
-	let t4;
-	let t5;
-	let t6_value = PPE_PROFILES[/*settings*/ ctx[33].ppeProfile].adjustment + "";
-	let t6;
-	let t7;
-	let each_value_2 = ensure_array_like(/*heat*/ ctx[9].zoneInfo.mandatoryControls);
-	let each_blocks = [];
-
-	for (let i = 0; i < each_value_2.length; i += 1) {
-		each_blocks[i] = create_each_block_2(get_each_context_2(ctx, each_value_2, i));
-	}
-
-	return {
-		c() {
-			div0 = element("div");
-			div0.textContent = "⚠ Mandatory Controls";
-			t1 = space();
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				each_blocks[i].c();
-			}
-
-			t2 = space();
-			div1 = element("div");
-			t3 = text("PPE: ");
-			t4 = text(t4_value);
-			t5 = text(" (+");
-			t6 = text(t6_value);
-			t7 = text("°C)");
-			attr(div0, "class", "fg-dct svelte-apo8v3");
-			attr(div1, "class", "fg-dppe svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div0, anchor);
-			insert(target, t1, anchor);
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				if (each_blocks[i]) {
-					each_blocks[i].m(target, anchor);
-				}
-			}
-
-			insert(target, t2, anchor);
-			insert(target, div1, anchor);
-			append(div1, t3);
-			append(div1, t4);
-			append(div1, t5);
-			append(div1, t6);
-			append(div1, t7);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512) {
-				each_value_2 = ensure_array_like(/*heat*/ ctx[9].zoneInfo.mandatoryControls);
-				let i;
-
-				for (i = 0; i < each_value_2.length; i += 1) {
-					const child_ctx = get_each_context_2(ctx, each_value_2, i);
-
-					if (each_blocks[i]) {
-						each_blocks[i].p(child_ctx, dirty);
-					} else {
-						each_blocks[i] = create_each_block_2(child_ctx);
-						each_blocks[i].c();
-						each_blocks[i].m(t2.parentNode, t2);
-					}
-				}
-
-				for (; i < each_blocks.length; i += 1) {
-					each_blocks[i].d(1);
-				}
-
-				each_blocks.length = each_value_2.length;
-			}
-
-			if (dirty[1] & /*settings*/ 4 && t4_value !== (t4_value = PPE_PROFILES[/*settings*/ ctx[33].ppeProfile].label + "")) set_data(t4, t4_value);
-			if (dirty[1] & /*settings*/ 4 && t6_value !== (t6_value = PPE_PROFILES[/*settings*/ ctx[33].ppeProfile].adjustment + "")) set_data(t6, t6_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div0);
-				detach(t1);
-				detach(t2);
-				detach(div1);
-			}
-
-			destroy_each(each_blocks, detaching);
-		}
-	};
-}
-
-// (200:14) {#each heat.zoneInfo.mandatoryControls as ctrl}
-function create_each_block_2(ctx) {
-	let div;
-	let t0;
-	let t1_value = /*ctrl*/ ctx[111] + "";
-	let t1;
-
-	return {
-		c() {
-			div = element("div");
-			t0 = text("▸ ");
-			t1 = text(t1_value);
-			attr(div, "class", "fg-dci svelte-apo8v3");
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, t0);
-			append(div, t1);
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 512 && t1_value !== (t1_value = /*ctrl*/ ctx[111] + "")) set_data(t1, t1_value);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(div);
-			}
-		}
-	};
-}
-
-// (282:10) {:else}
-function create_else_block(ctx) {
-	let span0;
-	let t1;
-	let a_1;
-
-	return {
-		c() {
-			span0 = element("span");
-			span0.textContent = "ECMWF";
-			t1 = space();
-			a_1 = element("a");
-			a_1.innerHTML = `🔒 All models + worst-case <span class="fg-proch svelte-apo8v3">PRO</span>`;
-			attr(span0, "class", "fg-mr-free svelte-apo8v3");
-			attr(a_1, "class", "fg-mr-pro-badge svelte-apo8v3");
-			attr(a_1, "href", "https://fieldguard-hse.com");
-			attr(a_1, "target", "_blank");
-		},
-		m(target, anchor) {
-			insert(target, span0, anchor);
-			insert(target, t1, anchor);
-			insert(target, a_1, anchor);
-		},
-		p: noop,
-		d(detaching) {
-			if (detaching) {
-				detach(span0);
-				detach(t1);
-				detach(a_1);
-			}
-		}
-	};
-}
-
-// (274:10) {#if isPro()}
-function create_if_block_5(ctx) {
-	let select;
-	let t0;
-	let label;
-	let input;
-	let t1;
+	let button_class_value;
 	let mounted;
 	let dispose;
-	let each_value_1 = ensure_array_like(/*MODELS*/ ctx[42]);
-	let each_blocks = [];
 
-	for (let i = 0; i < each_value_1.length; i += 1) {
-		each_blocks[i] = create_each_block_1(get_each_context_1(ctx, each_value_1, i));
+	function click_handler_3() {
+		return /*click_handler_3*/ ctx[61](/*s*/ ctx[138]);
+	}
+
+	function click_handler_4() {
+		return /*click_handler_4*/ ctx[62](/*s*/ ctx[138]);
 	}
 
 	return {
 		c() {
-			select = element("select");
+			button = element("button");
+			span0 = element("span");
+			t0 = text(t0_value);
+			span1 = element("span");
+			span1.textContent = "×";
+			attr(span0, "class", "fg-site-dot svelte-fq6k1p");
+			set_style(span0, "background", /*bgStatus*/ ctx[36][/*s*/ ctx[138].id]?.color || '#475569');
+			attr(span1, "class", "fg-site-x svelte-fq6k1p");
+			attr(span1, "title", "Remove");
 
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				each_blocks[i].c();
-			}
-
-			t0 = space();
-			label = element("label");
-			input = element("input");
-			t1 = text("\n              Worst-case ⚡");
-			attr(select, "class", "fg-mr-sel svelte-apo8v3");
-			if (/*selectedModel*/ ctx[13] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[64].call(select));
-			attr(input, "type", "checkbox");
-			attr(input, "class", "svelte-apo8v3");
-			attr(label, "class", "fg-mr-wc svelte-apo8v3");
+			attr(button, "class", button_class_value = "fg-site-chip " + (/*s*/ ctx[138].id === /*activeSiteId*/ ctx[32]
+			? 'active'
+			: '') + " svelte-fq6k1p");
 		},
 		m(target, anchor) {
-			insert(target, select, anchor);
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				if (each_blocks[i]) {
-					each_blocks[i].m(select, null);
-				}
-			}
-
-			select_option(select, /*selectedModel*/ ctx[13], true);
-			insert(target, t0, anchor);
-			insert(target, label, anchor);
-			append(label, input);
-			input.checked = /*worstCaseMode*/ ctx[14];
-			append(label, t1);
+			insert(target, button, anchor);
+			append(button, span0);
+			append(button, t0);
+			append(button, span1);
 
 			if (!mounted) {
 				dispose = [
-					listen(select, "change", /*select_change_handler*/ ctx[64]),
-					listen(select, "change", /*refreshData*/ ctx[43]),
-					listen(input, "change", /*input_change_handler*/ ctx[65]),
-					listen(input, "change", /*refreshData*/ ctx[43])
+					listen(span1, "click", stop_propagation(click_handler_3)),
+					listen(button, "click", click_handler_4)
 				];
 
 				mounted = true;
 			}
 		},
-		p(ctx, dirty) {
-			if (dirty[1] & /*MODELS*/ 2048) {
-				each_value_1 = ensure_array_like(/*MODELS*/ ctx[42]);
-				let i;
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
 
-				for (i = 0; i < each_value_1.length; i += 1) {
-					const child_ctx = get_each_context_1(ctx, each_value_1, i);
-
-					if (each_blocks[i]) {
-						each_blocks[i].p(child_ctx, dirty);
-					} else {
-						each_blocks[i] = create_each_block_1(child_ctx);
-						each_blocks[i].c();
-						each_blocks[i].m(select, null);
-					}
-				}
-
-				for (; i < each_blocks.length; i += 1) {
-					each_blocks[i].d(1);
-				}
-
-				each_blocks.length = each_value_1.length;
+			if (dirty[1] & /*bgStatus, savedSites*/ 33) {
+				set_style(span0, "background", /*bgStatus*/ ctx[36][/*s*/ ctx[138].id]?.color || '#475569');
 			}
 
-			if (dirty[0] & /*selectedModel*/ 8192 | dirty[1] & /*MODELS*/ 2048) {
-				select_option(select, /*selectedModel*/ ctx[13]);
-			}
+			if (dirty[1] & /*savedSites*/ 1 && t0_value !== (t0_value = /*s*/ ctx[138].name + "")) set_data(t0, t0_value);
 
-			if (dirty[0] & /*worstCaseMode*/ 16384) {
-				input.checked = /*worstCaseMode*/ ctx[14];
+			if (dirty[1] & /*savedSites, activeSiteId*/ 3 && button_class_value !== (button_class_value = "fg-site-chip " + (/*s*/ ctx[138].id === /*activeSiteId*/ ctx[32]
+			? 'active'
+			: '') + " svelte-fq6k1p")) {
+				attr(button, "class", button_class_value);
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(select);
-				detach(t0);
-				detach(label);
+				detach(button);
 			}
 
-			destroy_each(each_blocks, detaching);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (276:14) {#each MODELS as m}
-function create_each_block_1(ctx) {
+// (48:6) {:else}
+function create_else_block_5(ctx) {
+	let a;
+
+	return {
+		c() {
+			a = element("a");
+			a.textContent = "＋ Save more sites — Pro";
+			attr(a, "class", "fg-site-locked svelte-fq6k1p");
+			attr(a, "href", "https://fieldguard-hse.com");
+			attr(a, "target", "_blank");
+		},
+		m(target, anchor) {
+			insert(target, a, anchor);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(a);
+			}
+		}
+	};
+}
+
+// (46:22) 
+function create_if_block_27(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = `Max ${/*maxSites*/ ctx[39]()} sites on this licence`;
+			attr(span, "class", "fg-site-max svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (43:6) {#if canAddSite()}
+function create_if_block_26(ctx) {
+	let input;
+	let t0;
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			input = element("input");
+			t0 = space();
+			button = element("button");
+			button.textContent = "＋ Save pin";
+			attr(input, "class", "fg-site-name svelte-fq6k1p");
+			attr(input, "placeholder", "Name…");
+			attr(button, "class", "fg-site-add svelte-fq6k1p");
+			attr(button, "title", "Save current pin as a site");
+		},
+		m(target, anchor) {
+			insert(target, input, anchor);
+			set_input_value(input, /*newSiteName*/ ctx[33]);
+			insert(target, t0, anchor);
+			insert(target, button, anchor);
+
+			if (!mounted) {
+				dispose = [
+					listen(input, "input", /*input_input_handler*/ ctx[63]),
+					listen(button, "click", /*addCurrentSite*/ ctx[53])
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[1] & /*newSiteName*/ 4 && input.value !== /*newSiteName*/ ctx[33]) {
+				set_input_value(input, /*newSiteName*/ ctx[33]);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(input);
+				detach(t0);
+				detach(button);
+			}
+
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+// (53:4) {#if isStale}
+function create_if_block_25(ctx) {
+	let div;
+	let t0;
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("⚠ Offline — showing last saved reading from ");
+			t1 = text(/*staleTime*/ ctx[35]);
+			attr(div, "class", "fg-stale svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[1] & /*staleTime*/ 16) set_data(t1, /*staleTime*/ ctx[35]);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (60:8) {#each MODELS as m}
+function create_each_block_4(ctx) {
 	let option;
-	let t_1_value = /*m*/ ctx[108].label + "";
+	let t_1_value = /*m*/ ctx[135].label + "";
 	let t_1;
 
 	return {
 		c() {
 			option = element("option");
 			t_1 = text(t_1_value);
-			option.__value = /*m*/ ctx[108].key;
+			option.__value = /*m*/ ctx[135].key;
 			set_input_value(option, option.__value);
 		},
 		m(target, anchor) {
@@ -7952,13 +6503,2749 @@ function create_each_block_1(ctx) {
 	};
 }
 
-// (289:8) {#if worstCaseMode && modelResults.length > 1}
+// (64:20) {#if !isPro}
+function create_if_block_24(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (72:19) 
+function create_if_block_3(ctx) {
+	let t0;
+	let div12;
+	let button0;
+	let div0;
+	let t2;
+	let div1;
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38], false) + "";
+	let t3;
+	let span0;
+	let t5;
+	let div2;
+	let t6_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "";
+	let t6;
+	let button0_class_value;
+	let t7;
+	let button1;
+	let div3;
+	let t9;
+	let div4;
+	let t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38], false) + "";
+	let t10;
+	let span1;
+	let t11_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t11;
+	let t12;
+	let div5;
+	let t13_value = /*windResult*/ ctx[17]?.riskLabel + "";
+	let t13;
+	let button1_class_value;
+	let t14;
+	let button2;
+	let div6;
+	let t16;
+	let div7;
+	let t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38], false) + "";
+	let t17;
+	let span2;
+	let t18_value = (/*units*/ ctx[38] === 'imperial' ? 'in' : 'mm') + "";
+	let t18;
+	let t19;
+	let div8;
+	let t20_value = /*rainResult*/ ctx[18]?.riskLabel + "";
+	let t20;
+	let button2_class_value;
+	let t21;
+	let button3;
+	let div9;
+	let t23;
+	let div10;
+	let t24_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "";
+	let t24;
+	let span3;
+	let t26;
+	let div11;
+	let t27_value = solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).label + "";
+	let t27;
+	let button3_class_value;
+	let t28;
+	let t29;
+	let show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[43](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+	let t30;
+	let t31;
+	let if_block4_anchor;
+	let mounted;
+	let dispose;
+
+	function select_block_type_3(ctx, dirty) {
+		if (/*heat*/ ctx[16].isBanPeriod && /*activeBan*/ ctx[14]) return create_if_block_22;
+		if (/*activeBan*/ ctx[14]) return create_if_block_23;
+	}
+
+	let current_block_type = select_block_type_3(ctx);
+	let if_block0 = current_block_type && current_block_type(ctx);
+
+	function select_block_type_4(ctx, dirty) {
+		if (/*selectedHazard*/ ctx[21] === 'heat') return create_if_block_8;
+		if (/*selectedHazard*/ ctx[21] === 'wind') return create_if_block_16;
+		if (/*selectedHazard*/ ctx[21] === 'rain') return create_if_block_18;
+		if (/*selectedHazard*/ ctx[21] === 'solar') return create_if_block_20;
+	}
+
+	let current_block_type_1 = select_block_type_4(ctx);
+	let if_block1 = current_block_type_1 && current_block_type_1(ctx);
+	let if_block2 = show_if && create_if_block_7(ctx);
+	let if_block3 = /*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20] && create_if_block_5(ctx);
+	let if_block4 = /*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[22].length > 1 && create_if_block_4(ctx);
+
+	return {
+		c() {
+			if (if_block0) if_block0.c();
+			t0 = space();
+			div12 = element("div");
+			button0 = element("button");
+			div0 = element("div");
+			div0.textContent = "🌡️";
+			t2 = space();
+			div1 = element("div");
+			t3 = text(t3_value);
+			span0 = element("span");
+			span0.textContent = "°";
+			t5 = space();
+			div2 = element("div");
+			t6 = text(t6_value);
+			t7 = space();
+			button1 = element("button");
+			div3 = element("div");
+			div3.textContent = "💨";
+			t9 = space();
+			div4 = element("div");
+			t10 = text(t10_value);
+			span1 = element("span");
+			t11 = text(t11_value);
+			t12 = space();
+			div5 = element("div");
+			t13 = text(t13_value);
+			t14 = space();
+			button2 = element("button");
+			div6 = element("div");
+			div6.textContent = "🌧️";
+			t16 = space();
+			div7 = element("div");
+			t17 = text(t17_value);
+			span2 = element("span");
+			t18 = text(t18_value);
+			t19 = space();
+			div8 = element("div");
+			t20 = text(t20_value);
+			t21 = space();
+			button3 = element("button");
+			div9 = element("div");
+			div9.textContent = "☀️";
+			t23 = space();
+			div10 = element("div");
+			t24 = text(t24_value);
+			span3 = element("span");
+			span3.textContent = "W";
+			t26 = space();
+			div11 = element("div");
+			t27 = text(t27_value);
+			t28 = space();
+			if (if_block1) if_block1.c();
+			t29 = space();
+			if (if_block2) if_block2.c();
+			t30 = space();
+			if (if_block3) if_block3.c();
+			t31 = space();
+			if (if_block4) if_block4.c();
+			if_block4_anchor = empty();
+			attr(div0, "class", "fg-hz-ic svelte-fq6k1p");
+			attr(span0, "class", "fg-hz-u svelte-fq6k1p");
+			attr(div1, "class", "fg-hz-val svelte-fq6k1p");
+			attr(div2, "class", "fg-hz-st svelte-fq6k1p");
+			set_style(div2, "color", /*heat*/ ctx[16].zoneInfo.color);
+			attr(button0, "class", button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-fq6k1p");
+			set_style(button0, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			attr(div3, "class", "fg-hz-ic svelte-fq6k1p");
+			attr(span1, "class", "fg-hz-u svelte-fq6k1p");
+			attr(div4, "class", "fg-hz-val svelte-fq6k1p");
+			attr(div5, "class", "fg-hz-st svelte-fq6k1p");
+			set_style(div5, "color", /*windResult*/ ctx[17]?.riskColor);
+			attr(button1, "class", button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-fq6k1p");
+			set_style(button1, "border-color", /*windResult*/ ctx[17]?.riskColor);
+			attr(div6, "class", "fg-hz-ic svelte-fq6k1p");
+			attr(span2, "class", "fg-hz-u svelte-fq6k1p");
+			attr(div7, "class", "fg-hz-val svelte-fq6k1p");
+			attr(div8, "class", "fg-hz-st svelte-fq6k1p");
+			set_style(div8, "color", /*rainResult*/ ctx[18]?.riskColor);
+			attr(button2, "class", button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-fq6k1p");
+			set_style(button2, "border-color", /*rainResult*/ ctx[18]?.riskColor);
+			attr(div9, "class", "fg-hz-ic svelte-fq6k1p");
+			attr(span3, "class", "fg-hz-u svelte-fq6k1p");
+			attr(div10, "class", "fg-hz-val svelte-fq6k1p");
+			attr(div11, "class", "fg-hz-st svelte-fq6k1p");
+			set_style(div11, "color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			attr(button3, "class", button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-fq6k1p");
+			set_style(button3, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			attr(div12, "class", "fg-hazard-strip svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			if (if_block0) if_block0.m(target, anchor);
+			insert(target, t0, anchor);
+			insert(target, div12, anchor);
+			append(div12, button0);
+			append(button0, div0);
+			append(button0, t2);
+			append(button0, div1);
+			append(div1, t3);
+			append(div1, span0);
+			append(button0, t5);
+			append(button0, div2);
+			append(div2, t6);
+			append(div12, t7);
+			append(div12, button1);
+			append(button1, div3);
+			append(button1, t9);
+			append(button1, div4);
+			append(div4, t10);
+			append(div4, span1);
+			append(span1, t11);
+			append(button1, t12);
+			append(button1, div5);
+			append(div5, t13);
+			append(div12, t14);
+			append(div12, button2);
+			append(button2, div6);
+			append(button2, t16);
+			append(button2, div7);
+			append(div7, t17);
+			append(div7, span2);
+			append(span2, t18);
+			append(button2, t19);
+			append(button2, div8);
+			append(div8, t20);
+			append(div12, t21);
+			append(div12, button3);
+			append(button3, div9);
+			append(button3, t23);
+			append(button3, div10);
+			append(div10, t24);
+			append(div10, span3);
+			append(button3, t26);
+			append(button3, div11);
+			append(div11, t27);
+			insert(target, t28, anchor);
+			if (if_block1) if_block1.m(target, anchor);
+			insert(target, t29, anchor);
+			if (if_block2) if_block2.m(target, anchor);
+			insert(target, t30, anchor);
+			if (if_block3) if_block3.m(target, anchor);
+			insert(target, t31, anchor);
+			if (if_block4) if_block4.m(target, anchor);
+			insert(target, if_block4_anchor, anchor);
+
+			if (!mounted) {
+				dispose = [
+					listen(button0, "click", /*click_handler_5*/ ctx[66]),
+					listen(button1, "click", /*click_handler_6*/ ctx[67]),
+					listen(button2, "click", /*click_handler_7*/ ctx[68]),
+					listen(button3, "click", /*click_handler_8*/ ctx[69])
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (current_block_type === (current_block_type = select_block_type_3(ctx)) && if_block0) {
+				if_block0.p(ctx, dirty);
+			} else {
+				if (if_block0) if_block0.d(1);
+				if_block0 = current_block_type && current_block_type(ctx);
+
+				if (if_block0) {
+					if_block0.c();
+					if_block0.m(t0.parentNode, t0);
+				}
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38], false) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*heat*/ 65536 && t6_value !== (t6_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "")) set_data(t6, t6_value);
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div2, "color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button0_class_value !== (button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-fq6k1p")) {
+				attr(button0, "class", button0_class_value);
+			}
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(button0, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t10_value !== (t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38], false) + "")) set_data(t10, t10_value);
+			if (dirty[1] & /*units*/ 128 && t11_value !== (t11_value = (/*units*/ ctx[38] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*windResult*/ 131072 && t13_value !== (t13_value = /*windResult*/ ctx[17]?.riskLabel + "")) set_data(t13, t13_value);
+
+			if (dirty[0] & /*windResult*/ 131072) {
+				set_style(div5, "color", /*windResult*/ ctx[17]?.riskColor);
+			}
+
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button1_class_value !== (button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-fq6k1p")) {
+				attr(button1, "class", button1_class_value);
+			}
+
+			if (dirty[0] & /*windResult*/ 131072) {
+				set_style(button1, "border-color", /*windResult*/ ctx[17]?.riskColor);
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t17_value !== (t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38], false) + "")) set_data(t17, t17_value);
+			if (dirty[1] & /*units*/ 128 && t18_value !== (t18_value = (/*units*/ ctx[38] === 'imperial' ? 'in' : 'mm') + "")) set_data(t18, t18_value);
+			if (dirty[0] & /*rainResult*/ 262144 && t20_value !== (t20_value = /*rainResult*/ ctx[18]?.riskLabel + "")) set_data(t20, t20_value);
+
+			if (dirty[0] & /*rainResult*/ 262144) {
+				set_style(div8, "color", /*rainResult*/ ctx[18]?.riskColor);
+			}
+
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button2_class_value !== (button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-fq6k1p")) {
+				attr(button2, "class", button2_class_value);
+			}
+
+			if (dirty[0] & /*rainResult*/ 262144) {
+				set_style(button2, "border-color", /*rainResult*/ ctx[18]?.riskColor);
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 && t24_value !== (t24_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "")) set_data(t24, t24_value);
+			if (dirty[0] & /*rawData, isDay*/ 36864 && t27_value !== (t27_value = solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).label + "")) set_data(t27, t27_value);
+
+			if (dirty[0] & /*rawData, isDay*/ 36864) {
+				set_style(div11, "color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			}
+
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button3_class_value !== (button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-fq6k1p")) {
+				attr(button3, "class", button3_class_value);
+			}
+
+			if (dirty[0] & /*rawData, isDay*/ 36864) {
+				set_style(button3, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			}
+
+			if (current_block_type_1 === (current_block_type_1 = select_block_type_4(ctx)) && if_block1) {
+				if_block1.p(ctx, dirty);
+			} else {
+				if (if_block1) if_block1.d(1);
+				if_block1 = current_block_type_1 && current_block_type_1(ctx);
+
+				if (if_block1) {
+					if_block1.c();
+					if_block1.m(t29.parentNode, t29);
+				}
+			}
+
+			if (dirty[0] & /*selectedHazard, coldResult*/ 2621440) show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[43](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+
+			if (show_if) {
+				if (if_block2) {
+					if_block2.p(ctx, dirty);
+				} else {
+					if_block2 = create_if_block_7(ctx);
+					if_block2.c();
+					if_block2.m(t30.parentNode, t30);
+				}
+			} else if (if_block2) {
+				if_block2.d(1);
+				if_block2 = null;
+			}
+
+			if (/*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20]) {
+				if (if_block3) {
+					if_block3.p(ctx, dirty);
+				} else {
+					if_block3 = create_if_block_5(ctx);
+					if_block3.c();
+					if_block3.m(t31.parentNode, t31);
+				}
+			} else if (if_block3) {
+				if_block3.d(1);
+				if_block3 = null;
+			}
+
+			if (/*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[22].length > 1) {
+				if (if_block4) {
+					if_block4.p(ctx, dirty);
+				} else {
+					if_block4 = create_if_block_4(ctx);
+					if_block4.c();
+					if_block4.m(if_block4_anchor.parentNode, if_block4_anchor);
+				}
+			} else if (if_block4) {
+				if_block4.d(1);
+				if_block4 = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(t0);
+				detach(div12);
+				detach(t28);
+				detach(t29);
+				detach(t30);
+				detach(t31);
+				detach(if_block4_anchor);
+			}
+
+			if (if_block0) {
+				if_block0.d(detaching);
+			}
+
+			if (if_block1) {
+				if_block1.d(detaching);
+			}
+
+			if (if_block2) if_block2.d(detaching);
+			if (if_block3) if_block3.d(detaching);
+			if (if_block4) if_block4.d(detaching);
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+// (70:20) 
+function create_if_block_2(ctx) {
+	let div;
+	let t0;
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("⚠ ");
+			t1 = text(/*error*/ ctx[9]);
+			attr(div, "class", "fg-error svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*error*/ 512) set_data(t1, /*error*/ ctx[9]);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (68:4) {#if loading}
+function create_if_block_1(ctx) {
+	let div;
+	let t0;
+
+	let t1_value = (/*worstCaseMode*/ ctx[1]
+	? 'all models'
+	: /*selectedModel*/ ctx[28]) + "";
+
+	let t1;
+	let t2;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("⏳ Fetching ");
+			t1 = text(t1_value);
+			t2 = text("…");
+			attr(div, "class", "fg-loading svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+			append(div, t2);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*worstCaseMode, selectedModel*/ 268435458 && t1_value !== (t1_value = (/*worstCaseMode*/ ctx[1]
+			? 'all models'
+			: /*selectedModel*/ ctx[28]) + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (80:26) 
+function create_if_block_23(ctx) {
+	let div;
+	let t0;
+	let t1_value = /*activeBan*/ ctx[14].country + "";
+	let t1;
+	let t2;
+	let t3_value = /*activeBan*/ ctx[14].label + "";
+	let t3;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("ℹ ");
+			t1 = text(t1_value);
+			t2 = text(" statutory midday work ban: ");
+			t3 = text(t3_value);
+			attr(div, "class", "fg-ban-info svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+			append(div, t2);
+			append(div, t3);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*activeBan*/ 16384 && t1_value !== (t1_value = /*activeBan*/ ctx[14].country + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*activeBan*/ 16384 && t3_value !== (t3_value = /*activeBan*/ ctx[14].label + "")) set_data(t3, t3_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (75:6) {#if heat.isBanPeriod && activeBan}
+function create_if_block_22(ctx) {
+	let div;
+	let t0;
+	let t1_value = /*activeBan*/ ctx[14].country + "";
+	let t1;
+	let t2;
+	let t3_value = /*activeBan*/ ctx[14].label + "";
+	let t3;
+	let br;
+	let t4;
+	let small;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("🚫 LEGAL WORK BAN (");
+			t1 = text(t1_value);
+			t2 = text(") — ");
+			t3 = text(t3_value);
+			br = element("br");
+			t4 = space();
+			small = element("small");
+			small.textContent = "Outdoor work prohibited now — workers must be in a shaded / A/C environment";
+			attr(small, "class", "svelte-fq6k1p");
+			attr(div, "class", "fg-ban-alert svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+			append(div, t2);
+			append(div, t3);
+			append(div, br);
+			append(div, t4);
+			append(div, small);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*activeBan*/ 16384 && t1_value !== (t1_value = /*activeBan*/ ctx[14].country + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*activeBan*/ 16384 && t3_value !== (t3_value = /*activeBan*/ ctx[14].label + "")) set_data(t3, t3_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (269:43) 
+function create_if_block_20(ctx) {
+	let div1;
+	let div0;
+	let t0;
+	let span;
+	let t1_value = solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).label + "";
+	let t1;
+	let t2;
+
+	function select_block_type_8(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_21;
+		return create_else_block_4;
+	}
+
+	let current_block_type = select_block_type_8(ctx);
+	let if_block = current_block_type(ctx);
+
+	return {
+		c() {
+			div1 = element("div");
+			div0 = element("div");
+			t0 = text("☀ Solar Radiation\n          ");
+			span = element("span");
+			t1 = text(t1_value);
+			t2 = space();
+			if_block.c();
+			attr(span, "class", "fg-badge svelte-fq6k1p");
+			set_style(span, "background", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-card svelte-fq6k1p");
+			set_style(div1, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+		},
+		m(target, anchor) {
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(span, t1);
+			append(div1, t2);
+			if_block.m(div1, null);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData, isDay*/ 36864 && t1_value !== (t1_value = solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).label + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*rawData, isDay*/ 36864) {
+				set_style(span, "background", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_8(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
+			} else {
+				if_block.d(1);
+				if_block = current_block_type(ctx);
+
+				if (if_block) {
+					if_block.c();
+					if_block.m(div1, null);
+				}
+			}
+
+			if (dirty[0] & /*rawData, isDay*/ 36864) {
+				set_style(div1, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div1);
+			}
+
+			if_block.d();
+		}
+	};
+}
+
+// (237:42) 
+function create_if_block_18(ctx) {
+	let div1;
+	let div0;
+	let t0;
+	let span;
+	let t1_value = /*rainResult*/ ctx[18]?.riskLabel + "";
+	let t1;
+	let t2;
+
+	function select_block_type_7(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_19;
+		return create_else_block_3;
+	}
+
+	let current_block_type = select_block_type_7(ctx);
+	let if_block = current_block_type(ctx);
+
+	return {
+		c() {
+			div1 = element("div");
+			div0 = element("div");
+			t0 = text("🌧 Rain\n          ");
+			span = element("span");
+			t1 = text(t1_value);
+			t2 = space();
+			if_block.c();
+			attr(span, "class", "fg-badge svelte-fq6k1p");
+			set_style(span, "background", /*rainResult*/ ctx[18]?.riskColor);
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-card svelte-fq6k1p");
+			set_style(div1, "border-color", /*rainResult*/ ctx[18]?.riskColor);
+		},
+		m(target, anchor) {
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(span, t1);
+			append(div1, t2);
+			if_block.m(div1, null);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rainResult*/ 262144 && t1_value !== (t1_value = /*rainResult*/ ctx[18]?.riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*rainResult*/ 262144) {
+				set_style(span, "background", /*rainResult*/ ctx[18]?.riskColor);
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_7(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
+			} else {
+				if_block.d(1);
+				if_block = current_block_type(ctx);
+
+				if (if_block) {
+					if_block.c();
+					if_block.m(div1, null);
+				}
+			}
+
+			if (dirty[0] & /*rainResult*/ 262144) {
+				set_style(div1, "border-color", /*rainResult*/ ctx[18]?.riskColor);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div1);
+			}
+
+			if_block.d();
+		}
+	};
+}
+
+// (201:42) 
+function create_if_block_16(ctx) {
+	let div1;
+	let div0;
+	let t0;
+	let span;
+	let t1_value = /*windResult*/ ctx[17]?.riskLabel + "";
+	let t1;
+	let t2;
+
+	function select_block_type_6(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_17;
+		return create_else_block_2;
+	}
+
+	let current_block_type = select_block_type_6(ctx);
+	let if_block = current_block_type(ctx);
+
+	return {
+		c() {
+			div1 = element("div");
+			div0 = element("div");
+			t0 = text("💨 Wind\n          ");
+			span = element("span");
+			t1 = text(t1_value);
+			t2 = space();
+			if_block.c();
+			attr(span, "class", "fg-badge svelte-fq6k1p");
+			set_style(span, "background", /*windResult*/ ctx[17]?.riskColor);
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-card svelte-fq6k1p");
+			set_style(div1, "border-color", /*windResult*/ ctx[17]?.riskColor);
+		},
+		m(target, anchor) {
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(span, t1);
+			append(div1, t2);
+			if_block.m(div1, null);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*windResult*/ 131072 && t1_value !== (t1_value = /*windResult*/ ctx[17]?.riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*windResult*/ 131072) {
+				set_style(span, "background", /*windResult*/ ctx[17]?.riskColor);
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_6(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
+			} else {
+				if_block.d(1);
+				if_block = current_block_type(ctx);
+
+				if (if_block) {
+					if_block.c();
+					if_block.m(div1, null);
+				}
+			}
+
+			if (dirty[0] & /*windResult*/ 131072) {
+				set_style(div1, "border-color", /*windResult*/ ctx[17]?.riskColor);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div1);
+			}
+
+			if_block.d();
+		}
+	};
+}
+
+// (108:6) {#if selectedHazard === 'heat'}
+function create_if_block_8(ctx) {
+	let div6;
+	let div0;
+	let t0;
+	let div4;
+	let div1;
+	let t1_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "";
+	let t1;
+	let t2;
+	let div2;
+	let t3_value = /*heat*/ ctx[16].zoneInfo.label + "";
+	let t3;
+	let t4;
+	let div3;
+	let t5;
+	let t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[38]) + "";
+	let t6;
+	let t7;
+	let div5;
+	let t8;
+	let t9;
+	let div12;
+	let div7;
+	let t10;
+	let t11;
+	let t12;
+	let div11;
+	let div8;
+	let span0;
+	let t14;
+	let span1;
+	let t16;
+	let span2;
+	let t17_value = /*heat*/ ctx[16].workRestSchedule.light + "";
+	let t17;
+	let t18;
+	let div9;
+	let span3;
+	let t20;
+	let span4;
+	let t22;
+	let span5;
+	let t23_value = /*heat*/ ctx[16].workRestSchedule.heavy + "";
+	let t23;
+	let t24;
+	let div10;
+	let span6;
+	let t26;
+	let span7;
+	let t28;
+	let span8;
+	let t29_value = /*heat*/ ctx[16].hydration + "";
+	let t29;
+	let t30;
+	let t31;
+	let t32;
+	let if_block5_anchor;
+	let if_block0 = /*isPro*/ ctx[3] && create_if_block_15(ctx);
+	let if_block1 = /*isPro*/ ctx[3] && create_if_block_14();
+	let if_block2 = /*isPro*/ ctx[3] && create_if_block_13(ctx);
+	let if_block3 = /*isPro*/ ctx[3] && create_if_block_12(ctx);
+
+	function select_block_type_5(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_10;
+		return create_else_block_1;
+	}
+
+	let current_block_type = select_block_type_5(ctx);
+	let if_block4 = current_block_type(ctx);
+	let if_block5 = /*isPro*/ ctx[3] && create_if_block_9(ctx);
+
+	return {
+		c() {
+			div6 = element("div");
+			div0 = element("div");
+			t0 = space();
+			div4 = element("div");
+			div1 = element("div");
+			t1 = text(t1_value);
+			t2 = space();
+			div2 = element("div");
+			t3 = text(t3_value);
+			t4 = space();
+			div3 = element("div");
+			t5 = text("Apparent Temp: ");
+			t6 = text(t6_value);
+			if (if_block0) if_block0.c();
+			t7 = space();
+			div5 = element("div");
+			t8 = text(/*currentTime*/ ctx[10]);
+			t9 = space();
+			div12 = element("div");
+			div7 = element("div");
+			t10 = text("🌡 Heat Stress");
+			if (if_block1) if_block1.c();
+			t11 = space();
+			if (if_block2) if_block2.c();
+			t12 = space();
+			div11 = element("div");
+			div8 = element("div");
+			span0 = element("span");
+			span0.textContent = "🕐";
+			t14 = space();
+			span1 = element("span");
+			span1.textContent = "Light work:";
+			t16 = space();
+			span2 = element("span");
+			t17 = text(t17_value);
+			t18 = space();
+			div9 = element("div");
+			span3 = element("span");
+			span3.textContent = "💪";
+			t20 = space();
+			span4 = element("span");
+			span4.textContent = "Heavy work:";
+			t22 = space();
+			span5 = element("span");
+			t23 = text(t23_value);
+			t24 = space();
+			div10 = element("div");
+			span6 = element("span");
+			span6.textContent = "💧";
+			t26 = space();
+			span7 = element("span");
+			span7.textContent = "Hydration:";
+			t28 = space();
+			span8 = element("span");
+			t29 = text(t29_value);
+			t30 = space();
+			if (if_block3) if_block3.c();
+			t31 = space();
+			if_block4.c();
+			t32 = space();
+			if (if_block5) if_block5.c();
+			if_block5_anchor = empty();
+			attr(div0, "class", "fg-zone-dot svelte-fq6k1p");
+			set_style(div0, "background", /*heat*/ ctx[16].zoneInfo.color);
+			attr(div1, "class", "fg-zone-name svelte-fq6k1p");
+			set_style(div1, "color", /*heat*/ ctx[16].zoneInfo.color);
+			attr(div2, "class", "fg-zone-label svelte-fq6k1p");
+			attr(div3, "class", "fg-zone-sub svelte-fq6k1p");
+			attr(div4, "class", "fg-zone-main svelte-fq6k1p");
+			attr(div5, "class", "fg-zone-time svelte-fq6k1p");
+			attr(div6, "class", "fg-zone-banner svelte-fq6k1p");
+			set_style(div6, "background", /*heat*/ ctx[16].zoneInfo.bgColor);
+			set_style(div6, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			attr(div7, "class", "fg-card-header svelte-fq6k1p");
+			attr(span0, "class", "fg-ws-icon svelte-fq6k1p");
+			attr(span1, "class", "fg-ws-label svelte-fq6k1p");
+			attr(span2, "class", "fg-ws-val svelte-fq6k1p");
+			attr(div8, "class", "fg-ws-row svelte-fq6k1p");
+			attr(span3, "class", "fg-ws-icon svelte-fq6k1p");
+			attr(span4, "class", "fg-ws-label svelte-fq6k1p");
+			attr(span5, "class", "fg-ws-val svelte-fq6k1p");
+			attr(div9, "class", "fg-ws-row svelte-fq6k1p");
+			attr(span6, "class", "fg-ws-icon svelte-fq6k1p");
+			attr(span7, "class", "fg-ws-label svelte-fq6k1p");
+			attr(span8, "class", "fg-ws-val svelte-fq6k1p");
+			attr(div10, "class", "fg-ws-row svelte-fq6k1p");
+			attr(div11, "class", "fg-work-schedule svelte-fq6k1p");
+			attr(div12, "class", "fg-card svelte-fq6k1p");
+			set_style(div12, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+		},
+		m(target, anchor) {
+			insert(target, div6, anchor);
+			append(div6, div0);
+			append(div6, t0);
+			append(div6, div4);
+			append(div4, div1);
+			append(div1, t1);
+			append(div4, t2);
+			append(div4, div2);
+			append(div2, t3);
+			append(div4, t4);
+			append(div4, div3);
+			append(div3, t5);
+			append(div3, t6);
+			if (if_block0) if_block0.m(div3, null);
+			append(div6, t7);
+			append(div6, div5);
+			append(div5, t8);
+			insert(target, t9, anchor);
+			insert(target, div12, anchor);
+			append(div12, div7);
+			append(div7, t10);
+			if (if_block1) if_block1.m(div7, null);
+			append(div12, t11);
+			if (if_block2) if_block2.m(div12, null);
+			append(div12, t12);
+			append(div12, div11);
+			append(div11, div8);
+			append(div8, span0);
+			append(div8, t14);
+			append(div8, span1);
+			append(div8, t16);
+			append(div8, span2);
+			append(span2, t17);
+			append(div11, t18);
+			append(div11, div9);
+			append(div9, span3);
+			append(div9, t20);
+			append(div9, span4);
+			append(div9, t22);
+			append(div9, span5);
+			append(span5, t23);
+			append(div11, t24);
+			append(div11, div10);
+			append(div10, span6);
+			append(div10, t26);
+			append(div10, span7);
+			append(div10, t28);
+			append(div10, span8);
+			append(span8, t29);
+			append(div11, t30);
+			if (if_block3) if_block3.m(div11, null);
+			append(div12, t31);
+			if_block4.m(div12, null);
+			insert(target, t32, anchor);
+			if (if_block5) if_block5.m(target, anchor);
+			insert(target, if_block5_anchor, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div0, "background", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div1, "color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (dirty[0] & /*heat*/ 65536 && t3_value !== (t3_value = /*heat*/ ctx[16].zoneInfo.label + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t6_value !== (t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[38]) + "")) set_data(t6, t6_value);
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block0) {
+					if_block0.p(ctx, dirty);
+				} else {
+					if_block0 = create_if_block_15(ctx);
+					if_block0.c();
+					if_block0.m(div3, null);
+				}
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (dirty[0] & /*currentTime*/ 1024) set_data(t8, /*currentTime*/ ctx[10]);
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div6, "background", /*heat*/ ctx[16].zoneInfo.bgColor);
+			}
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div6, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block1) ; else {
+					if_block1 = create_if_block_14();
+					if_block1.c();
+					if_block1.m(div7, null);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
+			}
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block2) {
+					if_block2.p(ctx, dirty);
+				} else {
+					if_block2 = create_if_block_13(ctx);
+					if_block2.c();
+					if_block2.m(div12, t12);
+				}
+			} else if (if_block2) {
+				if_block2.d(1);
+				if_block2 = null;
+			}
+
+			if (dirty[0] & /*heat*/ 65536 && t17_value !== (t17_value = /*heat*/ ctx[16].workRestSchedule.light + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*heat*/ 65536 && t23_value !== (t23_value = /*heat*/ ctx[16].workRestSchedule.heavy + "")) set_data(t23, t23_value);
+			if (dirty[0] & /*heat*/ 65536 && t29_value !== (t29_value = /*heat*/ ctx[16].hydration + "")) set_data(t29, t29_value);
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block3) {
+					if_block3.p(ctx, dirty);
+				} else {
+					if_block3 = create_if_block_12(ctx);
+					if_block3.c();
+					if_block3.m(div11, null);
+				}
+			} else if (if_block3) {
+				if_block3.d(1);
+				if_block3 = null;
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_5(ctx)) && if_block4) {
+				if_block4.p(ctx, dirty);
+			} else {
+				if_block4.d(1);
+				if_block4 = current_block_type(ctx);
+
+				if (if_block4) {
+					if_block4.c();
+					if_block4.m(div12, null);
+				}
+			}
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div12, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block5) {
+					if_block5.p(ctx, dirty);
+				} else {
+					if_block5 = create_if_block_9(ctx);
+					if_block5.c();
+					if_block5.m(if_block5_anchor.parentNode, if_block5_anchor);
+				}
+			} else if (if_block5) {
+				if_block5.d(1);
+				if_block5 = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div6);
+				detach(t9);
+				detach(div12);
+				detach(t32);
+				detach(if_block5_anchor);
+			}
+
+			if (if_block0) if_block0.d();
+			if (if_block1) if_block1.d();
+			if (if_block2) if_block2.d();
+			if (if_block3) if_block3.d();
+			if_block4.d();
+			if (if_block5) if_block5.d(detaching);
+		}
+	};
+}
+
+// (292:8) {:else}
+function create_else_block_4(ctx) {
+	let div3;
+	let div2;
+	let div0;
+	let t0_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "";
+	let t0;
+	let span;
+	let t2;
+	let div1;
+	let t4;
+	let div4;
+	let t5;
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div3 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			span = element("span");
+			span.textContent = "W/m²";
+			t2 = space();
+			div1 = element("div");
+			div1.textContent = "Irradiance";
+			t4 = space();
+			div4 = element("div");
+			t5 = text("🔒 UV index, sun angle, sunrise/sunset & WBGT solar contribution\n          ");
+			button = element("button");
+			button.textContent = "Upgrade to Pro →";
+			set_style(span, "font-size", "9px");
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(button, "class", "fg-lock-btn svelte-fq6k1p");
+			attr(div4, "class", "fg-lock svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div3, anchor);
+			append(div3, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(div2, t2);
+			append(div2, div1);
+			insert(target, t4, anchor);
+			insert(target, div4, anchor);
+			append(div4, t5);
+			append(div4, button);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_12*/ ctx[73]);
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 && t0_value !== (t0_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "")) set_data(t0, t0_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div3);
+				detach(t4);
+				detach(div4);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (276:8) {#if isPro}
+function create_if_block_21(ctx) {
+	let div9;
+	let div2;
+	let div0;
+	let t0_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "";
+	let t0;
+	let span;
+	let t2;
+	let div1;
+	let t4;
+	let div5;
+	let div3;
+	let t5;
+	let t6;
+	let t7;
+	let div4;
+	let t9;
+	let div8;
+	let div6;
+	let t10_value = (/*isDay*/ ctx[12] ? '☀ Day' : '🌙 Night') + "";
+	let t10;
+	let t11;
+	let div7;
+	let t13;
+	let div10;
+
+	return {
+		c() {
+			div9 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			span = element("span");
+			span.textContent = "W/m²";
+			t2 = space();
+			div1 = element("div");
+			div1.textContent = "Irradiance";
+			t4 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t5 = text(/*sunElevation*/ ctx[13]);
+			t6 = text("°");
+			t7 = space();
+			div4 = element("div");
+			div4.textContent = "Sun Angle";
+			t9 = space();
+			div8 = element("div");
+			div6 = element("div");
+			t10 = text(t10_value);
+			t11 = space();
+			div7 = element("div");
+			div7.textContent = "Daylight";
+			t13 = space();
+			div10 = element("div");
+			div10.textContent = "Adds to WBGT globe temperature — peak solar load drives heat stress.";
+			set_style(span, "font-size", "9px");
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div4, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div5, "class", "fg-metric svelte-fq6k1p");
+			attr(div6, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div7, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div8, "class", "fg-metric svelte-fq6k1p");
+			attr(div9, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(div10, "class", "fg-threshold-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div9, anchor);
+			append(div9, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(div2, t2);
+			append(div2, div1);
+			append(div9, t4);
+			append(div9, div5);
+			append(div5, div3);
+			append(div3, t5);
+			append(div3, t6);
+			append(div5, t7);
+			append(div5, div4);
+			append(div9, t9);
+			append(div9, div8);
+			append(div8, div6);
+			append(div6, t10);
+			append(div8, t11);
+			append(div8, div7);
+			insert(target, t13, anchor);
+			insert(target, div10, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 && t0_value !== (t0_value = (/*rawData*/ ctx[15]?.solarWm2 ?? 0) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*sunElevation*/ 8192) set_data(t5, /*sunElevation*/ ctx[13]);
+			if (dirty[0] & /*isDay*/ 4096 && t10_value !== (t10_value = (/*isDay*/ ctx[12] ? '☀ Day' : '🌙 Night') + "")) set_data(t10, t10_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div9);
+				detach(t13);
+				detach(div10);
+			}
+		}
+	};
+}
+
+// (256:8) {:else}
+function create_else_block_3(ctx) {
+	let div3;
+	let div2;
+	let div0;
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38]) + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div4;
+	let t4;
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div3 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Rate";
+			t3 = space();
+			div4 = element("div");
+			t4 = text("🔒 Intensity scale & custom thresholds\n          ");
+			button = element("button");
+			button.textContent = "Upgrade to Pro →";
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(button, "class", "fg-lock-btn svelte-fq6k1p");
+			attr(div4, "class", "fg-lock svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div3, anchor);
+			append(div3, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			insert(target, t3, anchor);
+			insert(target, div4, anchor);
+			append(div4, t4);
+			append(div4, button);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_11*/ ctx[72]);
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38]) + "")) set_data(t0, t0_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div3);
+				detach(t3);
+				detach(div4);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (244:8) {#if isPro}
+function create_if_block_19(ctx) {
+	let div6;
+	let div2;
+	let div0;
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38]) + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div5;
+	let div3;
+	let t4_value = /*rainResult*/ ctx[18]?.intensityLabel + "";
+	let t4;
+	let t5;
+	let div4;
+	let t7;
+	let div7;
+	let t8;
+	let t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[38]) + "";
+	let t9;
+	let t10;
+	let t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[38]) + "";
+	let t11;
+
+	return {
+		c() {
+			div6 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Rate";
+			t3 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t4 = text(t4_value);
+			t5 = space();
+			div4 = element("div");
+			div4.textContent = "Intensity";
+			t7 = space();
+			div7 = element("div");
+			t8 = text("⚠ Warn: ");
+			t9 = text(t9_value);
+			t10 = text("  |  🛑 Danger: ");
+			t11 = text(t11_value);
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div4, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div5, "class", "fg-metric svelte-fq6k1p");
+			attr(div6, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(div7, "class", "fg-threshold-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div6, anchor);
+			append(div6, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			append(div6, t3);
+			append(div6, div5);
+			append(div5, div3);
+			append(div3, t4);
+			append(div5, t5);
+			append(div5, div4);
+			insert(target, t7, anchor);
+			insert(target, div7, anchor);
+			append(div7, t8);
+			append(div7, t9);
+			append(div7, t10);
+			append(div7, t11);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[38]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rainResult*/ 262144 && t4_value !== (t4_value = /*rainResult*/ ctx[18]?.intensityLabel + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t9_value !== (t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[38]) + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t11_value !== (t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[38]) + "")) set_data(t11, t11_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div6);
+				detach(t7);
+				detach(div7);
+			}
+		}
+	};
+}
+
+// (224:8) {:else}
+function create_else_block_2(ctx) {
+	let div3;
+	let div2;
+	let div0;
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div4;
+	let t4;
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div3 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Speed";
+			t3 = space();
+			div4 = element("div");
+			t4 = text("🔒 Beaufort scale, km/h & custom thresholds\n          ");
+			button = element("button");
+			button.textContent = "Upgrade to Pro →";
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(button, "class", "fg-lock-btn svelte-fq6k1p");
+			attr(div4, "class", "fg-lock svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div3, anchor);
+			append(div3, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			insert(target, t3, anchor);
+			insert(target, div4, anchor);
+			append(div4, t4);
+			append(div4, button);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_10*/ ctx[71]);
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "")) set_data(t0, t0_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div3);
+				detach(t3);
+				detach(div4);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (208:8) {#if isPro}
+function create_if_block_17(ctx) {
+	let div9;
+	let div2;
+	let div0;
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div5;
+	let div3;
+	let t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]).val + "";
+	let t4;
+	let t5;
+	let div4;
+	let t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]).lbl + "";
+	let t6;
+	let t7;
+	let div8;
+	let div6;
+	let t8;
+	let t9_value = /*windResult*/ ctx[17]?.beaufort + "";
+	let t9;
+	let t10;
+	let div7;
+	let t11_value = /*windResult*/ ctx[17]?.beaufortDesc + "";
+	let t11;
+	let t12;
+	let div10;
+	let t13;
+	let t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[38]) + "";
+	let t14;
+	let t15;
+	let t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[38]) + "";
+	let t16;
+
+	return {
+		c() {
+			div9 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Speed";
+			t3 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t4 = text(t4_value);
+			t5 = space();
+			div4 = element("div");
+			t6 = text(t6_value);
+			t7 = space();
+			div8 = element("div");
+			div6 = element("div");
+			t8 = text("Bft ");
+			t9 = text(t9_value);
+			t10 = space();
+			div7 = element("div");
+			t11 = text(t11_value);
+			t12 = space();
+			div10 = element("div");
+			t13 = text("⚠ Warn: ");
+			t14 = text(t14_value);
+			t15 = text("  |  🛑 Danger: ");
+			t16 = text(t16_value);
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div4, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div5, "class", "fg-metric svelte-fq6k1p");
+			attr(div6, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div7, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div8, "class", "fg-metric svelte-fq6k1p");
+			attr(div9, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(div10, "class", "fg-threshold-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div9, anchor);
+			append(div9, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			append(div9, t3);
+			append(div9, div5);
+			append(div5, div3);
+			append(div3, t4);
+			append(div5, t5);
+			append(div5, div4);
+			append(div4, t6);
+			append(div9, t7);
+			append(div9, div8);
+			append(div8, div6);
+			append(div6, t8);
+			append(div6, t9);
+			append(div8, t10);
+			append(div8, div7);
+			append(div7, t11);
+			insert(target, t12, anchor);
+			insert(target, div10, anchor);
+			append(div10, t13);
+			append(div10, t14);
+			append(div10, t15);
+			append(div10, t16);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t4_value !== (t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]).val + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t6_value !== (t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]).lbl + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*windResult*/ 131072 && t9_value !== (t9_value = /*windResult*/ ctx[17]?.beaufort + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*windResult*/ 131072 && t11_value !== (t11_value = /*windResult*/ ctx[17]?.beaufortDesc + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t14_value !== (t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[38]) + "")) set_data(t14, t14_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t16_value !== (t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[38]) + "")) set_data(t16, t16_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div9);
+				detach(t12);
+				detach(div10);
+			}
+		}
+	};
+}
+
+// (115:90) {#if isPro}
+function create_if_block_15(ctx) {
+	let t0;
+	let t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[38]) + "";
+	let t1;
+
+	return {
+		c() {
+			t0 = text("| WBGT+PPE: ");
+			t1 = text(t1_value);
+		},
+		m(target, anchor) {
+			insert(target, t0, anchor);
+			insert(target, t1, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t1_value !== (t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[38]) + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(t0);
+				detach(t1);
+			}
+		}
+	};
+}
+
+// (122:50) {#if isPro}
+function create_if_block_14(ctx) {
+	let t_1;
+
+	return {
+		c() {
+			t_1 = text("Analysis");
+		},
+		m(target, anchor) {
+			insert(target, t_1, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(t_1);
+			}
+		}
+	};
+}
+
+// (123:8) {#if isPro}
+function create_if_block_13(ctx) {
+	let div18;
+	let div2;
+	let div0;
+	let t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38]) + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div5;
+	let div3;
+	let t4_value = /*rawData*/ ctx[15]?.humidity + "";
+	let t4;
+	let t5;
+	let t6;
+	let div4;
+	let t8;
+	let div8;
+	let div6;
+	let t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[38]) + "";
+	let t9;
+	let t10;
+	let div7;
+	let t12;
+	let div11;
+	let div9;
+
+	let t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
+	? 'NW'
+	: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[38])) + "";
+
+	let t13;
+	let t14;
+	let div10;
+	let t16;
+	let div14;
+	let div12;
+	let t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[38]) + "";
+	let t17;
+	let t18;
+	let div13;
+	let t20;
+	let div17;
+	let div15;
+	let t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[38]) + "";
+	let t21;
+	let t22;
+	let div16;
+
+	return {
+		c() {
+			div18 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "Temp";
+			t3 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t4 = text(t4_value);
+			t5 = text("%");
+			t6 = space();
+			div4 = element("div");
+			div4.textContent = "Humidity";
+			t8 = space();
+			div8 = element("div");
+			div6 = element("div");
+			t9 = text(t9_value);
+			t10 = space();
+			div7 = element("div");
+			div7.textContent = "App.Temp A";
+			t12 = space();
+			div11 = element("div");
+			div9 = element("div");
+			t13 = text(t13_value);
+			t14 = space();
+			div10 = element("div");
+			div10.textContent = "App.Temp B";
+			t16 = space();
+			div14 = element("div");
+			div12 = element("div");
+			t17 = text(t17_value);
+			t18 = space();
+			div13 = element("div");
+			div13.textContent = "WBGT";
+			t20 = space();
+			div17 = element("div");
+			div15 = element("div");
+			t21 = text(t21_value);
+			t22 = space();
+			div16 = element("div");
+			div16.textContent = "WBGT+PPE";
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div4, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div5, "class", "fg-metric svelte-fq6k1p");
+			attr(div6, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div7, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div8, "class", "fg-metric svelte-fq6k1p");
+			attr(div9, "class", "fg-metric-val svelte-fq6k1p");
+			set_style(div9, "color", /*heat*/ ctx[16].zoneInfo.color);
+			attr(div10, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div11, "class", "fg-metric svelte-fq6k1p");
+			attr(div12, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div13, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div14, "class", "fg-metric svelte-fq6k1p");
+			attr(div15, "class", "fg-metric-val svelte-fq6k1p");
+
+			set_style(div15, "color", /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtDangerC
+			? '#dc2626'
+			: /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtWarnC
+				? '#f97316'
+				: '#94a3b8');
+
+			attr(div16, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div17, "class", "fg-metric svelte-fq6k1p");
+			attr(div18, "class", "fg-metrics-grid svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div18, anchor);
+			append(div18, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			append(div18, t3);
+			append(div18, div5);
+			append(div5, div3);
+			append(div3, t4);
+			append(div3, t5);
+			append(div5, t6);
+			append(div5, div4);
+			append(div18, t8);
+			append(div18, div8);
+			append(div8, div6);
+			append(div6, t9);
+			append(div8, t10);
+			append(div8, div7);
+			append(div18, t12);
+			append(div18, div11);
+			append(div11, div9);
+			append(div9, t13);
+			append(div11, t14);
+			append(div11, div10);
+			append(div18, t16);
+			append(div18, div14);
+			append(div14, div12);
+			append(div12, t17);
+			append(div14, t18);
+			append(div14, div13);
+			append(div18, t20);
+			append(div18, div17);
+			append(div17, div15);
+			append(div15, t21);
+			append(div17, t22);
+			append(div17, div16);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t0_value !== (t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 && t4_value !== (t4_value = /*rawData*/ ctx[15]?.humidity + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t9_value !== (t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[38]) + "")) set_data(t9, t9_value);
+
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t13_value !== (t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
+			? 'NW'
+			: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[38])) + "")) set_data(t13, t13_value);
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div9, "color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t17_value !== (t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[38]) + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 128 && t21_value !== (t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[38]) + "")) set_data(t21, t21_value);
+
+			if (dirty[0] & /*heat, settings*/ 65540) {
+				set_style(div15, "color", /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtDangerC
+				? '#dc2626'
+				: /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtWarnC
+					? '#f97316'
+					: '#94a3b8');
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div18);
+			}
+		}
+	};
+}
+
+// (171:10) {#if isPro}
+function create_if_block_12(ctx) {
+	let div;
+	let span0;
+	let t1;
+	let span1;
+	let t3;
+	let span2;
+	let t4_value = /*heat*/ ctx[16].zoneInfo.monitoringSchedule + "";
+	let t4;
+
+	return {
+		c() {
+			div = element("div");
+			span0 = element("span");
+			span0.textContent = "👁";
+			t1 = space();
+			span1 = element("span");
+			span1.textContent = "Monitoring:";
+			t3 = space();
+			span2 = element("span");
+			t4 = text(t4_value);
+			attr(span0, "class", "fg-ws-icon svelte-fq6k1p");
+			attr(span1, "class", "fg-ws-label svelte-fq6k1p");
+			attr(span2, "class", "fg-ws-val svelte-fq6k1p");
+			set_style(span2, "font-size", "9px");
+			attr(div, "class", "fg-ws-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, span0);
+			append(div, t1);
+			append(div, span1);
+			append(div, t3);
+			append(div, span2);
+			append(span2, t4);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*heat*/ 65536 && t4_value !== (t4_value = /*heat*/ ctx[16].zoneInfo.monitoringSchedule + "")) set_data(t4, t4_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (184:8) {:else}
+function create_else_block_1(ctx) {
+	let div;
+	let t0;
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("🔒 WBGT, Apparent Temp A/B, mandatory controls & monitoring schedule\n            ");
+			button = element("button");
+			button.textContent = "Upgrade to Pro →";
+			attr(button, "class", "fg-lock-btn svelte-fq6k1p");
+			attr(div, "class", "fg-lock svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, button);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_9*/ ctx[70]);
+				mounted = true;
+			}
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (179:8) {#if isPro}
+function create_if_block_10(ctx) {
+	let div;
+	let t0;
+	let t1_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].label + "";
+	let t1;
+	let t2;
+	let t3_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].adjustment + "";
+	let t3;
+	let t4;
+	let t5;
+	let if_block_anchor;
+	let if_block = /*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[27] && create_if_block_11(ctx);
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("PPE: ");
+			t1 = text(t1_value);
+			t2 = text(" (+");
+			t3 = text(t3_value);
+			t4 = text("°C)");
+			t5 = space();
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+			attr(div, "class", "fg-ppe-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+			append(div, t2);
+			append(div, t3);
+			append(div, t4);
+			insert(target, t5, anchor);
+			if (if_block) if_block.m(target, anchor);
+			insert(target, if_block_anchor, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*settings*/ 4 && t1_value !== (t1_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].label + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*settings*/ 4 && t3_value !== (t3_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].adjustment + "")) set_data(t3, t3_value);
+
+			if (/*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[27]) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_11(ctx);
+					if_block.c();
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+				detach(t5);
+				detach(if_block_anchor);
+			}
+
+			if (if_block) if_block.d(detaching);
+		}
+	};
+}
+
+// (181:10) {#if worstCaseMode && worstModelLabel}
+function create_if_block_11(ctx) {
+	let div;
+	let t0;
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("⚡ Worst case: ");
+			t1 = text(/*worstModelLabel*/ ctx[27]);
+			attr(div, "class", "fg-ppe-row svelte-fq6k1p");
+			set_style(div, "color", "#38bdf8");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*worstModelLabel*/ 134217728) set_data(t1, /*worstModelLabel*/ ctx[27]);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (192:6) {#if isPro}
+function create_if_block_9(ctx) {
+	let div1;
+	let div0;
+	let t0;
+	let t1_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "";
+	let t1;
+	let t2;
+	let t3;
+	let each_value_3 = ensure_array_like(/*heat*/ ctx[16].zoneInfo.mandatoryControls);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_3.length; i += 1) {
+		each_blocks[i] = create_each_block_3(get_each_context_3(ctx, each_value_3, i));
+	}
+
+	return {
+		c() {
+			div1 = element("div");
+			div0 = element("div");
+			t0 = text("⚠ Mandatory Controls (");
+			t1 = text(t1_value);
+			t2 = text(")");
+			t3 = space();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-card svelte-fq6k1p");
+			set_style(div1, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+		},
+		m(target, anchor) {
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div0, t0);
+			append(div0, t1);
+			append(div0, t2);
+			append(div1, t3);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div1, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*heat*/ 65536) {
+				each_value_3 = ensure_array_like(/*heat*/ ctx[16].zoneInfo.mandatoryControls);
+				let i;
+
+				for (i = 0; i < each_value_3.length; i += 1) {
+					const child_ctx = get_each_context_3(ctx, each_value_3, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_3(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(div1, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_3.length;
+			}
+
+			if (dirty[0] & /*heat*/ 65536) {
+				set_style(div1, "border-color", /*heat*/ ctx[16].zoneInfo.color);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div1);
+			}
+
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (195:8) {#each heat.zoneInfo.mandatoryControls as ctrl}
+function create_each_block_3(ctx) {
+	let div;
+	let t0;
+	let t1_value = /*ctrl*/ ctx[130] + "";
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("▸ ");
+			t1 = text(t1_value);
+			attr(div, "class", "fg-control-item svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*ctrl*/ ctx[130] + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (307:6) {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
+function create_if_block_7(ctx) {
+	let div12;
+	let div0;
+	let t0;
+	let span;
+	let t1_value = /*coldResult*/ ctx[19].riskLabel + "";
+	let t1;
+	let t2;
+	let div10;
+	let div3;
+	let div1;
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38]) + "";
+	let t3;
+	let t4;
+	let div2;
+	let t6;
+	let div6;
+	let div4;
+	let t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[38]) + "";
+	let t7;
+	let t8;
+	let div5;
+	let t10;
+	let div9;
+	let div7;
+	let t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "";
+	let t11;
+	let t12;
+	let div8;
+	let t14;
+	let div11;
+	let t15;
+	let t16_value = /*coldResult*/ ctx[19].frostbite + "";
+	let t16;
+	let t17;
+	let each_value_2 = ensure_array_like(/*coldResult*/ ctx[19].controls);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_2.length; i += 1) {
+		each_blocks[i] = create_each_block_2(get_each_context_2(ctx, each_value_2, i));
+	}
+
+	return {
+		c() {
+			div12 = element("div");
+			div0 = element("div");
+			t0 = text("❄ Cold Stress / Wind Chill\n            ");
+			span = element("span");
+			t1 = text(t1_value);
+			t2 = space();
+			div10 = element("div");
+			div3 = element("div");
+			div1 = element("div");
+			t3 = text(t3_value);
+			t4 = space();
+			div2 = element("div");
+			div2.textContent = "Air Temp";
+			t6 = space();
+			div6 = element("div");
+			div4 = element("div");
+			t7 = text(t7_value);
+			t8 = space();
+			div5 = element("div");
+			div5.textContent = "Wind Chill";
+			t10 = space();
+			div9 = element("div");
+			div7 = element("div");
+			t11 = text(t11_value);
+			t12 = space();
+			div8 = element("div");
+			div8.textContent = "Wind";
+			t14 = space();
+			div11 = element("div");
+			t15 = text("🥶 ");
+			t16 = text(t16_value);
+			t17 = space();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(span, "class", "fg-badge svelte-fq6k1p");
+			set_style(span, "background", /*coldResult*/ ctx[19].riskColor);
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div2, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div3, "class", "fg-metric svelte-fq6k1p");
+			attr(div4, "class", "fg-metric-val svelte-fq6k1p");
+			set_style(div4, "color", /*coldResult*/ ctx[19].riskColor);
+			attr(div5, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div6, "class", "fg-metric svelte-fq6k1p");
+			attr(div7, "class", "fg-metric-val svelte-fq6k1p");
+			attr(div8, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div9, "class", "fg-metric svelte-fq6k1p");
+			attr(div10, "class", "fg-metrics-grid svelte-fq6k1p");
+			attr(div11, "class", "fg-threshold-row svelte-fq6k1p");
+			attr(div12, "class", "fg-card svelte-fq6k1p");
+			set_style(div12, "border-color", /*coldResult*/ ctx[19].riskColor);
+		},
+		m(target, anchor) {
+			insert(target, div12, anchor);
+			append(div12, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(span, t1);
+			append(div12, t2);
+			append(div12, div10);
+			append(div10, div3);
+			append(div3, div1);
+			append(div1, t3);
+			append(div3, t4);
+			append(div3, div2);
+			append(div10, t6);
+			append(div10, div6);
+			append(div6, div4);
+			append(div4, t7);
+			append(div6, t8);
+			append(div6, div5);
+			append(div10, t10);
+			append(div10, div9);
+			append(div9, div7);
+			append(div7, t11);
+			append(div9, t12);
+			append(div9, div8);
+			append(div12, t14);
+			append(div12, div11);
+			append(div11, t15);
+			append(div11, t16);
+			append(div12, t17);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div12, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*coldResult*/ ctx[19].riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*coldResult*/ 524288) {
+				set_style(span, "background", /*coldResult*/ ctx[19].riskColor);
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[38]) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*coldResult*/ 524288 | dirty[1] & /*units*/ 128 && t7_value !== (t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[38]) + "")) set_data(t7, t7_value);
+
+			if (dirty[0] & /*coldResult*/ 524288) {
+				set_style(div4, "color", /*coldResult*/ ctx[19].riskColor);
+			}
+
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 128 && t11_value !== (t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[38]) + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*coldResult*/ 524288 && t16_value !== (t16_value = /*coldResult*/ ctx[19].frostbite + "")) set_data(t16, t16_value);
+
+			if (dirty[0] & /*coldResult*/ 524288) {
+				each_value_2 = ensure_array_like(/*coldResult*/ ctx[19].controls);
+				let i;
+
+				for (i = 0; i < each_value_2.length; i += 1) {
+					const child_ctx = get_each_context_2(ctx, each_value_2, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_2(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(div12, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_2.length;
+			}
+
+			if (dirty[0] & /*coldResult*/ 524288) {
+				set_style(div12, "border-color", /*coldResult*/ ctx[19].riskColor);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div12);
+			}
+
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (328:10) {#each coldResult.controls as ctrl}
+function create_each_block_2(ctx) {
+	let div;
+	let t0;
+	let t1_value = /*ctrl*/ ctx[130] + "";
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("▸ ");
+			t1 = text(t1_value);
+			attr(div, "class", "fg-control-item svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*ctrl*/ ctx[130] + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (335:6) {#if selectedHazard === 'rain' && isPro && thunderResult}
+function create_if_block_5(ctx) {
+	let div2;
+	let div0;
+	let t0;
+	let span;
+	let t1_value = /*thunderResult*/ ctx[20].riskLabel + "";
+	let t1;
+	let t2;
+	let t3;
+	let div1;
+	let t4;
+	let t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[38]) + "";
+	let t5;
+	let t6;
+	let t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[38]) + "";
+	let t7;
+	let t8;
+	let t9;
+
+	function select_block_type_9(ctx, dirty) {
+		if (/*thunderResult*/ ctx[20].available) return create_if_block_6;
+		return create_else_block;
+	}
+
+	let current_block_type = select_block_type_9(ctx);
+	let if_block = current_block_type(ctx);
+	let each_value_1 = ensure_array_like(/*thunderResult*/ ctx[20].guidance);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_1.length; i += 1) {
+		each_blocks[i] = create_each_block_1(get_each_context_1(ctx, each_value_1, i));
+	}
+
+	return {
+		c() {
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text("⛈ Thunderstorm / Lightning Risk\n            ");
+			span = element("span");
+			t1 = text(t1_value);
+			t2 = space();
+			if_block.c();
+			t3 = space();
+			div1 = element("div");
+			t4 = text("⚡ Lightning warning zone: ⌀ ");
+			t5 = text(t5_value);
+			t6 = text(" diameter (");
+			t7 = text(t7_value);
+			t8 = text(" radius)");
+			t9 = space();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(span, "class", "fg-badge svelte-fq6k1p");
+			set_style(span, "background", /*thunderResult*/ ctx[20].riskColor);
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(div1, "class", "fg-threshold-row svelte-fq6k1p");
+			attr(div2, "class", "fg-card svelte-fq6k1p");
+			set_style(div2, "border-color", /*thunderResult*/ ctx[20].riskColor);
+		},
+		m(target, anchor) {
+			insert(target, div2, anchor);
+			append(div2, div0);
+			append(div0, t0);
+			append(div0, span);
+			append(span, t1);
+			append(div2, t2);
+			if_block.m(div2, null);
+			append(div2, t3);
+			append(div2, div1);
+			append(div1, t4);
+			append(div1, t5);
+			append(div1, t6);
+			append(div1, t7);
+			append(div1, t8);
+			append(div2, t9);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div2, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*thunderResult*/ ctx[20].riskLabel + "")) set_data(t1, t1_value);
+
+			if (dirty[0] & /*thunderResult*/ 1048576) {
+				set_style(span, "background", /*thunderResult*/ ctx[20].riskColor);
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_9(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
+			} else {
+				if_block.d(1);
+				if_block = current_block_type(ctx);
+
+				if (if_block) {
+					if_block.c();
+					if_block.m(div2, t3);
+				}
+			}
+
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t5_value !== (t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[38]) + "")) set_data(t5, t5_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 128 && t7_value !== (t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[38]) + "")) set_data(t7, t7_value);
+
+			if (dirty[0] & /*thunderResult*/ 1048576) {
+				each_value_1 = ensure_array_like(/*thunderResult*/ ctx[20].guidance);
+				let i;
+
+				for (i = 0; i < each_value_1.length; i += 1) {
+					const child_ctx = get_each_context_1(ctx, each_value_1, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_1(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(div2, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_1.length;
+			}
+
+			if (dirty[0] & /*thunderResult*/ 1048576) {
+				set_style(div2, "border-color", /*thunderResult*/ ctx[20].riskColor);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div2);
+			}
+
+			if_block.d();
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (352:10) {:else}
+function create_else_block(ctx) {
+	let div;
+	let t_1_value = /*thunderResult*/ ctx[20].instability + "";
+	let t_1;
+
+	return {
+		c() {
+			div = element("div");
+			t_1 = text(t_1_value);
+			attr(div, "class", "fg-threshold-row svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t_1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*thunderResult*/ 1048576 && t_1_value !== (t_1_value = /*thunderResult*/ ctx[20].instability + "")) set_data(t_1, t_1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (341:10) {#if thunderResult.available}
+function create_if_block_6(ctx) {
+	let div6;
+	let div2;
+	let div0;
+	let t0_value = /*thunderResult*/ ctx[20].capeJkg + "";
+	let t0;
+	let t1;
+	let div1;
+	let t3;
+	let div5;
+	let div3;
+	let t4_value = /*thunderResult*/ ctx[20].instability + "";
+	let t4;
+	let t5;
+	let div4;
+
+	return {
+		c() {
+			div6 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			div1 = element("div");
+			div1.textContent = "CAPE J/kg";
+			t3 = space();
+			div5 = element("div");
+			div3 = element("div");
+			t4 = text(t4_value);
+			t5 = space();
+			div4 = element("div");
+			div4.textContent = "Instability";
+			attr(div0, "class", "fg-metric-val svelte-fq6k1p");
+			set_style(div0, "color", /*thunderResult*/ ctx[20].riskColor);
+			attr(div1, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div2, "class", "fg-metric svelte-fq6k1p");
+			attr(div3, "class", "fg-metric-val svelte-fq6k1p");
+			set_style(div3, "font-size", "11px");
+			attr(div4, "class", "fg-metric-lbl svelte-fq6k1p");
+			attr(div5, "class", "fg-metric svelte-fq6k1p");
+			set_style(div5, "grid-column", "span 2");
+			attr(div6, "class", "fg-metrics-grid svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div6, anchor);
+			append(div6, div2);
+			append(div2, div0);
+			append(div0, t0);
+			append(div2, t1);
+			append(div2, div1);
+			append(div6, t3);
+			append(div6, div5);
+			append(div5, div3);
+			append(div3, t4);
+			append(div5, t5);
+			append(div5, div4);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*thunderResult*/ 1048576 && t0_value !== (t0_value = /*thunderResult*/ ctx[20].capeJkg + "")) set_data(t0, t0_value);
+
+			if (dirty[0] & /*thunderResult*/ 1048576) {
+				set_style(div0, "color", /*thunderResult*/ ctx[20].riskColor);
+			}
+
+			if (dirty[0] & /*thunderResult*/ 1048576 && t4_value !== (t4_value = /*thunderResult*/ ctx[20].instability + "")) set_data(t4, t4_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div6);
+			}
+		}
+	};
+}
+
+// (356:10) {#each thunderResult.guidance as g}
+function create_each_block_1(ctx) {
+	let div;
+	let t0;
+	let t1_value = /*g*/ ctx[127] + "";
+	let t1;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = text("▸ ");
+			t1 = text(t1_value);
+			attr(div, "class", "fg-control-item svelte-fq6k1p");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t0);
+			append(div, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*g*/ ctx[127] + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (363:6) {#if worstCaseMode && modelResults.length > 1}
 function create_if_block_4(ctx) {
+	let div1;
+	let div0;
+	let t1;
 	let table;
 	let thead;
-	let t4;
+	let t6;
 	let tbody;
-	let each_value = ensure_array_like(/*modelResults*/ ctx[12]);
+	let each_value = ensure_array_like(/*modelResults*/ ctx[22]);
 	let each_blocks = [];
 
 	for (let i = 0; i < each_value.length; i += 1) {
@@ -7967,22 +9254,31 @@ function create_if_block_4(ctx) {
 
 	return {
 		c() {
+			div1 = element("div");
+			div0 = element("div");
+			div0.textContent = "📊 Model Comparison";
+			t1 = space();
 			table = element("table");
 			thead = element("thead");
-			thead.innerHTML = `<tr><th class="svelte-apo8v3">Model</th><th class="svelte-apo8v3">Zone</th><th class="svelte-apo8v3">App.T</th><th class="svelte-apo8v3">Wind</th></tr>`;
-			t4 = space();
+			thead.innerHTML = `<tr><th class="svelte-fq6k1p">Model</th><th class="svelte-fq6k1p">Zone</th><th class="svelte-fq6k1p">App.T</th><th class="svelte-fq6k1p">Wind</th></tr>`;
+			t6 = space();
 			tbody = element("tbody");
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
-			attr(table, "class", "fg-tbl svelte-apo8v3");
+			attr(div0, "class", "fg-card-header svelte-fq6k1p");
+			attr(table, "class", "fg-table svelte-fq6k1p");
+			attr(div1, "class", "fg-card fg-card-flat svelte-fq6k1p");
 		},
 		m(target, anchor) {
-			insert(target, table, anchor);
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div1, t1);
+			append(div1, table);
 			append(table, thead);
-			append(table, t4);
+			append(table, t6);
 			append(table, tbody);
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
@@ -7992,8 +9288,8 @@ function create_if_block_4(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4096) {
-				each_value = ensure_array_like(/*modelResults*/ ctx[12]);
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 128) {
+				each_value = ensure_array_like(/*modelResults*/ ctx[22]);
 				let i;
 
 				for (i = 0; i < each_value.length; i += 1) {
@@ -8017,7 +9313,7 @@ function create_if_block_4(ctx) {
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(table);
+				detach(div1);
 			}
 
 			destroy_each(each_blocks, detaching);
@@ -8025,32 +9321,31 @@ function create_if_block_4(ctx) {
 	};
 }
 
-// (293:14) {#each modelResults as mr}
+// (369:14) {#each modelResults as mr}
 function create_each_block(ctx) {
 	let tr;
 	let td0;
-	let t0_value = /*mr*/ ctx[105].modelLabel + "";
+	let t0_value = /*mr*/ ctx[124].modelLabel + "";
 	let t0;
-	let t1_value = (/*mr*/ ctx[105].isWorst ? ' ⚡' : '') + "";
+	let t1_value = (/*mr*/ ctx[124].isWorst ? ' ⚡' : '') + "";
 	let t1;
 	let t2;
 	let td1;
-	let t3_value = /*mr*/ ctx[105].heat.zoneInfo.riskLabel + "";
+	let t3_value = /*mr*/ ctx[124].heat.zoneInfo.riskLabel + "";
 	let t3;
 	let t4;
 	let td2;
 
-	let t5_value = (/*mr*/ ctx[105].heat.apparentTempFinal === 999
+	let t5_value = (/*mr*/ ctx[124].heat.apparentTempFinal === 999
 	? 'NW'
-	: /*mr*/ ctx[105].heat.apparentTempFinal + '°C') + "";
+	: fmtTemp(/*mr*/ ctx[124].heat.apparentTempFinal, /*units*/ ctx[38])) + "";
 
 	let t5;
 	let t6;
 	let td3;
-	let t7_value = /*mr*/ ctx[105].raw.windMs.toFixed(1) + "";
+	let t7_value = fmtWind(/*mr*/ ctx[124].raw.windMs, /*units*/ ctx[38]) + "";
 	let t7;
 	let t8;
-	let t9;
 	let tr_class_value;
 
 	return {
@@ -8068,16 +9363,15 @@ function create_each_block(ctx) {
 			t6 = space();
 			td3 = element("td");
 			t7 = text(t7_value);
-			t8 = text(" m/s");
-			t9 = space();
-			attr(td0, "class", "svelte-apo8v3");
-			set_style(td1, "color", /*mr*/ ctx[105].heat.zoneInfo.color);
-			attr(td1, "class", "svelte-apo8v3");
-			set_style(td2, "color", /*mr*/ ctx[105].heat.zoneInfo.color);
-			attr(td2, "class", "svelte-apo8v3");
-			set_style(td3, "color", /*mr*/ ctx[105].wind.riskColor);
-			attr(td3, "class", "svelte-apo8v3");
-			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[105].isWorst ? 'fg-tbl-b' : '') + " svelte-apo8v3"));
+			t8 = space();
+			attr(td0, "class", "svelte-fq6k1p");
+			set_style(td1, "color", /*mr*/ ctx[124].heat.zoneInfo.color);
+			attr(td1, "class", "svelte-fq6k1p");
+			set_style(td2, "color", /*mr*/ ctx[124].heat.zoneInfo.color);
+			attr(td2, "class", "svelte-fq6k1p");
+			set_style(td3, "color", /*mr*/ ctx[124].wind.riskColor);
+			attr(td3, "class", "svelte-fq6k1p");
+			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[124].isWorst ? 'fg-worst-row' : '') + " svelte-fq6k1p"));
 		},
 		m(target, anchor) {
 			insert(target, tr, anchor);
@@ -8093,33 +9387,32 @@ function create_each_block(ctx) {
 			append(tr, t6);
 			append(tr, td3);
 			append(td3, t7);
-			append(td3, t8);
-			append(tr, t9);
+			append(tr, t8);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4096 && t0_value !== (t0_value = /*mr*/ ctx[105].modelLabel + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*modelResults*/ 4096 && t1_value !== (t1_value = (/*mr*/ ctx[105].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*modelResults*/ 4096 && t3_value !== (t3_value = /*mr*/ ctx[105].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t0_value !== (t0_value = /*mr*/ ctx[124].modelLabel + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t1_value !== (t1_value = (/*mr*/ ctx[124].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t3_value !== (t3_value = /*mr*/ ctx[124].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
 
-			if (dirty[0] & /*modelResults*/ 4096) {
-				set_style(td1, "color", /*mr*/ ctx[105].heat.zoneInfo.color);
+			if (dirty[0] & /*modelResults*/ 4194304) {
+				set_style(td1, "color", /*mr*/ ctx[124].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4096 && t5_value !== (t5_value = (/*mr*/ ctx[105].heat.apparentTempFinal === 999
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 128 && t5_value !== (t5_value = (/*mr*/ ctx[124].heat.apparentTempFinal === 999
 			? 'NW'
-			: /*mr*/ ctx[105].heat.apparentTempFinal + '°C') + "")) set_data(t5, t5_value);
+			: fmtTemp(/*mr*/ ctx[124].heat.apparentTempFinal, /*units*/ ctx[38])) + "")) set_data(t5, t5_value);
 
-			if (dirty[0] & /*modelResults*/ 4096) {
-				set_style(td2, "color", /*mr*/ ctx[105].heat.zoneInfo.color);
+			if (dirty[0] & /*modelResults*/ 4194304) {
+				set_style(td2, "color", /*mr*/ ctx[124].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4096 && t7_value !== (t7_value = /*mr*/ ctx[105].raw.windMs.toFixed(1) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 128 && t7_value !== (t7_value = fmtWind(/*mr*/ ctx[124].raw.windMs, /*units*/ ctx[38]) + "")) set_data(t7, t7_value);
 
-			if (dirty[0] & /*modelResults*/ 4096) {
-				set_style(td3, "color", /*mr*/ ctx[105].wind.riskColor);
+			if (dirty[0] & /*modelResults*/ 4194304) {
+				set_style(td3, "color", /*mr*/ ctx[124].wind.riskColor);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4096 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[105].isWorst ? 'fg-tbl-b' : '') + " svelte-apo8v3"))) {
+			if (dirty[0] & /*modelResults*/ 4194304 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[124].isWorst ? 'fg-worst-row' : '') + " svelte-fq6k1p"))) {
 				attr(tr, "class", tr_class_value);
 			}
 		},
@@ -8133,300 +9426,130 @@ function create_each_block(ctx) {
 
 function create_fragment(ctx) {
 	let section;
-	let div1;
-	let div0;
-	let t1;
 	let div3;
-	let img;
-	let img_src_value;
-	let t2;
 	let span0;
-	let t4;
+	let t1;
 	let div2;
+	let t5;
+	let span1;
+
+	let t6_value = (/*isPro*/ ctx[3]
+	? /*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO'
+	: 'FREE') + "";
+
+	let t6;
+	let span1_class_value;
+	let t7;
+	let button;
+	let t8_value = (/*tab*/ ctx[4] === 'settings' ? '← Back' : '⚙ Config') + "";
 	let t8;
-	let button0;
 	let t9;
 	let div4;
-	let span3;
-	let t11;
-	let span4;
-	let t12_value = (/*lat*/ ctx[1].toFixed(3) + ', ' + /*lon*/ ctx[2].toFixed(3)) + "";
-	let t12;
-	let t13;
-	let span6;
-	let span5;
-	let t14;
-	let t15;
-	let t16;
-	let button1;
-	let t17_value = (/*locationLocked*/ ctx[3] ? '🔒' : '📌') + "";
-	let t17;
-	let button1_class_value;
-	let button1_title_value;
-	let t18;
-	let show_if = /*isPro*/ ctx[38]() && !/*locationLocked*/ ctx[3];
-	let t19;
-	let div5;
-	let t20;
-	let div6;
-	let t21;
-	let div8;
-	let div7;
-	let t22;
+	let t10;
 	let mounted;
 	let dispose;
+	let each_value_10 = ensure_array_like(/*TABS*/ ctx[41]);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_10.length; i += 1) {
+		each_blocks[i] = create_each_block_10(get_each_context_10(ctx, each_value_10, i));
+	}
 
 	function select_block_type(ctx, dirty) {
-		if (/*isNight*/ ctx[20]) return create_if_block_41;
-		return create_else_block_12;
+		if (/*tab*/ ctx[4] === 'dashboard') return create_if_block;
+		if (/*tab*/ ctx[4] === 'emergency') return create_if_block_28;
+		if (/*tab*/ ctx[4] === 'report') return create_if_block_32;
+		if (/*tab*/ ctx[4] === 'settings') return create_if_block_35;
 	}
 
 	let current_block_type = select_block_type(ctx);
-	let if_block0 = current_block_type(ctx);
-	let if_block1 = show_if && create_if_block_40();
-
-	function select_block_type_1(ctx, dirty) {
-		if (/*loading*/ ctx[4]) return create_if_block_37;
-		if (/*heat*/ ctx[9]) return create_if_block_38;
-		return create_else_block_11;
-	}
-
-	let current_block_type_1 = select_block_type_1(ctx);
-	let if_block2 = current_block_type_1(ctx);
-	let if_block3 = /*heat*/ ctx[9] && create_if_block_35(ctx);
-	let each_value_8 = ensure_array_like(/*TABS*/ ctx[41]);
-	let each_blocks = [];
-
-	for (let i = 0; i < each_value_8.length; i += 1) {
-		each_blocks[i] = create_each_block_8(get_each_context_8(ctx, each_value_8, i));
-	}
-
-	function select_block_type_3(ctx, dirty) {
-		if (/*tab*/ ctx[0] === 'dashboard') return create_if_block;
-		if (/*tab*/ ctx[0] === 'sos') return create_if_block_18;
-		if (/*tab*/ ctx[0] === 'report') return create_if_block_21;
-		if (/*tab*/ ctx[0] === 'settings') return create_if_block_30;
-	}
-
-	let current_block_type_2 = select_block_type_3(ctx);
-	let if_block4 = current_block_type_2 && current_block_type_2(ctx);
+	let if_block = current_block_type && current_block_type(ctx);
 
 	return {
 		c() {
 			section = element("section");
-			div1 = element("div");
-			div0 = element("div");
-			div0.textContent = "🛡️ FieldGuard — HSE Safety";
-			t1 = space();
 			div3 = element("div");
-			img = element("img");
-			t2 = space();
 			span0 = element("span");
 			span0.textContent = "🛡️";
-			t4 = space();
+			t1 = space();
 			div2 = element("div");
-			div2.innerHTML = `<span class="fg-head-title svelte-apo8v3">FieldGuard</span> <span class="fg-head-sub svelte-apo8v3">Real-time Heat &amp; Weather Safety</span>`;
-			t8 = space();
-			button0 = element("button");
-			button0.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>`;
+			div2.innerHTML = `<div class="fg-title svelte-fq6k1p">FieldGuard</div> <div class="fg-subtitle svelte-fq6k1p">Heat · Cold · Wind · Rain · Storm</div>`;
+			t5 = space();
+			span1 = element("span");
+			t6 = text(t6_value);
+			t7 = space();
+			button = element("button");
+			t8 = text(t8_value);
 			t9 = space();
 			div4 = element("div");
-			span3 = element("span");
-			span3.textContent = "📍";
-			t11 = space();
-			span4 = element("span");
-			t12 = text(t12_value);
-			t13 = space();
-			span6 = element("span");
-			span5 = element("span");
-			t14 = text(/*currentTime*/ ctx[6]);
-			t15 = space();
-			if_block0.c();
-			t16 = space();
-			button1 = element("button");
-			t17 = text(t17_value);
-			t18 = space();
-			if (if_block1) if_block1.c();
-			t19 = space();
-			div5 = element("div");
-			if_block2.c();
-			t20 = space();
-			div6 = element("div");
-			if (if_block3) if_block3.c();
-			t21 = space();
-			div8 = element("div");
-			div7 = element("div");
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
-			t22 = space();
-			if (if_block4) if_block4.c();
-			attr(div0, "class", "plugin__title plugin__title--chevron-back");
-			attr(div1, "class", "plugin__mobile-header");
-			attr(img, "class", "fg-head-logo svelte-apo8v3");
-			if (!src_url_equal(img.src, img_src_value = "./assets/logo-white.png")) attr(img, "src", img_src_value);
-			attr(img, "onerror", "this.style.display='none';this.nextElementSibling.style.display='block'");
-			attr(img, "alt", "");
-			attr(span0, "class", "fg-head-shield svelte-apo8v3");
-			set_style(span0, "display", "none");
-			attr(div2, "class", "fg-head-txt svelte-apo8v3");
-			attr(button0, "class", "fg-icon-btn svelte-apo8v3");
-			attr(button0, "title", "Refresh");
-			attr(div3, "class", "fg-head svelte-apo8v3");
-			attr(span4, "class", "fg-loc-name svelte-apo8v3");
-			attr(span5, "class", "fg-loc-t svelte-apo8v3");
-			attr(button1, "class", button1_class_value = "fg-lock-btn " + (/*locationLocked*/ ctx[3] ? 'locked' : '') + " svelte-apo8v3");
-
-			attr(button1, "title", button1_title_value = /*locationLocked*/ ctx[3]
-			? 'Location locked — click to unlock'
-			: 'Click to lock location');
-
-			attr(span6, "class", "fg-loc-r svelte-apo8v3");
-			attr(div4, "class", "fg-loc svelte-apo8v3");
-			attr(div5, "class", "fg-summary svelte-apo8v3");
-			attr(div6, "class", "fg-pills desktoponly svelte-apo8v3");
-			attr(div7, "class", "fg-tabs svelte-apo8v3");
-			attr(div8, "class", "fg-desktop svelte-apo8v3");
-			attr(section, "class", "plugin__content fg svelte-apo8v3");
+			t10 = space();
+			if (if_block) if_block.c();
+			attr(span0, "class", "fg-logo svelte-fq6k1p");
+			attr(div2, "class", "fg-titlewrap svelte-fq6k1p");
+			attr(span1, "class", span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-fq6k1p");
+			attr(button, "class", "fg-settings-btn svelte-fq6k1p");
+			attr(div3, "class", "fg-header svelte-fq6k1p");
+			attr(div4, "class", "fg-tabs svelte-fq6k1p");
+			attr(section, "class", "plugin__content fieldguard svelte-fq6k1p");
 		},
 		m(target, anchor) {
 			insert(target, section, anchor);
-			append(section, div1);
-			append(div1, div0);
-			append(section, t1);
 			append(section, div3);
-			append(div3, img);
-			append(div3, t2);
 			append(div3, span0);
-			append(div3, t4);
+			append(div3, t1);
 			append(div3, div2);
-			append(div3, t8);
-			append(div3, button0);
+			append(div3, t5);
+			append(div3, span1);
+			append(span1, t6);
+			append(div3, t7);
+			append(div3, button);
+			append(button, t8);
 			append(section, t9);
 			append(section, div4);
-			append(div4, span3);
-			append(div4, t11);
-			append(div4, span4);
-			append(span4, t12);
-			append(div4, t13);
-			append(div4, span6);
-			append(span6, span5);
-			append(span5, t14);
-			append(span6, t15);
-			if_block0.m(span6, null);
-			append(span6, t16);
-			append(span6, button1);
-			append(button1, t17);
-			append(section, t18);
-			if (if_block1) if_block1.m(section, null);
-			append(section, t19);
-			append(section, div5);
-			if_block2.m(div5, null);
-			append(section, t20);
-			append(section, div6);
-			if (if_block3) if_block3.m(div6, null);
-			append(section, t21);
-			append(section, div8);
-			append(div8, div7);
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				if (each_blocks[i]) {
-					each_blocks[i].m(div7, null);
+					each_blocks[i].m(div4, null);
 				}
 			}
 
-			append(div8, t22);
-			if (if_block4) if_block4.m(div8, null);
+			append(section, t10);
+			if (if_block) if_block.m(section, null);
 
 			if (!mounted) {
-				dispose = [
-					listen(div0, "click", backToMenu),
-					listen(button0, "click", /*refreshData*/ ctx[43]),
-					listen(button1, "click", /*click_handler*/ ctx[51])
-				];
-
+				dispose = listen(button, "click", /*click_handler*/ ctx[58]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*lat, lon*/ 6 && t12_value !== (t12_value = (/*lat*/ ctx[1].toFixed(3) + ', ' + /*lon*/ ctx[2].toFixed(3)) + "")) set_data(t12, t12_value);
-			if (dirty[0] & /*currentTime*/ 64) set_data(t14, /*currentTime*/ ctx[6]);
+			if (dirty[0] & /*isPro, licenseTier*/ 9 && t6_value !== (t6_value = (/*isPro*/ ctx[3]
+			? /*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO'
+			: 'FREE') + "")) set_data(t6, t6_value);
 
-			if (current_block_type !== (current_block_type = select_block_type(ctx))) {
-				if_block0.d(1);
-				if_block0 = current_block_type(ctx);
-
-				if (if_block0) {
-					if_block0.c();
-					if_block0.m(span6, t16);
-				}
+			if (dirty[0] & /*isPro*/ 8 && span1_class_value !== (span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-fq6k1p")) {
+				attr(span1, "class", span1_class_value);
 			}
 
-			if (dirty[0] & /*locationLocked*/ 8 && t17_value !== (t17_value = (/*locationLocked*/ ctx[3] ? '🔒' : '📌') + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*tab*/ 16 && t8_value !== (t8_value = (/*tab*/ ctx[4] === 'settings' ? '← Back' : '⚙ Config') + "")) set_data(t8, t8_value);
 
-			if (dirty[0] & /*locationLocked*/ 8 && button1_class_value !== (button1_class_value = "fg-lock-btn " + (/*locationLocked*/ ctx[3] ? 'locked' : '') + " svelte-apo8v3")) {
-				attr(button1, "class", button1_class_value);
-			}
-
-			if (dirty[0] & /*locationLocked*/ 8 && button1_title_value !== (button1_title_value = /*locationLocked*/ ctx[3]
-			? 'Location locked — click to unlock'
-			: 'Click to lock location')) {
-				attr(button1, "title", button1_title_value);
-			}
-
-			if (dirty[0] & /*locationLocked*/ 8) show_if = /*isPro*/ ctx[38]() && !/*locationLocked*/ ctx[3];
-
-			if (show_if) {
-				if (if_block1) ; else {
-					if_block1 = create_if_block_40();
-					if_block1.c();
-					if_block1.m(section, t19);
-				}
-			} else if (if_block1) {
-				if_block1.d(1);
-				if_block1 = null;
-			}
-
-			if (current_block_type_1 === (current_block_type_1 = select_block_type_1(ctx)) && if_block2) {
-				if_block2.p(ctx, dirty);
-			} else {
-				if_block2.d(1);
-				if_block2 = current_block_type_1(ctx);
-
-				if (if_block2) {
-					if_block2.c();
-					if_block2.m(div5, null);
-				}
-			}
-
-			if (/*heat*/ ctx[9]) {
-				if (if_block3) {
-					if_block3.p(ctx, dirty);
-				} else {
-					if_block3 = create_if_block_35(ctx);
-					if_block3.c();
-					if_block3.m(div6, null);
-				}
-			} else if (if_block3) {
-				if_block3.d(1);
-				if_block3 = null;
-			}
-
-			if (dirty[0] & /*tab*/ 1 | dirty[1] & /*TABS*/ 1024) {
-				each_value_8 = ensure_array_like(/*TABS*/ ctx[41]);
+			if (dirty[0] & /*tab*/ 16 | dirty[1] & /*TABS*/ 1024) {
+				each_value_10 = ensure_array_like(/*TABS*/ ctx[41]);
 				let i;
 
-				for (i = 0; i < each_value_8.length; i += 1) {
-					const child_ctx = get_each_context_8(ctx, each_value_8, i);
+				for (i = 0; i < each_value_10.length; i += 1) {
+					const child_ctx = get_each_context_10(ctx, each_value_10, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_8(child_ctx);
+						each_blocks[i] = create_each_block_10(child_ctx);
 						each_blocks[i].c();
-						each_blocks[i].m(div7, null);
+						each_blocks[i].m(div4, null);
 					}
 				}
 
@@ -8434,18 +9557,18 @@ function create_fragment(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_8.length;
+				each_blocks.length = each_value_10.length;
 			}
 
-			if (current_block_type_2 === (current_block_type_2 = select_block_type_3(ctx)) && if_block4) {
-				if_block4.p(ctx, dirty);
+			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
 			} else {
-				if (if_block4) if_block4.d(1);
-				if_block4 = current_block_type_2 && current_block_type_2(ctx);
+				if (if_block) if_block.d(1);
+				if_block = current_block_type && current_block_type(ctx);
 
-				if (if_block4) {
-					if_block4.c();
-					if_block4.m(div8, null);
+				if (if_block) {
+					if_block.c();
+					if_block.m(section, null);
 				}
 			}
 		},
@@ -8456,78 +9579,19 @@ function create_fragment(ctx) {
 				detach(section);
 			}
 
-			if_block0.d();
-			if (if_block1) if_block1.d();
-			if_block2.d();
-			if (if_block3) if_block3.d();
 			destroy_each(each_blocks, detaching);
 
-			if (if_block4) {
-				if_block4.d();
+			if (if_block) {
+				if_block.d();
 			}
 
 			mounted = false;
-			run_all(dispose);
+			dispose();
 		}
 	};
 }
 
-function backToMenu() {
-	try {
-		window.W?.broadcast?.emit('rqstOpen', 'menu');
-	} catch {
-		
-	}
-}
-
-function calcHours(start, end) {
-	try {
-		const [sh, sm] = start.split(':').map(Number);
-		const [eh, em] = end.split(':').map(Number);
-		return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
-	} catch {
-		return 0;
-	}
-}
-
-function calcSolarPosition(latDeg, lonDeg, date) {
-	const JD = date.getTime() / 86400000 + 2440587.5;
-	const n = JD - 2451545.0;
-	const L = (280.46 + 0.9856474 * n) % 360;
-	const g = (357.528 + 0.9856003 * n) % 360 * Math.PI / 180;
-	const lambda = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * Math.PI / 180;
-	const epsilon = 23.439 * Math.PI / 180;
-	const sinDec = Math.sin(epsilon) * Math.sin(lambda);
-	const dec = Math.asin(sinDec);
-	const UT = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
-	const LSTM = 15 * Math.round(lonDeg / 15);
-	const B = 360 / 365 * (n - 81) * Math.PI / 180;
-	const EoT = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
-	const TC = 4 * (lonDeg - LSTM) + EoT;
-	const LST = UT + TC / 60;
-	const HRA = (LST - 12) * 15 * Math.PI / 180;
-	const latRad = latDeg * Math.PI / 180;
-	const sinElev = Math.sin(latRad) * Math.sin(dec) + Math.cos(latRad) * Math.cos(dec) * Math.cos(HRA);
-	const elev = Math.asin(sinElev) * 180 / Math.PI;
-	const cosHA_rise = -Math.tan(latRad) * Math.tan(dec);
-	const HA_rise = Math.acos(Math.max(-1, Math.min(1, cosHA_rise))) * 180 / Math.PI;
-	const sunrise_LST = 12 - HA_rise / 15;
-	const sunset_LST = 12 + HA_rise / 15;
-
-	return {
-		elev,
-		LST,
-		sunrise_LST,
-		sunset_LST,
-		solarNoon_LST: 12
-	};
-}
-
-function fmtLocalSolarTime(lst) {
-	const h = Math.floor((lst % 24 + 24) % 24);
-	const m = Math.floor((lst - Math.floor(lst)) * 60);
-	return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
+const LICENSE_API = 'https://fieldguard-hse.com/api/validate';
 
 function zoneSeverity(zone) {
 	return ({
@@ -8539,323 +9603,58 @@ function zoneSeverity(zone) {
 	})[zone] ?? 0;
 }
 
-function getLocationClockTime(latDeg, lonDeg) {
-	try {
-		const offsetH = Math.round(lonDeg / 15);
-		const absH = Math.abs(offsetH);
-
-		const tzName = offsetH === 0
-		? 'Etc/GMT'
-		: offsetH > 0 ? 'Etc/GMT-' + absH : 'Etc/GMT+' + absH;
-
-		return new Intl.DateTimeFormat('en-GB',
-		{
-				hour: '2-digit',
-				minute: '2-digit',
-				hour12: false,
-				timeZone: tzName
-			}).format(new Date());
-	} catch {
-		const utcOffsetH = lonDeg / 15;
-		const now = new Date();
-		const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-		return new Date(utcMs + utcOffsetH * 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function triggerNotification(title, body) {
+	if ('Notification' in window) {
+		if (Notification.permission === 'granted') new Notification(`FieldGuard: ${title}`, { body }); else Notification.requestPermission();
 	}
 }
 
 function instance($$self, $$props, $$invalidate) {
+	let isPro;
+	let units;
 	let tab = 'dashboard';
 	let lat = 23.6, lon = 58.6;
-	let locationLocked = true;
+	let locationName = '';
 	let loading = false, error = '';
 	let currentTime = '';
-	let activeCard = 'heat';
-	let mapClickHandler = null;
+	let locked = false;
+	let isDay = true;
+	let sunElevation = 0;
+	let countryCode = '', countryName = '';
+	let activeBan = null;
+	let geocodedFor = '';
 	let rawData = null;
 	let heat = null;
 	let windResult = null;
 	let rainResult = null;
+	let coldResult = null;
+	let thunderResult = null;
+	let selectedHazard = 'heat';
 	let modelResults = [];
+	let licenseKey = '';
+	let licenseTier = '';
+	let licenseExpires = '';
+	let licenseMsg = '';
+	let licenseChecking = false;
 	let worstModelLabel = '';
 	let selectedModel = 'ecmwf';
-	let worstCaseMode = false;
+	let worstCaseMode = true;
 	let alertLog = [];
-	let autoRefreshTimer = null;
 	let reportText = '';
-	let suspensions = [];
+	let autoRefreshTimer = null;
+	let savedSites = [];
+	let activeSiteId = '';
+	let newSiteName = '';
+	let isStale = false, staleTime = '';
+	let bgStatus = {};
 
-	let suspForm = {
-		date: '',
-		startTime: '',
-		endTime: '',
-		trigger: 'RED zone',
-		trades: '',
-		workers: 0
-	};
-
-	let showSuspForm = false;
-
-	function loadSuspensions() {
-		try {
-			const s = localStorage.getItem('fg_suspensions');
-			if (s) $$invalidate(17, suspensions = JSON.parse(s));
-		} catch {
-			
-		}
+	function maxSites() {
+		if (!isPro) return 1;
+		return licenseTier === 'site' ? 10 : 3;
 	}
 
-	function saveSuspensions() {
-		try {
-			localStorage.setItem('fg_suspensions', JSON.stringify(suspensions));
-		} catch {
-			
-		}
-	}
-
-	function addSuspension() {
-		if (!suspForm.date || !suspForm.startTime || !suspForm.endTime) return;
-		$$invalidate(17, suspensions = [...suspensions, { ...suspForm, id: Date.now() }]);
-		saveSuspensions();
-
-		$$invalidate(18, suspForm = {
-			date: '',
-			startTime: '',
-			endTime: '',
-			trigger: 'RED zone',
-			trades: '',
-			workers: 0
-		});
-
-		$$invalidate(19, showSuspForm = false);
-	}
-
-	function deleteSuspension(id) {
-		$$invalidate(17, suspensions = suspensions.filter(s => s.id !== id));
-		saveSuspensions();
-	}
-
-	let isNight = false;
-	let solarElevDeg = 0;
-	let uvIndex = 0;
-	let sunriseTime = '--:--';
-	let sunsetTime = '--:--';
-	let solarNoonTime = '--:--';
-	let wbgtSolarContrib = 0;
-	let solarColor = '#4a6090';
-	let solarLabel = 'LOW';
-
-	function updateSolarState(inputs) {
-		const now = new Date();
-		const sol = calcSolarPosition(lat, lon, now);
-
-		const localHour = (() => {
-			try {
-				const offsetH = Math.round(lon / 15);
-
-				const tzName = offsetH === 0
-				? 'Etc/GMT'
-				: offsetH > 0
-					? `Etc/GMT-${offsetH}`
-					: `Etc/GMT+${Math.abs(offsetH)}`;
-
-				const parts = new Intl.DateTimeFormat('en-GB',
-				{
-						hour: 'numeric',
-						minute: 'numeric',
-						hour12: false,
-						timeZone: tzName
-					}).formatToParts(now);
-
-				const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '12');
-				const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0');
-				return h + m / 60;
-			} catch {
-				return sol.LST;
-			}
-		})();
-
-		$$invalidate(20, isNight = localHour < sol.sunrise_LST || localHour > sol.sunset_LST);
-		$$invalidate(21, solarElevDeg = Math.round(sol.elev * 10) / 10);
-
-		$$invalidate(23, sunriseTime = fmtLocalSolarTime(sol.sunrise_LST));
-		$$invalidate(24, sunsetTime = fmtLocalSolarTime(sol.sunset_LST));
-		$$invalidate(25, solarNoonTime = fmtLocalSolarTime(sol.solarNoon_LST));
-		$$invalidate(22, uvIndex = isNight ? 0 : Math.round(inputs.solarWm2 / 25));
-		const albedo = 0.37, emiss = 0.95, sigma = 5.67e-8;
-		const Tk = inputs.tempC + 273.15;
-		const Tg_K = Math.pow((1 - albedo) * inputs.solarWm2 / (emiss * sigma) + Tk ** 4, 0.25);
-		const Tg = Tg_K - 273.15;
-		$$invalidate(26, wbgtSolarContrib = Math.round(0.2 * (Tg - inputs.tempC) * 10) / 10);
-		const w = inputs.solarWm2;
-
-		if (isNight) {
-			$$invalidate(27, solarColor = '#a5b4fc');
-			$$invalidate(28, solarLabel = 'NIGHT');
-		} else if (w < 200) {
-			$$invalidate(27, solarColor = '#16a34a');
-			$$invalidate(28, solarLabel = 'LOW');
-		} else if (w < 600) {
-			$$invalidate(27, solarColor = '#d97706');
-			$$invalidate(28, solarLabel = 'MODERATE');
-		} else if (w < 900) {
-			$$invalidate(27, solarColor = '#dc2626');
-			$$invalidate(28, solarLabel = 'HIGH');
-		} else {
-			$$invalidate(27, solarColor = '#7c3aed');
-			$$invalidate(28, solarLabel = 'EXTREME');
-		}
-	}
-
-	function toggleCard(id) {
-		$$invalidate(7, activeCard = activeCard === id ? null : id);
-	}
-
-	let license = { valid: false, tier: '', expires: '' };
-	let licenseKeyInput = '';
-	let licenseLoading = false;
-	let licenseError = '';
-
-	function isPro() {
-		return license.valid && !!license.expires && new Date(license.expires) > new Date();
-	}
-
-	async function loadLicense() {
-		try {
-			const s = localStorage.getItem('fg_license');
-			if (!s) return;
-			const cached = JSON.parse(s);
-			if (!cached.valid) return;
-
-			if (new Date(cached.expires) > new Date()) {
-				$$invalidate(29, license = cached);
-			}
-
-			try {
-				const res = await fetch('https://fieldguard-hse.com/api/validate', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						key: cached.key ?? cached.token ?? '',
-						revalidate: true,
-						fingerprint: navigator.userAgent
-					})
-				});
-
-				if (res.ok) {
-					const data = await res.json();
-
-					if (data.valid) {
-						$$invalidate(29, license = {
-							valid: true,
-							tier: data.tier,
-							expires: data.expires,
-							token: data.token,
-							key: cached.key
-						});
-
-						localStorage.setItem('fg_license', JSON.stringify(license));
-						$$invalidate(14, worstCaseMode = true);
-					} else {
-						$$invalidate(29, license = { valid: false });
-						localStorage.removeItem('fg_license');
-						$$invalidate(14, worstCaseMode = false);
-					}
-				}
-			} catch {
-				
-			}
-		} catch {
-			localStorage.removeItem('fg_license');
-		}
-	}
-
-	async function loadRemoteConfig() {
-		try {
-			const res = await fetch('https://fieldguard-hse.com/api/plugin-config', {
-				method: 'GET',
-				headers: { 'Content-Type': 'application/json' },
-				signal: AbortSignal.timeout(4000)
-			});
-
-			if (!res.ok) return;
-			const cfg = await res.json();
-			if (cfg.banStart) $$invalidate(33, settings.banStart = cfg.banStart, settings);
-			if (cfg.banEnd) $$invalidate(33, settings.banEnd = cfg.banEnd, settings);
-			if (cfg.banMonths) $$invalidate(33, settings.banMonths = cfg.banMonths, settings);
-			if (cfg.wbgtWarnC) $$invalidate(33, settings.wbgtWarnC = cfg.wbgtWarnC, settings);
-			if (cfg.wbgtDangerC) $$invalidate(33, settings.wbgtDangerC = cfg.wbgtDangerC, settings);
-			if (cfg.announcement) console.info('[FieldGuard]', cfg.announcement);
-			localStorage.setItem('fg_remote_config', JSON.stringify(cfg));
-		} catch {
-			
-		}
-	}
-
-	async function activateLicense() {
-		const key = licenseKeyInput.trim();
-		if (!key) return;
-		$$invalidate(31, licenseLoading = true);
-		$$invalidate(32, licenseError = '');
-
-		if (key === 'FG-TEST-PRO-2026' || key === 'FG-DEV-UNLOCK') {
-			const expiry = new Date();
-			expiry.setFullYear(expiry.getFullYear() + 1);
-
-			$$invalidate(29, license = {
-				valid: true,
-				tier: 'pro',
-				expires: expiry.toISOString(),
-				token: 'test',
-				key
-			});
-
-			localStorage.setItem('fg_license', JSON.stringify(license));
-			$$invalidate(30, licenseKeyInput = '');
-			$$invalidate(14, worstCaseMode = true);
-			$$invalidate(31, licenseLoading = false);
-			refreshData();
-			return;
-		}
-
-		try {
-			const res = await fetch('https://fieldguard-hse.com/api/validate', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ key, fingerprint: navigator.userAgent })
-			});
-
-			if (!res.ok) throw new Error(`Server error: ${res.status}`);
-			const data = await res.json();
-
-			if (data.valid) {
-				$$invalidate(29, license = {
-					valid: true,
-					tier: data.tier,
-					expires: data.expires,
-					token: data.token,
-					key
-				});
-
-				localStorage.setItem('fg_license', JSON.stringify(license));
-				$$invalidate(30, licenseKeyInput = '');
-				$$invalidate(14, worstCaseMode = true);
-				refreshData();
-			} else {
-				$$invalidate(32, licenseError = data.message ?? 'Invalid license key.');
-			}
-		} catch(e) {
-			$$invalidate(32, licenseError = (e.message?.includes('fetch'))
-			? 'Cannot reach fieldguard-hse.com'
-			: e.message ?? 'Activation failed.');
-		}
-
-		$$invalidate(31, licenseLoading = false);
-	}
-
-	function deactivateLicense() {
-		$$invalidate(29, license = { valid: false, tier: '', expires: '' });
-		localStorage.removeItem('fg_license');
-		$$invalidate(14, worstCaseMode = false);
+	function canAddSite() {
+		return savedSites.length < maxSites();
 	}
 
 	const TABS = [
@@ -8864,7 +9663,11 @@ function instance($$self, $$props, $$invalidate) {
 			icon: '🏠',
 			label: 'Live'
 		},
-		{ id: 'sos', icon: '🚨', label: 'SOS' },
+		{
+			id: 'emergency',
+			icon: '🚨',
+			label: 'SOS'
+		},
 		{
 			id: 'report',
 			icon: '📄',
@@ -8878,12 +9681,36 @@ function instance($$self, $$props, $$invalidate) {
 	];
 
 	const MODELS = [
-		{ key: 'ecmwf', label: 'ECMWF' },
-		{ key: 'gfs', label: 'GFS' },
-		{ key: 'icon', label: 'ICON' },
-		{ key: 'meps', label: 'MEPS' },
-		{ key: 'gem', label: 'GEM' },
-		{ key: 'access', label: 'ACCESS-G' }
+		{
+			key: 'ecmwf',
+			label: 'ECMWF',
+			om: 'ecmwf_ifs025'
+		},
+		{
+			key: 'gfs',
+			label: 'GFS',
+			om: 'gfs_global'
+		},
+		{
+			key: 'icon',
+			label: 'ICON',
+			om: 'icon_global'
+		},
+		{
+			key: 'gem',
+			label: 'GEM',
+			om: 'gem_global'
+		},
+		{
+			key: 'arpege',
+			label: 'ARPEGE',
+			om: 'meteofrance_arpege_world'
+		},
+		{
+			key: 'access',
+			label: 'ACCESS-G',
+			om: 'bom_access_global'
+		}
 	];
 
 	const DEFAULT_SETTINGS = {
@@ -8895,7 +9722,10 @@ function instance($$self, $$props, $$invalidate) {
 		rainWarnMmh: 7.6,
 		rainDangerMmh: 25,
 		soundAlerts: true,
-		autoRefresh: false
+		autoRefresh: false,
+		units: 'metric',
+		winterMode: 'auto',
+		lightningRadiusKm: 10
 	};
 
 	let settings = { ...DEFAULT_SETTINGS };
@@ -8917,79 +9747,50 @@ function instance($$self, $$props, $$invalidate) {
 
 	async function fetchModelData(modelKey) {
 		try {
-			store.set('product', modelKey);
-			await new Promise(r => setTimeout(r, 600));
+			const m = MODELS.find(x => x.key === modelKey);
+			const om = m ? m.om : 'best_match';
+			const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` + `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` + `&hourly=cape&wind_speed_unit=ms&forecast_days=1&models=${om}`;
+			const res = await fetch(url);
+			if (!res.ok) return null;
+			const j = await res.json();
+			const c = j && j.current;
+			if (!c || c.temperature_2m === undefined || c.temperature_2m === null) return null;
+			let capeJkg;
+			const capeArr = j && j.hourly && j.hourly.cape;
 
-			const read = async overlay => {
-				store.set('overlay', overlay);
-				await new Promise(r => setTimeout(r, 300));
-				const interp = await window.W?.interpolator?.getLatLonInterpolator?.();
-				return interp ? await interp({ lat, lon }) : null;
-			};
-
-			const tempRaw = await read('temp');
-			const windRaw = await read('wind');
-			const humRaw = await read('rh');
-			const rainRaw = await read('rain');
-			const cloudRaw = await read('lclouds');
-
-			const tempC = Array.isArray(tempRaw)
-			? tempRaw[0] - 273.15
-			: (tempRaw ?? 298) - 273.15;
-
-			const windMs = Array.isArray(windRaw)
-			? Math.sqrt(windRaw[0] ** 2 + windRaw[1] ** 2)
-			: windRaw ?? 0;
-
-			const humidity = Array.isArray(humRaw) ? humRaw[0] : humRaw ?? 50;
-
-			const rainMmH = Array.isArray(rainRaw)
-			? Math.max(0, rainRaw[0])
-			: Math.max(0, rainRaw ?? 0);
-
-			const cloudFrac = Math.min(1, Math.max(0, (Array.isArray(cloudRaw) ? cloudRaw[0] : cloudRaw ?? 30) / 100));
-			const now = new Date();
-			const sol = calcSolarPosition(lat, lon, now);
-			const isNightNow = sol.elev < -0.833;
-			let solarWm2 = 0;
-
-			if (!isNightNow) {
-				const sinElev = Math.sin(sol.elev * Math.PI / 180);
-				const airMass = sinElev > 0.01 ? 1 / sinElev : 100;
-				const transmit = Math.pow(0.7, Math.pow(airMass, 0.678));
-				solarWm2 = Math.round(Math.max(0, 1361 * transmit * sinElev * (1 - 0.75 * cloudFrac)));
+			if (Array.isArray(capeArr) && capeArr.length && capeArr[0] !== null && capeArr[0] !== undefined) {
+				capeJkg = Math.max(0, Math.round(capeArr[0]));
 			}
 
 			return {
-				tempC: Math.round(tempC * 10) / 10,
-				humidity: Math.min(100, Math.max(0, Math.round(humidity))),
-				windMs: Math.max(0, Math.round(windMs * 10) / 10),
-				solarWm2,
-				rainMmH: Math.round(rainMmH * 10) / 10
+				tempC: Math.round(c.temperature_2m * 10) / 10,
+				humidity: Math.min(100, Math.max(0, Math.round(c.relative_humidity_2m ?? 50))),
+				windMs: Math.max(0, Math.round((c.wind_speed_10m ?? 0) * 10) / 10),
+				solarWm2: Math.max(0, Math.round(c.shortwave_radiation ?? 0)),
+				rainMmH: Math.max(0, Math.round((c.precipitation ?? 0) * 10) / 10),
+				capeJkg
 			};
-		} catch(e) {
-			console.error('[FieldGuard] fetchModelData error:', e);
+		} catch {
 			return null;
 		}
 	}
 
-	async function loadFromOpenMeteo() {
-		try {
-			const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` + `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` + `&wind_speed_unit=ms&timezone=auto`;
-			const j = await (await fetch(url)).json();
-			const c = j.current;
-			const sol = calcSolarPosition(lat, lon, new Date());
-			const solarWm2 = sol.elev < -0.833 ? 0 : c.shortwave_radiation ?? 0;
+	async function resolveCountry() {
+		const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+		if (key === geocodedFor) return;
+		geocodedFor = key;
 
-			return {
-				tempC: c.temperature_2m,
-				humidity: c.relative_humidity_2m,
-				windMs: c.wind_speed_10m,
-				solarWm2,
-				rainMmH: c.precipitation ?? 0
-			};
+		try {
+			const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+			const j = await (await fetch(url)).json();
+			countryCode = j.countryCode || '';
+			countryName = j.countryName || '';
+			$$invalidate(7, locationName = [j.city || j.locality, j.principalSubdivision, countryName].filter(Boolean).join(', '));
+			$$invalidate(14, activeBan = getMiddayBan(countryCode));
 		} catch {
-			return null;
+			countryCode = '';
+			countryName = '';
+			$$invalidate(14, activeBan = null);
 		}
 	}
 
@@ -8997,27 +9798,39 @@ function instance($$self, $$props, $$invalidate) {
 		const now = new Date();
 		const localHour = now.getUTCHours() + lon / 15;
 		const month = now.getMonth() + 1;
+		$$invalidate(12, isDay = isDaytime(lat, lon, now));
+		$$invalidate(13, sunElevation = solarElevationDeg(lat, lon, now));
 
 		return {
-			heat: assessHeatStress(inputs, settings.ppeProfile, localHour, month),
+			heat: assessHeatStress(inputs, settings.ppeProfile, localHour, month, activeBan),
 			wind: assessWind(inputs.windMs, settings.windWarnMs, settings.windDangerMs),
-			rain: assessRain(inputs.rainMmH, settings.rainWarnMmh, settings.rainDangerMmh)
+			rain: assessRain(inputs.rainMmH, settings.rainWarnMmh, settings.rainDangerMmh),
+			cold: assessColdStress(inputs.tempC, inputs.windMs),
+			thunder: assessThunderstorm(inputs.capeJkg)
 		};
 	}
 
+	function showColdCard(c) {
+		if (!isPro || !c) return false;
+		if (settings.winterMode === 'off') return false;
+		if (settings.winterMode === 'on') return true;
+		return c.active;
+	}
+
 	async function refreshData() {
-		$$invalidate(4, loading = true);
-		$$invalidate(5, error = '');
-		$$invalidate(6, currentTime = getLocationClockTime(lat, lon));
+		$$invalidate(8, loading = true);
+		$$invalidate(9, error = '');
+		$$invalidate(10, currentTime = new Date().toLocaleTimeString());
 
 		try {
+			await resolveCountry();
 			const results = [];
 
-			if (worstCaseMode && isPro()) {
+			if (worstCaseMode) {
 				for (const model of MODELS) {
 					const inputs = await fetchModelData(model.key);
 					if (!inputs) continue;
-					const { heat: h, wind: w, rain: r } = processInputs(inputs);
+					const { heat: h, wind: w, rain: r, cold: cd, thunder: th } = processInputs(inputs);
 
 					results.push({
 						modelKey: model.key,
@@ -9026,15 +9839,17 @@ function instance($$self, $$props, $$invalidate) {
 						heat: h,
 						wind: w,
 						rain: r,
+						cold: cd,
+						thunder: th,
 						isWorst: false
 					});
 				}
 			}
 
 			if (results.length === 0) {
-				const inputs = await fetchModelData(selectedModel) ?? await loadFromOpenMeteo();
+				const inputs = await fetchModelData(selectedModel);
 				if (!inputs) throw new Error('No data available');
-				const { heat: h, wind: w, rain: r } = processInputs(inputs);
+				const { heat: h, wind: w, rain: r, cold: cd, thunder: th } = processInputs(inputs);
 
 				results.push({
 					modelKey: selectedModel,
@@ -9043,93 +9858,163 @@ function instance($$self, $$props, $$invalidate) {
 					heat: h,
 					wind: w,
 					rain: r,
+					cold: cd,
+					thunder: th,
 					isWorst: true
 				});
 			} else {
 				results.sort((a, b) => {
 					const zd = zoneSeverity(b.heat.zone) - zoneSeverity(a.heat.zone);
+					if (zd !== 0) return zd;
 
-					return zd !== 0
-					? zd
-					: (b.heat.apparentTempFinal === 999
-						? 99
-						: b.heat.apparentTempFinal) - (a.heat.apparentTempFinal === 999
-						? 99
-						: a.heat.apparentTempFinal);
+					return (b.heat.apparentTempFinal === 999
+					? 99
+					: b.heat.apparentTempFinal) - (a.heat.apparentTempFinal === 999
+					? 99
+					: a.heat.apparentTempFinal);
 				});
 
 				results[0].isWorst = true;
 			}
 
-			$$invalidate(12, modelResults = results);
-			$$invalidate(8, rawData = results[0].raw);
-			$$invalidate(9, heat = results[0].heat);
-			$$invalidate(10, windResult = results[0].wind);
-			$$invalidate(11, rainResult = results[0].rain);
-			worstModelLabel = results[0].modelLabel;
-			updateSolarState(rawData);
+			$$invalidate(22, modelResults = results);
+			$$invalidate(15, rawData = results[0].raw);
+			$$invalidate(16, heat = results[0].heat);
+			$$invalidate(17, windResult = results[0].wind);
+			$$invalidate(18, rainResult = results[0].rain);
+			$$invalidate(19, coldResult = results[0].cold);
+			$$invalidate(20, thunderResult = results[0].thunder);
+			$$invalidate(27, worstModelLabel = results[0].modelLabel);
+			$$invalidate(34, isStale = false);
+			if (rawData) cacheReading(rawData);
+
+			if (activeSiteId && heat) $$invalidate(36, bgStatus = {
+				...bgStatus,
+				[activeSiteId]: {
+					color: heat.zoneInfo.color,
+					label: heat.zoneInfo.riskLabel,
+					time: new Date().toLocaleTimeString()
+				}
+			});
+
 			checkAlerts();
 		} catch(e) {
-			$$invalidate(5, error = (e?.message?.includes('Timeout'))
-			? 'Windy data timeout — click refresh to retry'
-			: 'Failed to load data. Check connection.');
+			const cached = loadCachedReading();
 
-			console.error('[FieldGuard] fetchModelData error:', e);
+			if (cached) {
+				const { heat: h, wind: w, rain: r, cold: cd, thunder: th } = processInputs(cached.inputs);
+				$$invalidate(15, rawData = cached.inputs);
+				$$invalidate(16, heat = h);
+				$$invalidate(17, windResult = w);
+				$$invalidate(18, rainResult = r);
+				$$invalidate(19, coldResult = cd);
+				$$invalidate(20, thunderResult = th);
+
+				$$invalidate(22, modelResults = [
+					{
+						modelKey: selectedModel,
+						modelLabel: 'cached',
+						raw: cached.inputs,
+						heat: h,
+						wind: w,
+						rain: r,
+						cold: cd,
+						thunder: th,
+						isWorst: true
+					}
+				]);
+
+				$$invalidate(27, worstModelLabel = 'cached');
+				$$invalidate(34, isStale = true);
+				$$invalidate(35, staleTime = cached.time);
+				$$invalidate(9, error = '');
+			} else {
+				$$invalidate(9, error = 'Failed to fetch data. Check network or try a different model.');
+			}
 		}
 
-		$$invalidate(4, loading = false);
+		$$invalidate(8, loading = false);
 	}
 
 	function checkAlerts() {
 		if (!heat || !windResult || !rainResult) return;
 		const time = new Date().toLocaleTimeString();
 
-		if (heat.zone !== 'green') $$invalidate(15, alertLog = [
-			...alertLog,
-			{
+		if (heat.zone !== 'green') {
+			const entry = {
 				time,
 				type: `🌡 HEAT — ${heat.zoneInfo.riskLabel}`,
 				color: heat.zoneInfo.color,
 				message: `App.Temp: ${heat.apparentTempFinal === 999
 				? 'NO WORK'
 				: heat.apparentTempFinal + '°C'} | ${heat.zoneInfo.label}`
-			}
-		]);
+			};
 
-		if (windResult.exceedsThreshold) $$invalidate(15, alertLog = [
-			...alertLog,
-			{
+			$$invalidate(29, alertLog = [...alertLog, entry]);
+
+			if (settings.soundAlerts && (heat.zone === 'red' || heat.zone === 'purple' || heat.zone === 'black')) {
+				triggerNotification(entry.type, entry.message);
+			}
+		}
+
+		if (windResult.exceedsThreshold) {
+			$$invalidate(29, alertLog = [
+				...alertLog,
+				{
+					time,
+					type: '💨 WIND ALERT',
+					color: windResult.riskColor,
+					message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})`
+				}
+			]);
+		}
+
+		if (rainResult.exceedsThreshold) {
+			$$invalidate(29, alertLog = [
+				...alertLog,
+				{
+					time,
+					type: '🌧 RAIN ALERT',
+					color: rainResult.riskColor,
+					message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}`
+				}
+			]);
+		}
+
+		if (isPro && coldResult && coldResult.exceedsThreshold) {
+			const entry = {
 				time,
-				type: '💨 WIND ALERT',
-				color: windResult.riskColor,
-				message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})`
-			}
-		]);
+				type: `❄ COLD — ${coldResult.riskLabel}`,
+				color: coldResult.riskColor,
+				message: `Wind chill ${fmtTemp(coldResult.windChillC, units)} — ${coldResult.frostbite}`
+			};
 
-		if (rainResult.exceedsThreshold) $$invalidate(15, alertLog = [
-			...alertLog,
-			{
+			$$invalidate(29, alertLog = [...alertLog, entry]);
+			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
+		}
+
+		if (isPro && thunderResult && thunderResult.exceedsThreshold) {
+			const entry = {
 				time,
-				type: '🌧 RAIN ALERT',
-				color: rainResult.riskColor,
-				message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}`
-			}
-		]);
+				type: `⛈ STORM — ${thunderResult.riskLabel}`,
+				color: thunderResult.riskColor,
+				message: `CAPE ${thunderResult.capeJkg} J/kg — ${thunderResult.instability}`
+			};
 
-		if (heat.isBanPeriod) $$invalidate(15, alertLog = [
-			...alertLog,
-			{
-				time,
-				type: '🚫 LEGAL WORK BAN',
-				color: '#f97316',
-				message: `12:30–15:30 outdoor ban active`
-			}
-		]);
+			$$invalidate(29, alertLog = [...alertLog, entry]);
+			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
+		}
 
-		if (heat.zone === 'red' || heat.zone === 'purple' || heat.zone === 'black') {
-			if (settings.soundAlerts && 'Notification' in window && Notification.permission === 'granted') {
-				new Notification(`FieldGuard: ${heat.zoneInfo.riskLabel}`, { body: heat.zoneInfo.mandatoryControls[0] });
-			}
+		if (heat.isBanPeriod) {
+			$$invalidate(29, alertLog = [
+				...alertLog,
+				{
+					time,
+					type: '🚫 LEGAL WORK BAN',
+					color: '#f97316',
+					message: `12:30–15:30 outdoor ban active (${reportMeta.banMonths})`
+				}
+			]);
 		}
 	}
 
@@ -9144,7 +10029,7 @@ function instance($$self, $$props, $$invalidate) {
 	}
 
 	function resetSettings() {
-		$$invalidate(33, settings = { ...DEFAULT_SETTINGS });
+		$$invalidate(2, settings = { ...DEFAULT_SETTINGS });
 		saveSettings();
 	}
 
@@ -9154,11 +10039,97 @@ function instance($$self, $$props, $$invalidate) {
 			autoRefreshTimer = null;
 		}
 
-		if (settings.autoRefresh && isPro()) autoRefreshTimer = setInterval(refreshData, 15 * 60 * 1000);
+		if (settings.autoRefresh) autoRefreshTimer = setInterval(backgroundTick, 15 * 60 * 1000);
+	}
+
+	function loadLicense() {
+		try {
+			const s = localStorage.getItem('fieldguard_license');
+			if (!s) return;
+			const o = JSON.parse(s);
+
+			if (o && o.tier && o.expires && new Date(o.expires) > new Date()) {
+				$$invalidate(23, licenseKey = o.key || '');
+				$$invalidate(0, licenseTier = o.tier);
+				$$invalidate(24, licenseExpires = o.expires);
+			} else {
+				localStorage.removeItem('fieldguard_license');
+			}
+		} catch {
+			
+		}
+	}
+
+	async function activateLicense() {
+		const key = (licenseKey || '').trim().toUpperCase();
+		$$invalidate(23, licenseKey = key);
+
+		if (!(/^FGS?-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/).test(key)) {
+			$$invalidate(25, licenseMsg = 'Invalid key format — expected FG-XXXX-XXXX-XXXX');
+			return;
+		}
+
+		$$invalidate(26, licenseChecking = true);
+		$$invalidate(25, licenseMsg = 'Checking…');
+
+		try {
+			const res = await fetch(LICENSE_API, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ key })
+			});
+
+			const j = await res.json();
+
+			if (j && j.valid) {
+				$$invalidate(0, licenseTier = j.tier || 'pro');
+				$$invalidate(24, licenseExpires = j.expires || '');
+
+				try {
+					localStorage.setItem('fieldguard_license', JSON.stringify({
+						key,
+						tier: licenseTier,
+						expires: licenseExpires
+					}));
+				} catch {
+					
+				}
+
+				$$invalidate(25, licenseMsg = '✓ Activated — Pro features unlocked');
+				refreshData();
+			} else {
+				$$invalidate(0, licenseTier = '');
+				$$invalidate(24, licenseExpires = '');
+
+				$$invalidate(25, licenseMsg = j && j.reason === 'expired'
+				? 'This key has expired — please renew.'
+				: 'Key not found or invalid.');
+			}
+		} catch {
+			$$invalidate(25, licenseMsg = 'Could not reach the license server. Check your connection.');
+		}
+
+		$$invalidate(26, licenseChecking = false);
+	}
+
+	function deactivateLicense() {
+		$$invalidate(0, licenseTier = '');
+		$$invalidate(24, licenseExpires = '');
+		$$invalidate(23, licenseKey = '');
+		$$invalidate(25, licenseMsg = '');
+
+		try {
+			localStorage.removeItem('fieldguard_license');
+		} catch {
+			
+		}
+
+		refreshData();
 	}
 
 	function generateReport() {
-		const today = new Date(), weekAgo = new Date(today);
+		const today = new Date();
+		const weekAgo = new Date(today);
 		weekAgo.setDate(today.getDate() - 7);
 		const fmt = d => d.toISOString().split('T')[0];
 		const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -9183,21 +10154,9 @@ function instance($$self, $$props, $$invalidate) {
 			action: heat?.zoneInfo.mandatoryControls[0] ?? ''
 		}));
 
-		const mappedSuspensions = suspensions.map(s => ({
-			date: s.date,
-			startTime: s.startTime,
-			endTime: s.endTime,
-			hours: calcHours(s.startTime, s.endTime),
-			trigger: s.trigger,
-			trades: s.trades,
-			workers: s.workers
-		}));
-
-		const totalSuspH = mappedSuspensions.reduce((sum, s) => sum + s.hours, 0);
-
 		const rd = {
 			...reportMeta,
-			siteAddress: lat.toFixed(3) + ', ' + lon.toFixed(3),
+			siteAddress: locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
 			lat,
 			lon,
 			weekStart: fmt(weekAgo),
@@ -9207,13 +10166,15 @@ function instance($$self, $$props, $$invalidate) {
 			dailyMet,
 			wbgtLog,
 			morningGap: [],
-			suspensions: mappedSuspensions,
-			totalSuspensionHours: totalSuspH,
-			cumulativeSuspensionHours: totalSuspH,
-			forecastNarrative: `FieldGuard analysis at ${lat.toFixed(3) + ', ' + lon.toFixed(3)} shows ${heat?.zoneInfo.riskLabel ?? 'N/A'} zone. ${suspensions.length} work suspension${suspensions.length !== 1 ? 's' : ''} logged this period.`
+			suspensions: [],
+			totalSuspensionHours: wbgtLog.reduce((s, e) => s + e.durationH, 0),
+			cumulativeSuspensionHours: wbgtLog.reduce((s, e) => s + e.durationH, 0),
+			forecastNarrative: `FieldGuard worst-case analysis at ${locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`} ` + `shows ${heat?.zoneInfo.riskLabel ?? 'N/A'} zone (Apparent Temp: ${heat?.apparentTempFinal === 999
+			? 'NO WORK'
+			: (heat?.apparentTempFinal ?? 'N/A') + '°C'}, ` + `WBGT+PPE: ${heat?.wbgtAdjusted ?? 'N/A'}°C). ${heat?.zoneInfo.mandatoryControls[0] ?? ''}`
 		};
 
-		$$invalidate(16, reportText = generateWeeklyReport(rd));
+		$$invalidate(30, reportText = generateWeeklyReport(rd));
 	}
 
 	function copyReport() {
@@ -9229,314 +10190,469 @@ function instance($$self, $$props, $$invalidate) {
 		a.click();
 	}
 
+	function loadSites() {
+		try {
+			const s = localStorage.getItem('fieldguard_sites');
+			if (s) $$invalidate(31, savedSites = JSON.parse(s));
+		} catch {
+			
+		}
+	}
+
+	function persistSites() {
+		try {
+			localStorage.setItem('fieldguard_sites', JSON.stringify(savedSites));
+		} catch {
+			
+		}
+	}
+
+	function addCurrentSite() {
+		if (!canAddSite()) return;
+		const id = `${Date.now()}`;
+
+		const name = (newSiteName || '').trim() || (locationName
+		? locationName.split(',')[0]
+		: `Site ${savedSites.length + 1}`);
+
+		$$invalidate(31, savedSites = [...savedSites, { id, name, lat, lon }]);
+		$$invalidate(32, activeSiteId = id);
+		$$invalidate(33, newSiteName = '');
+		persistSites();
+	}
+
+	function selectSite(s) {
+		$$invalidate(32, activeSiteId = s.id);
+		$$invalidate(11, locked = true);
+		$$invalidate(5, lat = s.lat);
+		$$invalidate(6, lon = s.lon);
+		$$invalidate(7, locationName = s.name);
+		geocodedFor = '';
+		refreshData();
+	}
+
+	function removeSite(s) {
+		$$invalidate(31, savedSites = savedSites.filter(x => x.id !== s.id));
+		if (activeSiteId === s.id) $$invalidate(32, activeSiteId = '');
+		persistSites();
+	}
+
+	function cacheKey() {
+		return `${lat.toFixed(3)},${lon.toFixed(3)}`;
+	}
+
+	function cacheReading(inputs) {
+		try {
+			const all = JSON.parse(localStorage.getItem('fieldguard_cache') || '{}');
+
+			all[cacheKey()] = {
+				inputs,
+				time: new Date().toLocaleString()
+			};
+
+			localStorage.setItem('fieldguard_cache', JSON.stringify(all));
+		} catch {
+			
+		}
+	}
+
+	function loadCachedReading() {
+		try {
+			const all = JSON.parse(localStorage.getItem('fieldguard_cache') || '{}');
+			return all[cacheKey()] ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	function downloadCSV() {
+		const head = ['Time', 'Type', 'Message', 'Site'];
+
+		const rows = alertLog.map(a => [
+			a.time,
+			String(a.type).replace(/[^\x20-\x7E]/g, '').trim(),
+			a.message,
+			locationName || cacheKey()
+		]);
+
+		const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+		const csv = [head, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+		a.download = `FieldGuard-log-${new Date().toISOString().split('T')[0]}.csv`;
+		a.click();
+	}
+
+	async function monitorSites() {
+		if (savedSites.length === 0) return;
+		const om = MODELS.find(m => m.key === selectedModel)?.om ?? 'best_match';
+
+		for (const s of savedSites) {
+			try {
+				const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}` + `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` + `&hourly=cape&wind_speed_unit=ms&forecast_days=1&models=${om}`;
+				const res = await fetch(url);
+				if (!res.ok) continue;
+				const j = await res.json();
+				const c = j && j.current;
+				if (!c || c.temperature_2m == null) continue;
+				const capeArr = j && j.hourly && j.hourly.cape;
+
+				const capeJkg = Array.isArray(capeArr) && capeArr[0] != null
+				? Math.max(0, Math.round(capeArr[0]))
+				: undefined;
+
+				const inputs = {
+					tempC: c.temperature_2m,
+					humidity: c.relative_humidity_2m ?? 50,
+					windMs: Math.max(0, c.wind_speed_10m ?? 0),
+					solarWm2: Math.max(0, c.shortwave_radiation ?? 0),
+					rainMmH: Math.max(0, c.precipitation ?? 0),
+					capeJkg
+				};
+
+				const now = new Date();
+				const h = assessHeatStress(inputs, settings.ppeProfile, now.getUTCHours() + s.lon / 15, now.getMonth() + 1, null);
+
+				$$invalidate(36, bgStatus = {
+					...bgStatus,
+					[s.id]: {
+						color: h.zoneInfo.color,
+						label: h.zoneInfo.riskLabel,
+						time: now.toLocaleTimeString()
+					}
+				});
+
+				if (settings.soundAlerts && s.id !== activeSiteId && (h.zone === 'red' || h.zone === 'purple' || h.zone === 'black')) {
+					triggerNotification(`⚠ ${s.name} — ${h.zoneInfo.riskLabel}`, `Apparent Temp ${h.apparentTempFinal === 999
+					? 'NO WORK'
+					: h.apparentTempFinal + '°C'}`);
+				}
+			} catch {
+				
+			}
+		}
+	}
+
+	function backgroundTick() {
+		refreshData();
+		monitorSites();
+	}
+
+	function onVisible() {
+		if (document.visibilityState === 'visible') {
+			refreshData();
+			monitorSites();
+		}
+	}
+
+	function onMapClick(e) {
+		if (locked) return;
+		$$invalidate(5, lat = e.latlng.lat);
+		$$invalidate(6, lon = e.latlng.lng);
+		refreshData();
+	}
+
 	onMount(() => {
 		try {
 			const s = localStorage.getItem('fieldguard_settings');
-			if (s) $$invalidate(33, settings = { ...DEFAULT_SETTINGS, ...JSON.parse(s) });
+			if (s) $$invalidate(2, settings = { ...DEFAULT_SETTINGS, ...JSON.parse(s) });
 		} catch {
 			
 		}
 
 		loadLicense();
-		loadRemoteConfig();
-		loadSuspensions();
-
-		try {
-			const s = localStorage.getItem('fg_loc_locked');
-			if (s !== null) $$invalidate(3, locationLocked = s === 'true');
-		} catch {
-			
-		}
-
-		try {
-			const sLat = localStorage.getItem('fg_lat');
-			const sLon = localStorage.getItem('fg_lon');
-
-			if (sLat && sLon) {
-				$$invalidate(1, lat = parseFloat(sLat));
-				$$invalidate(2, lon = parseFloat(sLon));
-			}
-		} catch {
-			
-		}
-
-		clockTimerRef = setInterval(
-			() => {
-				$$invalidate(6, currentTime = getLocationClockTime(lat, lon));
-				const sol = calcSolarPosition(lat, lon, new Date());
-				const wasNight = isNight;
-				const _offH = Math.round(lon / 15);
-
-				const _tz = _offH === 0
-				? 'Etc/GMT'
-				: _offH > 0
-					? 'Etc/GMT-' + _offH
-					: 'Etc/GMT+' + Math.abs(_offH);
-
-				try {
-					const _p = new Intl.DateTimeFormat('en-GB',
-					{
-							hour: 'numeric',
-							minute: 'numeric',
-							hour12: false,
-							timeZone: _tz
-						}).formatToParts(new Date());
-
-					const _lh = parseInt(_p.find(x => x.type === 'hour')?.value ?? '12') + parseInt(_p.find(x => x.type === 'minute')?.value ?? '0') / 60;
-					$$invalidate(20, isNight = _lh < sol.sunrise_LST || _lh > sol.sunset_LST);
-				} catch {
-					$$invalidate(20, isNight = sol.elev < -0.833);
-				}
-
-				$$invalidate(21, solarElevDeg = Math.round(sol.elev * 10) / 10);
-				if (wasNight !== isNight) refreshData();
-			},
-			30_000
-		);
+		loadSites();
 
 		try {
 			const c = map.getCenter();
-			$$invalidate(1, lat = c.lat);
-			$$invalidate(2, lon = c.lng);
+			$$invalidate(5, lat = c.lat);
+			$$invalidate(6, lon = c.lng);
 		} catch {
 			
 		}
 
-		mapClickHandler = e => {
-			if (locationLocked) return;
-			$$invalidate(1, lat = e.latlng.lat);
-			$$invalidate(2, lon = e.latlng.lng);
-
-			try {
-				localStorage.setItem('fg_lat', String(lat));
-				localStorage.setItem('fg_lon', String(lon));
-			} catch {
-				
-			}
-
-			refreshData();
-		};
-
-		map.on('click', mapClickHandler);
+		map.on('click', onMapClick);
+		document.addEventListener('visibilitychange', onVisible);
 		refreshData();
+		monitorSites();
 		setupAutoRefresh();
 		if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 	});
 
-	let clockTimerRef = null;
-
 	onDestroy(() => {
-		if (clockTimerRef) clearInterval(clockTimerRef);
 		if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-		if (mapClickHandler) map.off('click', mapClickHandler);
+		map.off('click', onMapClick);
+		document.removeEventListener('visibilitychange', onVisible);
 	});
 
 	const onopen = params => {
 		if (params?.lat && params?.lon) {
-			$$invalidate(1, lat = parseFloat(params.lat));
-			$$invalidate(2, lon = parseFloat(params.lon));
+			$$invalidate(5, lat = parseFloat(params.lat));
+			$$invalidate(6, lon = parseFloat(params.lon));
 			refreshData();
 		}
 	};
 
-	const $$binding_groups = [[]];
+	const $$binding_groups = [[], [], []];
+	const click_handler = () => $$invalidate(4, tab = tab === 'settings' ? 'dashboard' : 'settings');
+	const click_handler_1 = t => $$invalidate(4, tab = t.id);
+	const click_handler_2 = () => $$invalidate(11, locked = !locked);
+	const click_handler_3 = s => removeSite(s);
+	const click_handler_4 = s => selectSite(s);
 
-	const click_handler = () => {
-		$$invalidate(3, locationLocked = !locationLocked);
-
-		try {
-			localStorage.setItem('fg_loc_locked', String(locationLocked));
-		} catch {
-			
-		}
-	};
-
-	const click_handler_1 = () => toggleCard('heat');
-	const click_handler_2 = () => toggleCard('wind');
-	const click_handler_3 = () => toggleCard('rain');
-	const click_handler_4 = () => toggleCard('heat');
-	const click_handler_5 = () => toggleCard('solar');
-	const click_handler_6 = () => toggleCard('heat');
-	const click_handler_7 = () => toggleCard('heat');
-	const click_handler_8 = () => toggleCard('heat');
-	const click_handler_9 = () => toggleCard('wind');
-	const click_handler_10 = () => toggleCard('rain');
-	const click_handler_11 = () => toggleCard('solar');
-	const click_handler_12 = t => $$invalidate(0, tab = t.id);
+	function input_input_handler() {
+		newSiteName = this.value;
+		$$invalidate(33, newSiteName);
+	}
 
 	function select_change_handler() {
 		selectedModel = select_value(this);
-		$$invalidate(13, selectedModel);
+		$$invalidate(28, selectedModel);
 		$$invalidate(42, MODELS);
 	}
 
 	function input_change_handler() {
 		worstCaseMode = this.checked;
-		$$invalidate(14, worstCaseMode);
+		(($$invalidate(1, worstCaseMode), $$invalidate(3, isPro)), $$invalidate(0, licenseTier));
 	}
+
+	const click_handler_5 = () => $$invalidate(21, selectedHazard = 'heat');
+	const click_handler_6 = () => $$invalidate(21, selectedHazard = 'wind');
+	const click_handler_7 = () => $$invalidate(21, selectedHazard = 'rain');
+	const click_handler_8 = () => $$invalidate(21, selectedHazard = 'solar');
+	const click_handler_9 = () => $$invalidate(4, tab = 'settings');
+	const click_handler_10 = () => $$invalidate(4, tab = 'settings');
+	const click_handler_11 = () => $$invalidate(4, tab = 'settings');
+	const click_handler_12 = () => $$invalidate(4, tab = 'settings');
+	const click_handler_13 = () => $$invalidate(4, tab = 'settings');
 
 	function input0_input_handler() {
 		reportMeta.projectName = this.value;
-		$$invalidate(34, reportMeta);
+		$$invalidate(37, reportMeta);
 	}
 
 	function input1_input_handler() {
-		reportMeta.country = this.value;
-		$$invalidate(34, reportMeta);
+		reportMeta.contractNumber = this.value;
+		$$invalidate(37, reportMeta);
 	}
 
 	function input2_input_handler() {
-		reportMeta.clientName = this.value;
-		$$invalidate(34, reportMeta);
+		reportMeta.country = this.value;
+		$$invalidate(37, reportMeta);
 	}
 
 	function input3_input_handler() {
-		reportMeta.contractorName = this.value;
-		$$invalidate(34, reportMeta);
+		reportMeta.clientName = this.value;
+		$$invalidate(37, reportMeta);
 	}
 
 	function input4_input_handler() {
+		reportMeta.contractorName = this.value;
+		$$invalidate(37, reportMeta);
+	}
+
+	function input5_input_handler() {
 		reportMeta.hseManagerName = this.value;
-		$$invalidate(34, reportMeta);
+		$$invalidate(37, reportMeta);
+	}
+
+	function input6_input_handler() {
+		reportMeta.regulatoryRef = this.value;
+		$$invalidate(37, reportMeta);
+	}
+
+	function input7_input_handler() {
+		reportMeta.banStart = this.value;
+		$$invalidate(37, reportMeta);
+	}
+
+	function input8_input_handler() {
+		reportMeta.banEnd = this.value;
+		$$invalidate(37, reportMeta);
+	}
+
+	function input9_input_handler() {
+		reportMeta.banMonths = this.value;
+		$$invalidate(37, reportMeta);
 	}
 
 	function select_change_handler_1() {
 		reportMeta.fidic = select_value(this);
-		$$invalidate(34, reportMeta);
+		$$invalidate(37, reportMeta);
 	}
 
-	const click_handler_13 = () => $$invalidate(19, showSuspForm = !showSuspForm);
-
-	function input0_input_handler_1() {
-		suspForm.date = this.value;
-		$$invalidate(18, suspForm);
+	function input10_input_handler() {
+		reportMeta.delayDays = to_number(this.value);
+		$$invalidate(37, reportMeta);
 	}
 
-	function input1_input_handler_1() {
-		suspForm.startTime = this.value;
-		$$invalidate(18, suspForm);
+	function input_input_handler_1() {
+		licenseKey = this.value;
+		$$invalidate(23, licenseKey);
 	}
 
-	function input2_input_handler_1() {
-		suspForm.endTime = this.value;
-		$$invalidate(18, suspForm);
+	const keydown_handler = e => {
+		if (e.key === 'Enter') activateLicense();
+	};
+
+	function input0_change_handler() {
+		settings.units = this.__value;
+		$$invalidate(2, settings);
 	}
 
-	function select_change_handler_2() {
-		suspForm.trigger = select_value(this);
-		$$invalidate(18, suspForm);
+	function input1_change_handler() {
+		settings.units = this.__value;
+		$$invalidate(2, settings);
 	}
 
-	function input3_input_handler_1() {
-		suspForm.trades = this.value;
-		$$invalidate(18, suspForm);
+	function input2_change_handler() {
+		settings.winterMode = this.__value;
+		$$invalidate(2, settings);
 	}
 
-	function input4_input_handler_1() {
-		suspForm.workers = to_number(this.value);
-		$$invalidate(18, suspForm);
+	function input3_change_handler() {
+		settings.winterMode = this.__value;
+		$$invalidate(2, settings);
 	}
 
-	const click_handler_14 = s => deleteSuspension(s.id);
-	const func = (sum, s) => sum + calcHours(s.startTime, s.endTime);
-
-	function input_input_handler() {
-		licenseKeyInput = this.value;
-		$$invalidate(30, licenseKeyInput);
+	function input4_change_handler() {
+		settings.winterMode = this.__value;
+		$$invalidate(2, settings);
 	}
 
 	function input_change_handler_1() {
 		settings.ppeProfile = this.__value;
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input0_change_input_handler() {
+	function input5_change_input_handler() {
 		settings.wbgtWarnC = to_number(this.value);
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input1_change_input_handler() {
+	function input6_change_input_handler() {
 		settings.wbgtDangerC = to_number(this.value);
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input2_change_input_handler() {
+	function input7_change_input_handler() {
 		settings.windWarnMs = to_number(this.value);
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input3_change_input_handler() {
+	function input8_change_input_handler() {
+		settings.windDangerMs = to_number(this.value);
+		$$invalidate(2, settings);
+	}
+
+	function input9_change_input_handler() {
 		settings.rainWarnMmh = to_number(this.value);
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input0_change_handler() {
+	function input10_change_input_handler() {
+		settings.rainDangerMmh = to_number(this.value);
+		$$invalidate(2, settings);
+	}
+
+	function input11_change_input_handler() {
+		settings.lightningRadiusKm = to_number(this.value);
+		$$invalidate(2, settings);
+	}
+
+	function input12_change_handler() {
 		settings.soundAlerts = this.checked;
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
 
-	function input1_change_handler() {
+	function input13_change_handler() {
 		settings.autoRefresh = this.checked;
-		$$invalidate(33, settings);
+		$$invalidate(2, settings);
 	}
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty[0] & /*licenseTier*/ 1) {
+			$$invalidate(3, isPro = licenseTier === 'individual' || licenseTier === 'pro' || licenseTier === 'site');
+		}
+
+		if ($$self.$$.dirty[0] & /*isPro, settings*/ 12) {
+			$$invalidate(38, units = isPro && settings.units === 'imperial'
+			? 'imperial'
+			: 'metric');
+		}
+
+		if ($$self.$$.dirty[0] & /*isPro, worstCaseMode*/ 10) {
+			if (!isPro && worstCaseMode) $$invalidate(1, worstCaseMode = false);
+		}
+	};
 
 	return [
+		licenseTier,
+		worstCaseMode,
+		settings,
+		isPro,
 		tab,
 		lat,
 		lon,
-		locationLocked,
+		locationName,
 		loading,
 		error,
 		currentTime,
-		activeCard,
+		locked,
+		isDay,
+		sunElevation,
+		activeBan,
 		rawData,
 		heat,
 		windResult,
 		rainResult,
+		coldResult,
+		thunderResult,
+		selectedHazard,
 		modelResults,
+		licenseKey,
+		licenseExpires,
+		licenseMsg,
+		licenseChecking,
+		worstModelLabel,
 		selectedModel,
-		worstCaseMode,
 		alertLog,
 		reportText,
-		suspensions,
-		suspForm,
-		showSuspForm,
-		isNight,
-		solarElevDeg,
-		uvIndex,
-		sunriseTime,
-		sunsetTime,
-		solarNoonTime,
-		wbgtSolarContrib,
-		solarColor,
-		solarLabel,
-		license,
-		licenseKeyInput,
-		licenseLoading,
-		licenseError,
-		settings,
+		savedSites,
+		activeSiteId,
+		newSiteName,
+		isStale,
+		staleTime,
+		bgStatus,
 		reportMeta,
-		addSuspension,
-		deleteSuspension,
-		toggleCard,
-		isPro,
-		activateLicense,
-		deactivateLicense,
+		units,
+		maxSites,
+		canAddSite,
 		TABS,
 		MODELS,
+		showColdCard,
 		refreshData,
 		saveSettings,
 		resetSettings,
 		setupAutoRefresh,
+		activateLicense,
+		deactivateLicense,
 		generateReport,
 		copyReport,
 		downloadReport,
+		addCurrentSite,
+		selectSite,
+		removeSite,
+		downloadCSV,
 		onopen,
 		click_handler,
 		click_handler_1,
 		click_handler_2,
 		click_handler_3,
 		click_handler_4,
+		input_input_handler,
+		select_change_handler,
+		input_change_handler,
 		click_handler_5,
 		click_handler_6,
 		click_handler_7,
@@ -9545,43 +10661,48 @@ function instance($$self, $$props, $$invalidate) {
 		click_handler_10,
 		click_handler_11,
 		click_handler_12,
-		select_change_handler,
-		input_change_handler,
+		click_handler_13,
 		input0_input_handler,
 		input1_input_handler,
 		input2_input_handler,
 		input3_input_handler,
 		input4_input_handler,
+		input5_input_handler,
+		input6_input_handler,
+		input7_input_handler,
+		input8_input_handler,
+		input9_input_handler,
 		select_change_handler_1,
-		click_handler_13,
-		input0_input_handler_1,
-		input1_input_handler_1,
-		input2_input_handler_1,
-		select_change_handler_2,
-		input3_input_handler_1,
-		input4_input_handler_1,
-		click_handler_14,
-		func,
-		input_input_handler,
-		input_change_handler_1,
-		$$binding_groups,
-		input0_change_input_handler,
-		input1_change_input_handler,
-		input2_change_input_handler,
-		input3_change_input_handler,
+		input10_input_handler,
+		input_input_handler_1,
+		keydown_handler,
 		input0_change_handler,
-		input1_change_handler
+		$$binding_groups,
+		input1_change_handler,
+		input2_change_handler,
+		input3_change_handler,
+		input4_change_handler,
+		input_change_handler_1,
+		input5_change_input_handler,
+		input6_change_input_handler,
+		input7_change_input_handler,
+		input8_change_input_handler,
+		input9_change_input_handler,
+		input10_change_input_handler,
+		input11_change_input_handler,
+		input12_change_handler,
+		input13_change_handler
 	];
 }
 
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 50 }, add_css, [-1, -1, -1, -1, -1]);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 57 }, add_css, [-1, -1, -1, -1, -1, -1]);
 	}
 
 	get onopen() {
-		return this.$$.ctx[50];
+		return this.$$.ctx[57];
 	}
 }
 
