@@ -13,6 +13,6 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@windycom/plugin-devtools": "^3.0.4"
+        "@windycom/plugin-devtools": "^3.0.3"
     }
 }
