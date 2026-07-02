@@ -612,6 +612,30 @@
       </label>
     </div>
 
+    <div class="fg-settings-section">
+      <div class="fg-settings-label">📡 24/7 Monitoring — email me {#if !isPro}<span class="fg-pro-tag">PRO</span>{/if}</div>
+      <div class="fg-note">Our server checks this site's WBGT every 15 min and emails an alert when it enters a danger zone — <b>even with your browser closed</b>. {#if !isPro}Requires a Pro or Site license.{/if}</div>
+      {#if isPro}
+        <div class="fg-license-row">
+          <input class="fg-license-input" type="email" placeholder="you@company.com" spellcheck="false" bind:value={alertEmail} />
+          <button class="fg-btn-inline" on:click={register24} disabled={monitorBusy}>{monitorBusy ? '…' : '🔔 Monitor'}</button>
+        </div>
+        <div class="fg-note">Registers the current pin ({lat.toFixed(3)}, {lon.toFixed(3)}). Up to {maxSites()} site{maxSites() > 1 ? 's' : ''} on your license.</div>
+        {#if monitoredSites.length > 0}
+          <div class="fg-mon-list">
+            {#each monitoredSites as m}
+              <div class="fg-mon-item">
+                <span class="fg-mon-dot" style="background:{monZoneColor(m.last_zone)}"></span>
+                <span style="flex:1">{m.name}</span>
+                <button class="fg-mini-btn" on:click={() => removeMonitor(m.id)}>✕</button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+      {#if monitorMsg}<div class="fg-license-msg">{monitorMsg}</div>{/if}
+    </div>
+
     <button class="fg-btn fg-btn-secondary" on:click={resetSettings}>↩ Reset to Defaults</button>
 
   {/if}
@@ -675,6 +699,15 @@
   let alertLog: any[] = [];
   let reportText = '';
   let autoRefreshTimer: any = null;
+
+  // ── 24/7 backend monitor (always-on email alerts via Cloudflare Worker) ──
+  // Registers a site on our server so WBGT is polled and emailed even when the
+  // browser/tab is CLOSED. Pro/Site only. The plugin itself can't run closed.
+  const MONITOR_API = 'https://fieldguard-monitor.almarhoobimoza.workers.dev';
+  let alertEmail = '';
+  let monitorMsg = '';
+  let monitorBusy = false;
+  let monitoredSites: any[] = [];
 
   // ── Saved sites (multi-site) + background monitoring ───────
   interface SavedSite { id: string; name: string; lat: number; lon: number; }
@@ -964,6 +997,7 @@
         try { localStorage.setItem('fieldguard_license', JSON.stringify({ key, tier: licenseTier, expires: licenseExpires })); } catch {}
         licenseMsg = '✓ Activated — Pro features unlocked';
         refreshData();
+        listMonitors();
       } else {
         licenseTier = ''; licenseExpires = '';
         licenseMsg = (j && j.reason === 'expired') ? 'This key has expired — please renew.' : 'Key not found or invalid.';
@@ -976,7 +1010,55 @@
   function deactivateLicense() {
     licenseTier = ''; licenseExpires = ''; licenseKey = ''; licenseMsg = '';
     try { localStorage.removeItem('fieldguard_license'); } catch {}
+    monitoredSites = [];
     refreshData();
+  }
+
+  // ════════════ 24/7 backend monitor (email alerts, browser-independent) ════
+  // Talks to the Cloudflare Worker: register the current pin so it's polled
+  // every 15 min server-side and an alert is emailed on a danger zone.
+  const MON_ZONE_COLORS: Record<string, string> = {
+    green: '#22c55e', amber: '#f59e0b', red: '#ef4444', purple: '#a855f7', black: '#111827',
+  };
+  function monZoneColor(z: string): string { return MON_ZONE_COLORS[z] || '#64748b'; }
+  function loadMonitorEmail() {
+    try { alertEmail = localStorage.getItem('fieldguard_alert_email') || ''; } catch {}
+  }
+  async function listMonitors() {
+    if (!licenseKey) { monitoredSites = []; return; }
+    try {
+      const r = await fetch(`${MONITOR_API}/monitors?key=${encodeURIComponent(licenseKey)}`);
+      const j = await r.json();
+      monitoredSites = Array.isArray(j.monitors) ? j.monitors : [];
+    } catch {}
+  }
+  async function register24() {
+    monitorMsg = '';
+    if (!isPro) { monitorMsg = '24/7 email alerts require a Pro or Site license.'; return; }
+    const email = (alertEmail || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { monitorMsg = 'Enter a valid email address.'; return; }
+    try { localStorage.setItem('fieldguard_alert_email', email); } catch {}
+    monitorBusy = true;
+    try {
+      const r = await fetch(`${MONITOR_API}/monitor`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: licenseKey, email,
+          name: locationName ? locationName.split(',')[0] : `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
+          lat, lon, ppe: settings.ppeProfile,
+        }),
+      });
+      const j = await r.json();
+      if (r.ok && j.ok) { monitorMsg = `✓ Monitored 24/7 — alerts email to ${email}`; await listMonitors(); }
+      else { monitorMsg = j.error || 'Could not register this site.'; }
+    } catch { monitorMsg = 'Could not reach the monitoring server.'; }
+    monitorBusy = false;
+  }
+  async function removeMonitor(id: string) {
+    try {
+      await fetch(`${MONITOR_API}/monitor?key=${encodeURIComponent(licenseKey)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await listMonitors();
+    } catch {}
   }
 
   function generateReport() {
@@ -1125,6 +1207,8 @@
     try { const s = localStorage.getItem('fieldguard_settings'); if (s) settings = {...DEFAULT_SETTINGS, ...JSON.parse(s)}; } catch {}
     loadLicense();
     loadSites();
+    loadMonitorEmail();
+    listMonitors();
     try { const c = map.getCenter(); lat = c.lat; lon = c.lng; } catch {}
     map.on('click', onMapClick);
     document.addEventListener('visibilitychange', onVisible);
@@ -1187,6 +1271,9 @@
   .fg-site-max { font-size:9px; color:#64748b; }
   .fg-site-locked { background:#0f172a; border:1px dashed #334155; color:#94a3b8; padding:3px 9px; border-radius:14px; font-size:10px; text-decoration:none; }
   .fg-stale { margin:6px 12px 0; padding:5px 10px; background:#422006; border:1px solid #a16207; color:#fde68a; font-size:10px; border-radius:6px; }
+  .fg-mon-list { margin-top:8px; display:flex; flex-direction:column; gap:4px; }
+  .fg-mon-item { display:flex; align-items:center; gap:7px; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:5px 8px; font-size:11px; color:#cbd5e1; }
+  .fg-mon-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
   .fg-daynight { font-size:10px; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
   .fg-daynight.day { background:#78350f; color:#fcd34d; }
   .fg-daynight.night { background:#1e3a8a; color:#bfdbfe; }

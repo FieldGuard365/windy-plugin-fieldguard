@@ -1,6 +1,6 @@
 {
   "name": "windy-plugin-fieldguard",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Heat stress (WBGT), cold stress (wind chill), wind, rain and thunderstorm/lightning risk across all Windy models. Metric or imperial units (°C/°F, m/s/mph), worst-case engine, customizable thresholds, and ISO 7933-compliant weekly reports.",
@@ -10,7 +10,7 @@
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1782905208717,
-  "builtReadable": "2026-07-01T11:26:48.717Z",
+  "built": 1782963886238,
+  "builtReadable": "2026-07-02T03:44:46.238Z",
   "screenshot": "screenshot.jpg"
 }

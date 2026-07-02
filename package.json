@@ -1,6 +1,6 @@
 {
     "name": "windy-plugin-fieldguard",
-    "version": "3.0.4",
+    "version": "3.0.5",
     "description": "FieldGuard — HSE Field Safety Monitor for Windy.com",
     "main": "dist/plugin.min.js",
     "type": "module",
