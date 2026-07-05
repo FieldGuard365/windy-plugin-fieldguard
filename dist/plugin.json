@@ -10,7 +10,7 @@
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1782963886238,
-  "builtReadable": "2026-07-02T03:44:46.238Z",
+  "built": 1783261101825,
+  "builtReadable": "2026-07-05T14:18:21.825Z",
   "screenshot": "screenshot.jpg"
 }

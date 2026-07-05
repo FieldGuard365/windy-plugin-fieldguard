@@ -43,6 +43,8 @@
       {#if canAddSite()}
         <input class="fg-site-name" bind:value={newSiteName} placeholder="Name…" />
         <button class="fg-site-add" title="Save current pin as a site" on:click={addCurrentSite}>＋ Save pin</button>
+        <input class="fg-site-name" bind:value={coordInput} placeholder="lat, lon" on:keydown={(e) => e.key === 'Enter' && addSiteByCoords()} />
+        <button class="fg-site-add" title="Add a site by exact coordinates" on:click={addSiteByCoords}>＋ Coords</button>
       {:else if isPro}
         <span class="fg-site-max">Max {maxSites()} sites on this licence</span>
       {:else}
@@ -645,6 +647,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { map } from '@windy/map';
+  import broadcast from '@windy/broadcast';
 
   import {
     assessHeatStress, assessWind, assessRain, assessColdStress, assessThunderstorm,
@@ -714,6 +717,7 @@
   let savedSites: SavedSite[] = [];
   let activeSiteId = '';
   let newSiteName = '';
+  let coordInput = '';                       // "lat, lon" to add a site by exact coordinates
   let isStale = false, staleTime = '';
   let bgStatus: Record<string, { color: string; label: string; time: string }> = {};
   // Saved-site limit is tier-based — multi-site is a paid feature.
@@ -1044,7 +1048,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key: licenseKey, email,
-          name: locationName ? locationName.split(',')[0] : `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
+          name: (savedSites.find(s => s.id === activeSiteId)?.name) || (locationName ? locationName.split(',')[0] : `${lat.toFixed(3)}, ${lon.toFixed(3)}`),
           lat, lon, ppe: settings.ppeProfile,
         }),
       });
@@ -1116,6 +1120,20 @@
     savedSites = [...savedSites, { id, name, lat, lon }];
     activeSiteId = id; newSiteName = '';
     persistSites();
+  }
+  // Add a site by typing exact coordinates ("lat, lon" or "lat lon").
+  function addSiteByCoords() {
+    if (!canAddSite()) return;
+    const m = (coordInput || '').trim().match(/^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (!m) { locationName = 'Enter coords as: lat, lon'; return; }
+    const la = parseFloat(m[1]), lo = parseFloat(m[2]);
+    if (la < -90 || la > 90 || lo < -180 || lo > 180) { locationName = 'Coords out of range'; return; }
+    const id = `${Date.now()}`;
+    const name = (newSiteName || '').trim() || `${la.toFixed(3)}, ${lo.toFixed(3)}`;
+    savedSites = [...savedSites, { id, name, lat: la, lon: lo }];
+    activeSiteId = id; newSiteName = ''; coordInput = '';
+    lat = la; lon = lo; locationName = name; locked = true; geocodedFor = '';
+    persistSites(); refreshData();
   }
   function selectSite(s: SavedSite) {
     activeSiteId = s.id; locked = true;
@@ -1199,8 +1217,10 @@
   // Named handler so onDestroy removes ONLY our listener via map.off('click', onMapClick).
   // (A bare map.off('click') would strip every click handler on the Windy map, including Windy's own.)
   function onMapClick(e: any) {
-    if (locked) return;
-    lat = e.latlng.lat; lon = e.latlng.lng; refreshData();
+    if (!locked) { lat = e.latlng.lat; lon = e.latlng.lng; refreshData(); }
+    // Windy's single-click opens the picker and closes our rhpane — re-assert it open
+    // so the panel no longer "disappears" every time you click the map.
+    try { broadcast.emit('rqstOpen', 'windy-plugin-fieldguard', { lat, lon }); } catch {}
   }
 
   onMount(() => {

@@ -10,13 +10,16 @@ const __pluginConfig =  {
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1782963886063,
-  "builtReadable": "2026-07-02T03:44:46.063Z",
+  "built": 1783261101757,
+  "builtReadable": "2026-07-05T14:18:21.757Z",
   "screenshot": "screenshot.jpg"
 };
 
 // transformCode: import { map } from '@windy/map';
 const { map } = W.map;
+
+// transformCode: import broadcast from '@windy/broadcast';
+const broadcast = W.broadcast;
 
 
 /** @returns {void} */
@@ -3320,85 +3323,85 @@ function add_css(target) {
 
 function get_each_context_9(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[147] = list[i];
+	child_ctx[151] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_10(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[163] = list[i][0];
-	child_ctx[164] = list[i][1];
+	child_ctx[167] = list[i][0];
+	child_ctx[168] = list[i][1];
 	return child_ctx;
 }
 
 function get_each_context_6(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[153] = list[i];
+	child_ctx[157] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_7(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[156] = list[i];
-	child_ctx[158] = i;
+	child_ctx[160] = list[i];
+	child_ctx[162] = i;
 	return child_ctx;
 }
 
 function get_each_context_8(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[150] = list[i];
+	child_ctx[154] = list[i];
 	return child_ctx;
 }
 
 function get_each_context(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[136] = list[i];
+	child_ctx[140] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_1(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[139] = list[i];
+	child_ctx[143] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_2(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[142] = list[i];
+	child_ctx[146] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_3(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[142] = list[i];
+	child_ctx[146] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_4(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[147] = list[i];
+	child_ctx[151] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_5(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[150] = list[i];
+	child_ctx[154] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_11(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[167] = list[i];
+	child_ctx[171] = list[i];
 	return child_ctx;
 }
 
 // (18:4) {#each TABS as t}
 function create_each_block_11(ctx) {
 	let button;
-	let t0_value = /*t*/ ctx[167].icon + "";
+	let t0_value = /*t*/ ctx[171].icon + "";
 	let t0;
 	let t1;
-	let t2_value = /*t*/ ctx[167].label + "";
+	let t2_value = /*t*/ ctx[171].label + "";
 	let t2;
 	let t3;
 	let button_class_value;
@@ -3406,7 +3409,7 @@ function create_each_block_11(ctx) {
 	let dispose;
 
 	function click_handler_1() {
-		return /*click_handler_1*/ ctx[66](/*t*/ ctx[167]);
+		return /*click_handler_1*/ ctx[68](/*t*/ ctx[171]);
 	}
 
 	return {
@@ -3416,7 +3419,7 @@ function create_each_block_11(ctx) {
 			t1 = space();
 			t2 = text(t2_value);
 			t3 = space();
-			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[167].id ? 'active' : '') + " svelte-vomya3");
+			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[171].id ? 'active' : '') + " svelte-vomya3");
 		},
 		m(target, anchor) {
 			insert(target, button, anchor);
@@ -3433,7 +3436,7 @@ function create_each_block_11(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[0] & /*tab*/ 16 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[167].id ? 'active' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*tab*/ 16 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[171].id ? 'active' : '') + " svelte-vomya3")) {
 				attr(button, "class", button_class_value);
 			}
 		},
@@ -3448,7 +3451,7 @@ function create_each_block_11(ctx) {
 	};
 }
 
-// (480:31) 
+// (482:31) 
 function create_if_block_35(ctx) {
 	let div0;
 	let t1;
@@ -3511,7 +3514,7 @@ function create_if_block_35(ctx) {
 	let t38;
 	let label5;
 	let t39;
-	let t40_value = (/*units*/ ctx[42] === 'imperial' ? '°F' : '°C') + "";
+	let t40_value = (/*units*/ ctx[43] === 'imperial' ? '°F' : '°C') + "";
 	let t40;
 	let t41;
 	let div13;
@@ -3519,12 +3522,12 @@ function create_if_block_35(ctx) {
 	let input5_disabled_value;
 	let t42;
 	let span8;
-	let t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[42]) + "";
+	let t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[43]) + "";
 	let t43;
 	let t44;
 	let label6;
 	let t45;
-	let t46_value = (/*units*/ ctx[42] === 'imperial' ? '°F' : '°C') + "";
+	let t46_value = (/*units*/ ctx[43] === 'imperial' ? '°F' : '°C') + "";
 	let t46;
 	let t47;
 	let div14;
@@ -3532,7 +3535,7 @@ function create_if_block_35(ctx) {
 	let input6_disabled_value;
 	let t48;
 	let span9;
-	let t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[42]) + "";
+	let t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[43]) + "";
 	let t49;
 	let t50;
 	let div19;
@@ -3541,7 +3544,7 @@ function create_if_block_35(ctx) {
 	let t52;
 	let label7;
 	let t53;
-	let t54_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t54_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t54;
 	let t55;
 	let div17;
@@ -3549,12 +3552,12 @@ function create_if_block_35(ctx) {
 	let input7_disabled_value;
 	let t56;
 	let span10;
-	let t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[42]) + "";
+	let t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[43]) + "";
 	let t57;
 	let t58;
 	let label8;
 	let t59;
-	let t60_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t60_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t60;
 	let t61;
 	let div18;
@@ -3562,7 +3565,7 @@ function create_if_block_35(ctx) {
 	let input8_disabled_value;
 	let t62;
 	let span11;
-	let t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[42]) + "";
+	let t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[43]) + "";
 	let t63;
 	let t64;
 	let div23;
@@ -3571,7 +3574,7 @@ function create_if_block_35(ctx) {
 	let t66;
 	let label9;
 	let t67;
-	let t68_value = (/*units*/ ctx[42] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t68_value = (/*units*/ ctx[43] === 'imperial' ? 'in/h' : 'mm/h') + "";
 	let t68;
 	let t69;
 	let div21;
@@ -3579,12 +3582,12 @@ function create_if_block_35(ctx) {
 	let input9_disabled_value;
 	let t70;
 	let span12;
-	let t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[42]) + "";
+	let t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[43]) + "";
 	let t71;
 	let t72;
 	let label10;
 	let t73;
-	let t74_value = (/*units*/ ctx[42] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t74_value = (/*units*/ ctx[43] === 'imperial' ? 'in/h' : 'mm/h') + "";
 	let t74;
 	let t75;
 	let div22;
@@ -3592,7 +3595,7 @@ function create_if_block_35(ctx) {
 	let input10_disabled_value;
 	let t76;
 	let span13;
-	let t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[42]) + "";
+	let t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[43]) + "";
 	let t77;
 	let t78;
 	let div27;
@@ -3603,7 +3606,7 @@ function create_if_block_35(ctx) {
 	let t82;
 	let label11;
 	let t83;
-	let t84_value = (/*units*/ ctx[42] === 'imperial' ? 'mi' : 'km') + "";
+	let t84_value = (/*units*/ ctx[43] === 'imperial' ? 'mi' : 'km') + "";
 	let t84;
 	let t85;
 	let div26;
@@ -3611,10 +3614,10 @@ function create_if_block_35(ctx) {
 	let input11_disabled_value;
 	let t86;
 	let span14;
-	let t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[42]) + "";
+	let t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[43]) + "";
 	let t87;
 	let t88;
-	let t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[42]) + "";
+	let t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[43]) + "";
 	let t89;
 	let t90;
 	let div29;
@@ -3672,8 +3675,8 @@ function create_if_block_35(ctx) {
 	let if_block10 = !/*isPro*/ ctx[3] && create_if_block_39();
 	let if_block11 = /*isPro*/ ctx[3] && create_if_block_37(ctx);
 	let if_block12 = /*monitorMsg*/ ctx[32] && create_if_block_36(ctx);
-	binding_group = init_binding_group(/*$$binding_groups*/ ctx[97][1]);
-	binding_group_1 = init_binding_group(/*$$binding_groups*/ ctx[97][2]);
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[101][1]);
+	binding_group_1 = init_binding_group(/*$$binding_groups*/ ctx[101][2]);
 
 	return {
 		c() {
@@ -4209,42 +4212,42 @@ function create_if_block_35(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "change", /*input0_change_handler*/ ctx[96]),
-					listen(input0, "change", /*saveSettings*/ ctx[49]),
-					listen(input1, "change", /*input1_change_handler*/ ctx[98]),
-					listen(input1, "change", /*saveSettings*/ ctx[49]),
-					listen(input2, "change", /*input2_change_handler*/ ctx[99]),
-					listen(input2, "change", /*saveSettings*/ ctx[49]),
-					listen(input3, "change", /*input3_change_handler*/ ctx[100]),
-					listen(input3, "change", /*saveSettings*/ ctx[49]),
-					listen(input4, "change", /*input4_change_handler*/ ctx[101]),
-					listen(input4, "change", /*saveSettings*/ ctx[49]),
-					listen(input5, "change", /*input5_change_input_handler*/ ctx[103]),
-					listen(input5, "input", /*input5_change_input_handler*/ ctx[103]),
-					listen(input5, "change", /*saveSettings*/ ctx[49]),
-					listen(input6, "change", /*input6_change_input_handler*/ ctx[104]),
-					listen(input6, "input", /*input6_change_input_handler*/ ctx[104]),
-					listen(input6, "change", /*saveSettings*/ ctx[49]),
-					listen(input7, "change", /*input7_change_input_handler*/ ctx[105]),
-					listen(input7, "input", /*input7_change_input_handler*/ ctx[105]),
-					listen(input7, "change", /*saveSettings*/ ctx[49]),
-					listen(input8, "change", /*input8_change_input_handler*/ ctx[106]),
-					listen(input8, "input", /*input8_change_input_handler*/ ctx[106]),
-					listen(input8, "change", /*saveSettings*/ ctx[49]),
-					listen(input9, "change", /*input9_change_input_handler*/ ctx[107]),
-					listen(input9, "input", /*input9_change_input_handler*/ ctx[107]),
-					listen(input9, "change", /*saveSettings*/ ctx[49]),
-					listen(input10, "change", /*input10_change_input_handler*/ ctx[108]),
-					listen(input10, "input", /*input10_change_input_handler*/ ctx[108]),
-					listen(input10, "change", /*saveSettings*/ ctx[49]),
-					listen(input11, "change", /*input11_change_input_handler*/ ctx[109]),
-					listen(input11, "input", /*input11_change_input_handler*/ ctx[109]),
-					listen(input11, "change", /*saveSettings*/ ctx[49]),
-					listen(input12, "change", /*input12_change_handler*/ ctx[110]),
-					listen(input12, "change", /*saveSettings*/ ctx[49]),
-					listen(input13, "change", /*input13_change_handler*/ ctx[111]),
-					listen(input13, "change", /*setupAutoRefresh*/ ctx[51]),
-					listen(button, "click", /*resetSettings*/ ctx[50])
+					listen(input0, "change", /*input0_change_handler*/ ctx[100]),
+					listen(input0, "change", /*saveSettings*/ ctx[50]),
+					listen(input1, "change", /*input1_change_handler*/ ctx[102]),
+					listen(input1, "change", /*saveSettings*/ ctx[50]),
+					listen(input2, "change", /*input2_change_handler*/ ctx[103]),
+					listen(input2, "change", /*saveSettings*/ ctx[50]),
+					listen(input3, "change", /*input3_change_handler*/ ctx[104]),
+					listen(input3, "change", /*saveSettings*/ ctx[50]),
+					listen(input4, "change", /*input4_change_handler*/ ctx[105]),
+					listen(input4, "change", /*saveSettings*/ ctx[50]),
+					listen(input5, "change", /*input5_change_input_handler*/ ctx[107]),
+					listen(input5, "input", /*input5_change_input_handler*/ ctx[107]),
+					listen(input5, "change", /*saveSettings*/ ctx[50]),
+					listen(input6, "change", /*input6_change_input_handler*/ ctx[108]),
+					listen(input6, "input", /*input6_change_input_handler*/ ctx[108]),
+					listen(input6, "change", /*saveSettings*/ ctx[50]),
+					listen(input7, "change", /*input7_change_input_handler*/ ctx[109]),
+					listen(input7, "input", /*input7_change_input_handler*/ ctx[109]),
+					listen(input7, "change", /*saveSettings*/ ctx[50]),
+					listen(input8, "change", /*input8_change_input_handler*/ ctx[110]),
+					listen(input8, "input", /*input8_change_input_handler*/ ctx[110]),
+					listen(input8, "change", /*saveSettings*/ ctx[50]),
+					listen(input9, "change", /*input9_change_input_handler*/ ctx[111]),
+					listen(input9, "input", /*input9_change_input_handler*/ ctx[111]),
+					listen(input9, "change", /*saveSettings*/ ctx[50]),
+					listen(input10, "change", /*input10_change_input_handler*/ ctx[112]),
+					listen(input10, "input", /*input10_change_input_handler*/ ctx[112]),
+					listen(input10, "change", /*saveSettings*/ ctx[50]),
+					listen(input11, "change", /*input11_change_input_handler*/ ctx[113]),
+					listen(input11, "input", /*input11_change_input_handler*/ ctx[113]),
+					listen(input11, "change", /*saveSettings*/ ctx[50]),
+					listen(input12, "change", /*input12_change_handler*/ ctx[114]),
+					listen(input12, "change", /*saveSettings*/ ctx[50]),
+					listen(input13, "change", /*input13_change_handler*/ ctx[115]),
+					listen(input13, "change", /*setupAutoRefresh*/ ctx[52]),
+					listen(button, "click", /*resetSettings*/ ctx[51])
 				];
 
 				mounted = true;
@@ -4338,7 +4341,7 @@ function create_if_block_35(ctx) {
 				input4.checked = input4.__value === /*settings*/ ctx[2].winterMode;
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*saveSettings*/ 262144) {
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*saveSettings*/ 524288) {
 				each_value_10 = ensure_array_like(Object.entries(PPE_PROFILES));
 				let i;
 
@@ -4372,7 +4375,7 @@ function create_if_block_35(ctx) {
 				if_block4 = null;
 			}
 
-			if (dirty[1] & /*units*/ 2048 && t40_value !== (t40_value = (/*units*/ ctx[42] === 'imperial' ? '°F' : '°C') + "")) set_data(t40, t40_value);
+			if (dirty[1] & /*units*/ 4096 && t40_value !== (t40_value = (/*units*/ ctx[43] === 'imperial' ? '°F' : '°C') + "")) set_data(t40, t40_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input5_disabled_value !== (input5_disabled_value = !/*isPro*/ ctx[3])) {
 				input5.disabled = input5_disabled_value;
@@ -4382,8 +4385,8 @@ function create_if_block_35(ctx) {
 				set_input_value(input5, /*settings*/ ctx[2].wbgtWarnC);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t43_value !== (t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[42]) + "")) set_data(t43, t43_value);
-			if (dirty[1] & /*units*/ 2048 && t46_value !== (t46_value = (/*units*/ ctx[42] === 'imperial' ? '°F' : '°C') + "")) set_data(t46, t46_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t43_value !== (t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[43]) + "")) set_data(t43, t43_value);
+			if (dirty[1] & /*units*/ 4096 && t46_value !== (t46_value = (/*units*/ ctx[43] === 'imperial' ? '°F' : '°C') + "")) set_data(t46, t46_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input6_disabled_value !== (input6_disabled_value = !/*isPro*/ ctx[3])) {
 				input6.disabled = input6_disabled_value;
@@ -4393,7 +4396,7 @@ function create_if_block_35(ctx) {
 				set_input_value(input6, /*settings*/ ctx[2].wbgtDangerC);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t49_value !== (t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[42]) + "")) set_data(t49, t49_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t49_value !== (t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[43]) + "")) set_data(t49, t49_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block5) ; else {
@@ -4406,7 +4409,7 @@ function create_if_block_35(ctx) {
 				if_block5 = null;
 			}
 
-			if (dirty[1] & /*units*/ 2048 && t54_value !== (t54_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t54, t54_value);
+			if (dirty[1] & /*units*/ 4096 && t54_value !== (t54_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t54, t54_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input7_disabled_value !== (input7_disabled_value = !/*isPro*/ ctx[3])) {
 				input7.disabled = input7_disabled_value;
@@ -4416,8 +4419,8 @@ function create_if_block_35(ctx) {
 				set_input_value(input7, /*settings*/ ctx[2].windWarnMs);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t57_value !== (t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[42]) + "")) set_data(t57, t57_value);
-			if (dirty[1] & /*units*/ 2048 && t60_value !== (t60_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t60, t60_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t57_value !== (t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[43]) + "")) set_data(t57, t57_value);
+			if (dirty[1] & /*units*/ 4096 && t60_value !== (t60_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t60, t60_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input8_disabled_value !== (input8_disabled_value = !/*isPro*/ ctx[3])) {
 				input8.disabled = input8_disabled_value;
@@ -4427,7 +4430,7 @@ function create_if_block_35(ctx) {
 				set_input_value(input8, /*settings*/ ctx[2].windDangerMs);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t63_value !== (t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[42]) + "")) set_data(t63, t63_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t63_value !== (t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[43]) + "")) set_data(t63, t63_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block6) ; else {
@@ -4440,7 +4443,7 @@ function create_if_block_35(ctx) {
 				if_block6 = null;
 			}
 
-			if (dirty[1] & /*units*/ 2048 && t68_value !== (t68_value = (/*units*/ ctx[42] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t68, t68_value);
+			if (dirty[1] & /*units*/ 4096 && t68_value !== (t68_value = (/*units*/ ctx[43] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t68, t68_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input9_disabled_value !== (input9_disabled_value = !/*isPro*/ ctx[3])) {
 				input9.disabled = input9_disabled_value;
@@ -4450,8 +4453,8 @@ function create_if_block_35(ctx) {
 				set_input_value(input9, /*settings*/ ctx[2].rainWarnMmh);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t71_value !== (t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[42]) + "")) set_data(t71, t71_value);
-			if (dirty[1] & /*units*/ 2048 && t74_value !== (t74_value = (/*units*/ ctx[42] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t74, t74_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t71_value !== (t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[43]) + "")) set_data(t71, t71_value);
+			if (dirty[1] & /*units*/ 4096 && t74_value !== (t74_value = (/*units*/ ctx[43] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t74, t74_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input10_disabled_value !== (input10_disabled_value = !/*isPro*/ ctx[3])) {
 				input10.disabled = input10_disabled_value;
@@ -4461,7 +4464,7 @@ function create_if_block_35(ctx) {
 				set_input_value(input10, /*settings*/ ctx[2].rainDangerMmh);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t77_value !== (t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[42]) + "")) set_data(t77, t77_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t77_value !== (t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[43]) + "")) set_data(t77, t77_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block7) ; else {
@@ -4474,7 +4477,7 @@ function create_if_block_35(ctx) {
 				if_block7 = null;
 			}
 
-			if (dirty[1] & /*units*/ 2048 && t84_value !== (t84_value = (/*units*/ ctx[42] === 'imperial' ? 'mi' : 'km') + "")) set_data(t84, t84_value);
+			if (dirty[1] & /*units*/ 4096 && t84_value !== (t84_value = (/*units*/ ctx[43] === 'imperial' ? 'mi' : 'km') + "")) set_data(t84, t84_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input11_disabled_value !== (input11_disabled_value = !/*isPro*/ ctx[3])) {
 				input11.disabled = input11_disabled_value;
@@ -4484,8 +4487,8 @@ function create_if_block_35(ctx) {
 				set_input_value(input11, /*settings*/ ctx[2].lightningRadiusKm);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t87_value !== (t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[42]) + "")) set_data(t87, t87_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t89_value !== (t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[42]) + "")) set_data(t89, t89_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t87_value !== (t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[43]) + "")) set_data(t87, t87_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t89_value !== (t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[43]) + "")) set_data(t89, t89_value);
 
 			if (dirty[0] & /*settings*/ 4) {
 				input12.checked = /*settings*/ ctx[2].soundAlerts;
@@ -4607,7 +4610,7 @@ function create_if_block_35(ctx) {
 	};
 }
 
-// (437:29) 
+// (439:29) 
 function create_if_block_32(ctx) {
 	let div0;
 	let t1;
@@ -4671,7 +4674,7 @@ function create_if_block_32(ctx) {
 	};
 }
 
-// (387:32) 
+// (389:32) 
 function create_if_block_28(ctx) {
 	let if_block_anchor;
 
@@ -4763,7 +4766,7 @@ function create_if_block(ctx) {
 	}
 
 	function select_block_type_1(ctx, dirty) {
-		if (show_if == null) show_if = !!/*canAddSite*/ ctx[44]();
+		if (show_if == null) show_if = !!/*canAddSite*/ ctx[45]();
 		if (show_if) return create_if_block_26;
 		if (/*isPro*/ ctx[3]) return create_if_block_27;
 		return create_else_block_5;
@@ -4771,8 +4774,8 @@ function create_if_block(ctx) {
 
 	let current_block_type = select_block_type_1(ctx);
 	let if_block0 = current_block_type(ctx);
-	let if_block1 = /*isStale*/ ctx[38] && create_if_block_25(ctx);
-	let each_value_4 = ensure_array_like(/*MODELS*/ ctx[46]);
+	let if_block1 = /*isStale*/ ctx[39] && create_if_block_25(ctx);
+	let each_value_4 = ensure_array_like(/*MODELS*/ ctx[47]);
 	let each_blocks = [];
 
 	for (let i = 0; i < each_value_4.length; i += 1) {
@@ -4852,7 +4855,7 @@ function create_if_block(ctx) {
 			set_style(label0, "margin", "0");
 			attr(label0, "class", "svelte-vomya3");
 			attr(select, "class", "svelte-vomya3");
-			if (/*selectedModel*/ ctx[28] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[71].call(select));
+			if (/*selectedModel*/ ctx[28] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[75].call(select));
 			attr(input, "type", "checkbox");
 			input.disabled = input_disabled_value = !/*isPro*/ ctx[3];
 			attr(input, "class", "svelte-vomya3");
@@ -4912,12 +4915,12 @@ function create_if_block(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*click_handler_2*/ ctx[67]),
-					listen(button1, "click", /*refreshData*/ ctx[48]),
-					listen(select, "change", /*select_change_handler*/ ctx[71]),
-					listen(select, "change", /*refreshData*/ ctx[48]),
-					listen(input, "change", /*input_change_handler*/ ctx[72]),
-					listen(input, "change", /*refreshData*/ ctx[48])
+					listen(button0, "click", /*click_handler_2*/ ctx[69]),
+					listen(button1, "click", /*refreshData*/ ctx[49]),
+					listen(select, "change", /*select_change_handler*/ ctx[75]),
+					listen(select, "change", /*refreshData*/ ctx[49]),
+					listen(input, "change", /*input_change_handler*/ ctx[76]),
+					listen(input, "change", /*refreshData*/ ctx[49])
 				];
 
 				mounted = true;
@@ -4943,7 +4946,7 @@ function create_if_block(ctx) {
 				attr(button0, "title", button0_title_value);
 			}
 
-			if (dirty[1] & /*savedSites, activeSiteId, selectSite, bgStatus*/ 1073742384 | dirty[2] & /*removeSite*/ 1) {
+			if (dirty[1] & /*savedSites, activeSiteId, bgStatus*/ 1072 | dirty[2] & /*selectSite, removeSite*/ 6) {
 				each_value_5 = ensure_array_like(/*savedSites*/ ctx[35]);
 				let i;
 
@@ -4978,7 +4981,7 @@ function create_if_block(ctx) {
 				}
 			}
 
-			if (/*isStale*/ ctx[38]) {
+			if (/*isStale*/ ctx[39]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
@@ -4991,8 +4994,8 @@ function create_if_block(ctx) {
 				if_block1 = null;
 			}
 
-			if (dirty[1] & /*MODELS*/ 32768) {
-				each_value_4 = ensure_array_like(/*MODELS*/ ctx[46]);
+			if (dirty[1] & /*MODELS*/ 65536) {
+				each_value_4 = ensure_array_like(/*MODELS*/ ctx[47]);
 				let i;
 
 				for (i = 0; i < each_value_4.length; i += 1) {
@@ -5014,7 +5017,7 @@ function create_if_block(ctx) {
 				each_blocks.length = each_value_4.length;
 			}
 
-			if (dirty[0] & /*selectedModel*/ 268435456 | dirty[1] & /*MODELS*/ 32768) {
+			if (dirty[0] & /*selectedModel*/ 268435456 | dirty[1] & /*MODELS*/ 65536) {
 				select_option(select, /*selectedModel*/ ctx[28]);
 			}
 
@@ -5077,7 +5080,7 @@ function create_if_block(ctx) {
 	};
 }
 
-// (491:6) {:else}
+// (493:6) {:else}
 function create_else_block_9(ctx) {
 	let div0;
 	let t1;
@@ -5132,9 +5135,9 @@ function create_else_block_9(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler_1*/ ctx[94]),
-					listen(input, "keydown", /*keydown_handler*/ ctx[95]),
-					listen(button, "click", /*activateLicense*/ ctx[52])
+					listen(input, "input", /*input_input_handler*/ ctx[98]),
+					listen(input, "keydown", /*keydown_handler_1*/ ctx[99]),
+					listen(button, "click", /*activateLicense*/ ctx[53])
 				];
 
 				mounted = true;
@@ -5166,7 +5169,7 @@ function create_else_block_9(ctx) {
 	};
 }
 
-// (485:6) {#if isPro}
+// (487:6) {#if isPro}
 function create_if_block_49(ctx) {
 	let div;
 	let span0;
@@ -5218,7 +5221,7 @@ function create_if_block_49(ctx) {
 			append(div, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*deactivateLicense*/ ctx[53]);
+				dispose = listen(button, "click", /*deactivateLicense*/ ctx[54]);
 				mounted = true;
 			}
 		},
@@ -5240,7 +5243,7 @@ function create_if_block_49(ctx) {
 	};
 }
 
-// (500:6) {#if licenseMsg}
+// (502:6) {#if licenseMsg}
 function create_if_block_48(ctx) {
 	let div;
 	let t_1;
@@ -5266,7 +5269,7 @@ function create_if_block_48(ctx) {
 	};
 }
 
-// (504:60) {#if !isPro}
+// (506:60) {#if !isPro}
 function create_if_block_47(ctx) {
 	let span;
 
@@ -5287,7 +5290,7 @@ function create_if_block_47(ctx) {
 	};
 }
 
-// (517:71) {#if !isPro}
+// (519:71) {#if !isPro}
 function create_if_block_46(ctx) {
 	let span;
 
@@ -5308,13 +5311,13 @@ function create_if_block_46(ctx) {
 	};
 }
 
-// (535:6) {#each Object.entries(PPE_PROFILES) as [key, prof]}
+// (537:6) {#each Object.entries(PPE_PROFILES) as [key, prof]}
 function create_each_block_10(ctx) {
 	let label;
 	let input;
 	let t0;
 	let span1;
-	let t1_value = /*prof*/ ctx[164].label + "";
+	let t1_value = /*prof*/ ctx[168].label + "";
 	let t1;
 	let t2;
 	let span0;
@@ -5322,7 +5325,7 @@ function create_each_block_10(ctx) {
 	let binding_group;
 	let mounted;
 	let dispose;
-	binding_group = init_binding_group(/*$$binding_groups*/ ctx[97][0]);
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[101][0]);
 
 	return {
 		c() {
@@ -5333,10 +5336,10 @@ function create_each_block_10(ctx) {
 			t1 = text(t1_value);
 			t2 = space();
 			span0 = element("span");
-			span0.textContent = `+${/*prof*/ ctx[164].adjustment}°C`;
+			span0.textContent = `+${/*prof*/ ctx[168].adjustment}°C`;
 			t6 = space();
 			attr(input, "type", "radio");
-			input.__value = /*key*/ ctx[163];
+			input.__value = /*key*/ ctx[167];
 			set_input_value(input, input.__value);
 			attr(input, "class", "svelte-vomya3");
 			attr(span0, "class", "fg-adj svelte-vomya3");
@@ -5357,8 +5360,8 @@ function create_each_block_10(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "change", /*input_change_handler_1*/ ctx[102]),
-					listen(input, "change", /*saveSettings*/ ctx[49])
+					listen(input, "change", /*input_change_handler_1*/ ctx[106]),
+					listen(input, "change", /*saveSettings*/ ctx[50])
 				];
 
 				mounted = true;
@@ -5381,7 +5384,7 @@ function create_each_block_10(ctx) {
 	};
 }
 
-// (544:74) {#if !isPro}
+// (546:74) {#if !isPro}
 function create_if_block_45(ctx) {
 	let span;
 
@@ -5402,7 +5405,7 @@ function create_if_block_45(ctx) {
 	};
 }
 
-// (561:56) {#if !isPro}
+// (563:56) {#if !isPro}
 function create_if_block_44(ctx) {
 	let span;
 
@@ -5423,7 +5426,7 @@ function create_if_block_44(ctx) {
 	};
 }
 
-// (577:56) {#if !isPro}
+// (579:56) {#if !isPro}
 function create_if_block_43(ctx) {
 	let span;
 
@@ -5444,7 +5447,7 @@ function create_if_block_43(ctx) {
 	};
 }
 
-// (593:49) {#if !isPro}
+// (595:49) {#if !isPro}
 function create_if_block_42(ctx) {
 	let span;
 
@@ -5465,7 +5468,7 @@ function create_if_block_42(ctx) {
 	};
 }
 
-// (611:71) {#if !isPro}
+// (613:71) {#if !isPro}
 function create_if_block_41(ctx) {
 	let span;
 
@@ -5486,7 +5489,7 @@ function create_if_block_41(ctx) {
 	};
 }
 
-// (616:67) {#if !isPro}
+// (618:67) {#if !isPro}
 function create_if_block_40(ctx) {
 	let span;
 
@@ -5507,7 +5510,7 @@ function create_if_block_40(ctx) {
 	};
 }
 
-// (617:164) {#if !isPro}
+// (619:164) {#if !isPro}
 function create_if_block_39(ctx) {
 	let t_1;
 
@@ -5526,7 +5529,7 @@ function create_if_block_39(ctx) {
 	};
 }
 
-// (618:6) {#if isPro}
+// (620:6) {#if isPro}
 function create_if_block_37(ctx) {
 	let div0;
 	let input;
@@ -5543,10 +5546,10 @@ function create_if_block_37(ctx) {
 	let t6_value = /*lon*/ ctx[6].toFixed(3) + "";
 	let t6;
 	let t7;
-	let t8_value = /*maxSites*/ ctx[43]() + "";
+	let t8_value = /*maxSites*/ ctx[44]() + "";
 	let t8;
 	let t9;
-	let t10_value = (/*maxSites*/ ctx[43]() > 1 ? 's' : '') + "";
+	let t10_value = (/*maxSites*/ ctx[44]() > 1 ? 's' : '') + "";
 	let t10;
 	let t11;
 	let t12;
@@ -5609,8 +5612,8 @@ function create_if_block_37(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler_2*/ ctx[112]),
-					listen(button, "click", /*register24*/ ctx[55])
+					listen(input, "input", /*input_input_handler_1*/ ctx[116]),
+					listen(button, "click", /*register24*/ ctx[56])
 				];
 
 				mounted = true;
@@ -5659,7 +5662,7 @@ function create_if_block_37(ctx) {
 	};
 }
 
-// (624:8) {#if monitoredSites.length > 0}
+// (626:8) {#if monitoredSites.length > 0}
 function create_if_block_38(ctx) {
 	let div;
 	let each_value_9 = ensure_array_like(/*monitoredSites*/ ctx[34]);
@@ -5689,7 +5692,7 @@ function create_if_block_38(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*removeMonitor, monitoredSites, monZoneColor*/ 41943048) {
+			if (dirty[1] & /*removeMonitor, monitoredSites, monZoneColor*/ 83886088) {
 				each_value_9 = ensure_array_like(/*monitoredSites*/ ctx[34]);
 				let i;
 
@@ -5722,13 +5725,13 @@ function create_if_block_38(ctx) {
 	};
 }
 
-// (626:12) {#each monitoredSites as m}
+// (628:12) {#each monitoredSites as m}
 function create_each_block_9(ctx) {
 	let div;
 	let span0;
 	let t0;
 	let span1;
-	let t1_value = /*m*/ ctx[147].name + "";
+	let t1_value = /*m*/ ctx[151].name + "";
 	let t1;
 	let t2;
 	let button;
@@ -5737,7 +5740,7 @@ function create_each_block_9(ctx) {
 	let dispose;
 
 	function click_handler_14() {
-		return /*click_handler_14*/ ctx[113](/*m*/ ctx[147]);
+		return /*click_handler_14*/ ctx[117](/*m*/ ctx[151]);
 	}
 
 	return {
@@ -5752,7 +5755,7 @@ function create_each_block_9(ctx) {
 			button.textContent = "✕";
 			t4 = space();
 			attr(span0, "class", "fg-mon-dot svelte-vomya3");
-			set_style(span0, "background", /*monZoneColor*/ ctx[54](/*m*/ ctx[147].last_zone));
+			set_style(span0, "background", /*monZoneColor*/ ctx[55](/*m*/ ctx[151].last_zone));
 			set_style(span1, "flex", "1");
 			attr(button, "class", "fg-mini-btn svelte-vomya3");
 			attr(div, "class", "fg-mon-item svelte-vomya3");
@@ -5776,10 +5779,10 @@ function create_each_block_9(ctx) {
 			ctx = new_ctx;
 
 			if (dirty[1] & /*monitoredSites*/ 8) {
-				set_style(span0, "background", /*monZoneColor*/ ctx[54](/*m*/ ctx[147].last_zone));
+				set_style(span0, "background", /*monZoneColor*/ ctx[55](/*m*/ ctx[151].last_zone));
 			}
 
-			if (dirty[1] & /*monitoredSites*/ 8 && t1_value !== (t1_value = /*m*/ ctx[147].name + "")) set_data(t1, t1_value);
+			if (dirty[1] & /*monitoredSites*/ 8 && t1_value !== (t1_value = /*m*/ ctx[151].name + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -5792,7 +5795,7 @@ function create_each_block_9(ctx) {
 	};
 }
 
-// (636:6) {#if monitorMsg}
+// (638:6) {#if monitorMsg}
 function create_if_block_36(ctx) {
 	let div;
 	let t_1;
@@ -5818,7 +5821,7 @@ function create_if_block_36(ctx) {
 	};
 }
 
-// (445:4) {:else}
+// (447:4) {:else}
 function create_else_block_8(ctx) {
 	let div;
 	let label0;
@@ -5978,7 +5981,7 @@ function create_else_block_8(ctx) {
 			option2.__value = "UNDER REVIEW";
 			set_input_value(option2, option2.__value);
 			attr(select, "class", "svelte-vomya3");
-			if (/*reportMeta*/ ctx[41].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[92].call(select));
+			if (/*reportMeta*/ ctx[42].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[96].call(select));
 			attr(label10, "class", "svelte-vomya3");
 			attr(input10, "type", "number");
 			attr(input10, "min", "0");
@@ -5992,52 +5995,52 @@ function create_else_block_8(ctx) {
 			append(div, label0);
 			append(label0, t0);
 			append(label0, input0);
-			set_input_value(input0, /*reportMeta*/ ctx[41].projectName);
+			set_input_value(input0, /*reportMeta*/ ctx[42].projectName);
 			append(div, t1);
 			append(div, label1);
 			append(label1, t2);
 			append(label1, input1);
-			set_input_value(input1, /*reportMeta*/ ctx[41].contractNumber);
+			set_input_value(input1, /*reportMeta*/ ctx[42].contractNumber);
 			append(div, t3);
 			append(div, label2);
 			append(label2, t4);
 			append(label2, input2);
-			set_input_value(input2, /*reportMeta*/ ctx[41].country);
+			set_input_value(input2, /*reportMeta*/ ctx[42].country);
 			append(div, t5);
 			append(div, label3);
 			append(label3, t6);
 			append(label3, input3);
-			set_input_value(input3, /*reportMeta*/ ctx[41].clientName);
+			set_input_value(input3, /*reportMeta*/ ctx[42].clientName);
 			append(div, t7);
 			append(div, label4);
 			append(label4, t8);
 			append(label4, input4);
-			set_input_value(input4, /*reportMeta*/ ctx[41].contractorName);
+			set_input_value(input4, /*reportMeta*/ ctx[42].contractorName);
 			append(div, t9);
 			append(div, label5);
 			append(label5, t10);
 			append(label5, input5);
-			set_input_value(input5, /*reportMeta*/ ctx[41].hseManagerName);
+			set_input_value(input5, /*reportMeta*/ ctx[42].hseManagerName);
 			append(div, t11);
 			append(div, label6);
 			append(label6, t12);
 			append(label6, input6);
-			set_input_value(input6, /*reportMeta*/ ctx[41].regulatoryRef);
+			set_input_value(input6, /*reportMeta*/ ctx[42].regulatoryRef);
 			append(div, t13);
 			append(div, label7);
 			append(label7, t14);
 			append(label7, input7);
-			set_input_value(input7, /*reportMeta*/ ctx[41].banStart);
+			set_input_value(input7, /*reportMeta*/ ctx[42].banStart);
 			append(div, t15);
 			append(div, label8);
 			append(label8, t16);
 			append(label8, input8);
-			set_input_value(input8, /*reportMeta*/ ctx[41].banEnd);
+			set_input_value(input8, /*reportMeta*/ ctx[42].banEnd);
 			append(div, t17);
 			append(div, label9);
 			append(label9, t18);
 			append(label9, input9);
-			set_input_value(input9, /*reportMeta*/ ctx[41].banMonths);
+			set_input_value(input9, /*reportMeta*/ ctx[42].banMonths);
 			append(div, t19);
 			append(div, label10);
 			append(label10, t20);
@@ -6045,12 +6048,12 @@ function create_else_block_8(ctx) {
 			append(select, option0);
 			append(select, option1);
 			append(select, option2);
-			select_option(select, /*reportMeta*/ ctx[41].fidic, true);
+			select_option(select, /*reportMeta*/ ctx[42].fidic, true);
 			append(div, t24);
 			append(div, label11);
 			append(label11, t25);
 			append(label11, input10);
-			set_input_value(input10, /*reportMeta*/ ctx[41].delayDays);
+			set_input_value(input10, /*reportMeta*/ ctx[42].delayDays);
 			insert(target, t26, anchor);
 			insert(target, button, anchor);
 			insert(target, t28, anchor);
@@ -6059,71 +6062,71 @@ function create_else_block_8(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "input", /*input0_input_handler*/ ctx[82]),
-					listen(input1, "input", /*input1_input_handler*/ ctx[83]),
-					listen(input2, "input", /*input2_input_handler*/ ctx[84]),
-					listen(input3, "input", /*input3_input_handler*/ ctx[85]),
-					listen(input4, "input", /*input4_input_handler*/ ctx[86]),
-					listen(input5, "input", /*input5_input_handler*/ ctx[87]),
-					listen(input6, "input", /*input6_input_handler*/ ctx[88]),
-					listen(input7, "input", /*input7_input_handler*/ ctx[89]),
-					listen(input8, "input", /*input8_input_handler*/ ctx[90]),
-					listen(input9, "input", /*input9_input_handler*/ ctx[91]),
-					listen(select, "change", /*select_change_handler_1*/ ctx[92]),
-					listen(input10, "input", /*input10_input_handler*/ ctx[93]),
-					listen(button, "click", /*generateReport*/ ctx[57])
+					listen(input0, "input", /*input0_input_handler_1*/ ctx[86]),
+					listen(input1, "input", /*input1_input_handler_1*/ ctx[87]),
+					listen(input2, "input", /*input2_input_handler*/ ctx[88]),
+					listen(input3, "input", /*input3_input_handler*/ ctx[89]),
+					listen(input4, "input", /*input4_input_handler*/ ctx[90]),
+					listen(input5, "input", /*input5_input_handler*/ ctx[91]),
+					listen(input6, "input", /*input6_input_handler*/ ctx[92]),
+					listen(input7, "input", /*input7_input_handler*/ ctx[93]),
+					listen(input8, "input", /*input8_input_handler*/ ctx[94]),
+					listen(input9, "input", /*input9_input_handler*/ ctx[95]),
+					listen(select, "change", /*select_change_handler_1*/ ctx[96]),
+					listen(input10, "input", /*input10_input_handler*/ ctx[97]),
+					listen(button, "click", /*generateReport*/ ctx[58])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*reportMeta*/ 1024 && input0.value !== /*reportMeta*/ ctx[41].projectName) {
-				set_input_value(input0, /*reportMeta*/ ctx[41].projectName);
+			if (dirty[1] & /*reportMeta*/ 2048 && input0.value !== /*reportMeta*/ ctx[42].projectName) {
+				set_input_value(input0, /*reportMeta*/ ctx[42].projectName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input1.value !== /*reportMeta*/ ctx[41].contractNumber) {
-				set_input_value(input1, /*reportMeta*/ ctx[41].contractNumber);
+			if (dirty[1] & /*reportMeta*/ 2048 && input1.value !== /*reportMeta*/ ctx[42].contractNumber) {
+				set_input_value(input1, /*reportMeta*/ ctx[42].contractNumber);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input2.value !== /*reportMeta*/ ctx[41].country) {
-				set_input_value(input2, /*reportMeta*/ ctx[41].country);
+			if (dirty[1] & /*reportMeta*/ 2048 && input2.value !== /*reportMeta*/ ctx[42].country) {
+				set_input_value(input2, /*reportMeta*/ ctx[42].country);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input3.value !== /*reportMeta*/ ctx[41].clientName) {
-				set_input_value(input3, /*reportMeta*/ ctx[41].clientName);
+			if (dirty[1] & /*reportMeta*/ 2048 && input3.value !== /*reportMeta*/ ctx[42].clientName) {
+				set_input_value(input3, /*reportMeta*/ ctx[42].clientName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input4.value !== /*reportMeta*/ ctx[41].contractorName) {
-				set_input_value(input4, /*reportMeta*/ ctx[41].contractorName);
+			if (dirty[1] & /*reportMeta*/ 2048 && input4.value !== /*reportMeta*/ ctx[42].contractorName) {
+				set_input_value(input4, /*reportMeta*/ ctx[42].contractorName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input5.value !== /*reportMeta*/ ctx[41].hseManagerName) {
-				set_input_value(input5, /*reportMeta*/ ctx[41].hseManagerName);
+			if (dirty[1] & /*reportMeta*/ 2048 && input5.value !== /*reportMeta*/ ctx[42].hseManagerName) {
+				set_input_value(input5, /*reportMeta*/ ctx[42].hseManagerName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input6.value !== /*reportMeta*/ ctx[41].regulatoryRef) {
-				set_input_value(input6, /*reportMeta*/ ctx[41].regulatoryRef);
+			if (dirty[1] & /*reportMeta*/ 2048 && input6.value !== /*reportMeta*/ ctx[42].regulatoryRef) {
+				set_input_value(input6, /*reportMeta*/ ctx[42].regulatoryRef);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input7.value !== /*reportMeta*/ ctx[41].banStart) {
-				set_input_value(input7, /*reportMeta*/ ctx[41].banStart);
+			if (dirty[1] & /*reportMeta*/ 2048 && input7.value !== /*reportMeta*/ ctx[42].banStart) {
+				set_input_value(input7, /*reportMeta*/ ctx[42].banStart);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input8.value !== /*reportMeta*/ ctx[41].banEnd) {
-				set_input_value(input8, /*reportMeta*/ ctx[41].banEnd);
+			if (dirty[1] & /*reportMeta*/ 2048 && input8.value !== /*reportMeta*/ ctx[42].banEnd) {
+				set_input_value(input8, /*reportMeta*/ ctx[42].banEnd);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && input9.value !== /*reportMeta*/ ctx[41].banMonths) {
-				set_input_value(input9, /*reportMeta*/ ctx[41].banMonths);
+			if (dirty[1] & /*reportMeta*/ 2048 && input9.value !== /*reportMeta*/ ctx[42].banMonths) {
+				set_input_value(input9, /*reportMeta*/ ctx[42].banMonths);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024) {
-				select_option(select, /*reportMeta*/ ctx[41].fidic);
+			if (dirty[1] & /*reportMeta*/ 2048) {
+				select_option(select, /*reportMeta*/ ctx[42].fidic);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 1024 && to_number(input10.value) !== /*reportMeta*/ ctx[41].delayDays) {
-				set_input_value(input10, /*reportMeta*/ ctx[41].delayDays);
+			if (dirty[1] & /*reportMeta*/ 2048 && to_number(input10.value) !== /*reportMeta*/ ctx[42].delayDays) {
+				set_input_value(input10, /*reportMeta*/ ctx[42].delayDays);
 			}
 
 			if (/*reportText*/ ctx[30]) {
@@ -6155,7 +6158,7 @@ function create_else_block_8(ctx) {
 	};
 }
 
-// (443:4) {#if !isPro}
+// (445:4) {#if !isPro}
 function create_if_block_33(ctx) {
 	let div;
 
@@ -6177,7 +6180,7 @@ function create_if_block_33(ctx) {
 	};
 }
 
-// (467:4) {#if reportText}
+// (469:4) {#if reportText}
 function create_if_block_34(ctx) {
 	let div1;
 	let div0;
@@ -6228,8 +6231,8 @@ function create_if_block_34(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*copyReport*/ ctx[58]),
-					listen(button1, "click", /*downloadReport*/ ctx[59])
+					listen(button0, "click", /*copyReport*/ ctx[59]),
+					listen(button1, "click", /*downloadReport*/ ctx[60])
 				];
 
 				mounted = true;
@@ -6249,7 +6252,7 @@ function create_if_block_34(ctx) {
 	};
 }
 
-// (394:4) {:else}
+// (396:4) {:else}
 function create_else_block_6(ctx) {
 	let div0;
 	let t1;
@@ -6424,7 +6427,7 @@ function create_else_block_6(ctx) {
 	};
 }
 
-// (388:4) {#if !isPro}
+// (390:4) {#if !isPro}
 function create_if_block_29(ctx) {
 	let div2;
 	let div0;
@@ -6460,7 +6463,7 @@ function create_if_block_29(ctx) {
 			append(div2, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_13*/ ctx[81]);
+				dispose = listen(button, "click", /*click_handler_13*/ ctx[85]);
 				mounted = true;
 			}
 		},
@@ -6476,14 +6479,14 @@ function create_if_block_29(ctx) {
 	};
 }
 
-// (403:8) {#each HEAT_STRESS_SYMPTOMS as s}
+// (405:8) {#each HEAT_STRESS_SYMPTOMS as s}
 function create_each_block_8(ctx) {
 	let div;
 
 	return {
 		c() {
 			div = element("div");
-			div.textContent = `● ${/*s*/ ctx[150]}`;
+			div.textContent = `● ${/*s*/ ctx[154]}`;
 			attr(div, "class", "fg-emg-item svelte-vomya3");
 		},
 		m(target, anchor) {
@@ -6498,7 +6501,7 @@ function create_each_block_8(ctx) {
 	};
 }
 
-// (410:8) {#each EMERGENCY_RESPONSE as step, i}
+// (412:8) {#each EMERGENCY_RESPONSE as step, i}
 function create_each_block_7(ctx) {
 	let div;
 	let span;
@@ -6510,13 +6513,13 @@ function create_each_block_7(ctx) {
 		c() {
 			div = element("div");
 			span = element("span");
-			span.textContent = `${/*i*/ ctx[158] + 1}`;
+			span.textContent = `${/*i*/ ctx[162] + 1}`;
 			t1 = space();
-			t2 = text(/*step*/ ctx[156]);
+			t2 = text(/*step*/ ctx[160]);
 			t3 = space();
 			attr(span, "class", "fg-emg-num svelte-vomya3");
 
-			attr(div, "class", "fg-emg-step " + (/*step*/ ctx[156].includes('SEVERE')
+			attr(div, "class", "fg-emg-step " + (/*step*/ ctx[160].includes('SEVERE')
 			? 'fg-emg-critical'
 			: '') + " svelte-vomya3");
 		},
@@ -6536,7 +6539,7 @@ function create_each_block_7(ctx) {
 	};
 }
 
-// (420:8) {#if alertLog.length > 0}
+// (422:8) {#if alertLog.length > 0}
 function create_if_block_31(ctx) {
 	let button;
 	let mounted;
@@ -6553,7 +6556,7 @@ function create_if_block_31(ctx) {
 			insert(target, button, anchor);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*downloadCSV*/ ctx[63]);
+				dispose = listen(button, "click", /*downloadCSV*/ ctx[65]);
 				mounted = true;
 			}
 		},
@@ -6569,7 +6572,7 @@ function create_if_block_31(ctx) {
 	};
 }
 
-// (424:6) {:else}
+// (426:6) {:else}
 function create_else_block_7(ctx) {
 	let each_1_anchor;
 	let each_value_6 = ensure_array_like([.../*alertLog*/ ctx[29]].reverse().slice(0, 15));
@@ -6630,7 +6633,7 @@ function create_else_block_7(ctx) {
 	};
 }
 
-// (422:6) {#if alertLog.length === 0}
+// (424:6) {#if alertLog.length === 0}
 function create_if_block_30(ctx) {
 	let div;
 
@@ -6652,19 +6655,19 @@ function create_if_block_30(ctx) {
 	};
 }
 
-// (425:8) {#each [...alertLog].reverse().slice(0, 15) as alert}
+// (427:8) {#each [...alertLog].reverse().slice(0, 15) as alert}
 function create_each_block_6(ctx) {
 	let div3;
 	let div0;
-	let t0_value = /*alert*/ ctx[153].time + "";
+	let t0_value = /*alert*/ ctx[157].time + "";
 	let t0;
 	let t1;
 	let div1;
-	let t2_value = /*alert*/ ctx[153].type + "";
+	let t2_value = /*alert*/ ctx[157].type + "";
 	let t2;
 	let t3;
 	let div2;
-	let t4_value = /*alert*/ ctx[153].message + "";
+	let t4_value = /*alert*/ ctx[157].message + "";
 	let t4;
 	let t5;
 
@@ -6684,7 +6687,7 @@ function create_each_block_6(ctx) {
 			attr(div1, "class", "fg-alert-type svelte-vomya3");
 			attr(div2, "class", "fg-alert-msg svelte-vomya3");
 			attr(div3, "class", "fg-alert-item svelte-vomya3");
-			set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[153].color);
+			set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[157].color);
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -6699,12 +6702,12 @@ function create_each_block_6(ctx) {
 			append(div3, t5);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*alertLog*/ 536870912 && t0_value !== (t0_value = /*alert*/ ctx[153].time + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*alertLog*/ 536870912 && t2_value !== (t2_value = /*alert*/ ctx[153].type + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*alertLog*/ 536870912 && t4_value !== (t4_value = /*alert*/ ctx[153].message + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t0_value !== (t0_value = /*alert*/ ctx[157].time + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t2_value !== (t2_value = /*alert*/ ctx[157].type + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*alertLog*/ 536870912 && t4_value !== (t4_value = /*alert*/ ctx[157].message + "")) set_data(t4, t4_value);
 
 			if (dirty[0] & /*alertLog*/ 536870912) {
-				set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[153].color);
+				set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[157].color);
 			}
 		},
 		d(detaching) {
@@ -6719,7 +6722,7 @@ function create_each_block_6(ctx) {
 function create_each_block_5(ctx) {
 	let button;
 	let span0;
-	let t0_value = /*s*/ ctx[150].name + "";
+	let t0_value = /*s*/ ctx[154].name + "";
 	let t0;
 	let span1;
 	let button_class_value;
@@ -6727,11 +6730,11 @@ function create_each_block_5(ctx) {
 	let dispose;
 
 	function click_handler_3() {
-		return /*click_handler_3*/ ctx[68](/*s*/ ctx[150]);
+		return /*click_handler_3*/ ctx[70](/*s*/ ctx[154]);
 	}
 
 	function click_handler_4() {
-		return /*click_handler_4*/ ctx[69](/*s*/ ctx[150]);
+		return /*click_handler_4*/ ctx[71](/*s*/ ctx[154]);
 	}
 
 	return {
@@ -6742,11 +6745,11 @@ function create_each_block_5(ctx) {
 			span1 = element("span");
 			span1.textContent = "×";
 			attr(span0, "class", "fg-site-dot svelte-vomya3");
-			set_style(span0, "background", /*bgStatus*/ ctx[40][/*s*/ ctx[150].id]?.color || '#475569');
+			set_style(span0, "background", /*bgStatus*/ ctx[41][/*s*/ ctx[154].id]?.color || '#475569');
 			attr(span1, "class", "fg-site-x svelte-vomya3");
 			attr(span1, "title", "Remove");
 
-			attr(button, "class", button_class_value = "fg-site-chip " + (/*s*/ ctx[150].id === /*activeSiteId*/ ctx[36]
+			attr(button, "class", button_class_value = "fg-site-chip " + (/*s*/ ctx[154].id === /*activeSiteId*/ ctx[36]
 			? 'active'
 			: '') + " svelte-vomya3");
 		},
@@ -6768,13 +6771,13 @@ function create_each_block_5(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[1] & /*bgStatus, savedSites*/ 528) {
-				set_style(span0, "background", /*bgStatus*/ ctx[40][/*s*/ ctx[150].id]?.color || '#475569');
+			if (dirty[1] & /*bgStatus, savedSites*/ 1040) {
+				set_style(span0, "background", /*bgStatus*/ ctx[41][/*s*/ ctx[154].id]?.color || '#475569');
 			}
 
-			if (dirty[1] & /*savedSites*/ 16 && t0_value !== (t0_value = /*s*/ ctx[150].name + "")) set_data(t0, t0_value);
+			if (dirty[1] & /*savedSites*/ 16 && t0_value !== (t0_value = /*s*/ ctx[154].name + "")) set_data(t0, t0_value);
 
-			if (dirty[1] & /*savedSites, activeSiteId*/ 48 && button_class_value !== (button_class_value = "fg-site-chip " + (/*s*/ ctx[150].id === /*activeSiteId*/ ctx[36]
+			if (dirty[1] & /*savedSites, activeSiteId*/ 48 && button_class_value !== (button_class_value = "fg-site-chip " + (/*s*/ ctx[154].id === /*activeSiteId*/ ctx[36]
 			? 'active'
 			: '') + " svelte-vomya3")) {
 				attr(button, "class", button_class_value);
@@ -6791,7 +6794,7 @@ function create_each_block_5(ctx) {
 	};
 }
 
-// (48:6) {:else}
+// (50:6) {:else}
 function create_else_block_5(ctx) {
 	let a;
 
@@ -6815,14 +6818,14 @@ function create_else_block_5(ctx) {
 	};
 }
 
-// (46:22) 
+// (48:22) 
 function create_if_block_27(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
-			span.textContent = `Max ${/*maxSites*/ ctx[43]()} sites on this licence`;
+			span.textContent = `Max ${/*maxSites*/ ctx[44]()} sites on this licence`;
 			attr(span, "class", "fg-site-max svelte-vomya3");
 		},
 		m(target, anchor) {
@@ -6839,48 +6842,77 @@ function create_if_block_27(ctx) {
 
 // (43:6) {#if canAddSite()}
 function create_if_block_26(ctx) {
-	let input;
+	let input0;
 	let t0;
-	let button;
+	let button0;
+	let t2;
+	let input1;
+	let t3;
+	let button1;
 	let mounted;
 	let dispose;
 
 	return {
 		c() {
-			input = element("input");
+			input0 = element("input");
 			t0 = space();
-			button = element("button");
-			button.textContent = "＋ Save pin";
-			attr(input, "class", "fg-site-name svelte-vomya3");
-			attr(input, "placeholder", "Name…");
-			attr(button, "class", "fg-site-add svelte-vomya3");
-			attr(button, "title", "Save current pin as a site");
+			button0 = element("button");
+			button0.textContent = "＋ Save pin";
+			t2 = space();
+			input1 = element("input");
+			t3 = space();
+			button1 = element("button");
+			button1.textContent = "＋ Coords";
+			attr(input0, "class", "fg-site-name svelte-vomya3");
+			attr(input0, "placeholder", "Name…");
+			attr(button0, "class", "fg-site-add svelte-vomya3");
+			attr(button0, "title", "Save current pin as a site");
+			attr(input1, "class", "fg-site-name svelte-vomya3");
+			attr(input1, "placeholder", "lat, lon");
+			attr(button1, "class", "fg-site-add svelte-vomya3");
+			attr(button1, "title", "Add a site by exact coordinates");
 		},
 		m(target, anchor) {
-			insert(target, input, anchor);
-			set_input_value(input, /*newSiteName*/ ctx[37]);
+			insert(target, input0, anchor);
+			set_input_value(input0, /*newSiteName*/ ctx[37]);
 			insert(target, t0, anchor);
-			insert(target, button, anchor);
+			insert(target, button0, anchor);
+			insert(target, t2, anchor);
+			insert(target, input1, anchor);
+			set_input_value(input1, /*coordInput*/ ctx[38]);
+			insert(target, t3, anchor);
+			insert(target, button1, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler*/ ctx[70]),
-					listen(button, "click", /*addCurrentSite*/ ctx[60])
+					listen(input0, "input", /*input0_input_handler*/ ctx[72]),
+					listen(button0, "click", /*addCurrentSite*/ ctx[61]),
+					listen(input1, "input", /*input1_input_handler*/ ctx[73]),
+					listen(input1, "keydown", /*keydown_handler*/ ctx[74]),
+					listen(button1, "click", /*addSiteByCoords*/ ctx[62])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*newSiteName*/ 64 && input.value !== /*newSiteName*/ ctx[37]) {
-				set_input_value(input, /*newSiteName*/ ctx[37]);
+			if (dirty[1] & /*newSiteName*/ 64 && input0.value !== /*newSiteName*/ ctx[37]) {
+				set_input_value(input0, /*newSiteName*/ ctx[37]);
+			}
+
+			if (dirty[1] & /*coordInput*/ 128 && input1.value !== /*coordInput*/ ctx[38]) {
+				set_input_value(input1, /*coordInput*/ ctx[38]);
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(input);
+				detach(input0);
 				detach(t0);
-				detach(button);
+				detach(button0);
+				detach(t2);
+				detach(input1);
+				detach(t3);
+				detach(button1);
 			}
 
 			mounted = false;
@@ -6889,7 +6921,7 @@ function create_if_block_26(ctx) {
 	};
 }
 
-// (53:4) {#if isStale}
+// (55:4) {#if isStale}
 function create_if_block_25(ctx) {
 	let div;
 	let t0;
@@ -6899,7 +6931,7 @@ function create_if_block_25(ctx) {
 		c() {
 			div = element("div");
 			t0 = text("⚠ Offline — showing last saved reading from ");
-			t1 = text(/*staleTime*/ ctx[39]);
+			t1 = text(/*staleTime*/ ctx[40]);
 			attr(div, "class", "fg-stale svelte-vomya3");
 		},
 		m(target, anchor) {
@@ -6908,7 +6940,7 @@ function create_if_block_25(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*staleTime*/ 256) set_data(t1, /*staleTime*/ ctx[39]);
+			if (dirty[1] & /*staleTime*/ 512) set_data(t1, /*staleTime*/ ctx[40]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -6918,17 +6950,17 @@ function create_if_block_25(ctx) {
 	};
 }
 
-// (60:8) {#each MODELS as m}
+// (62:8) {#each MODELS as m}
 function create_each_block_4(ctx) {
 	let option;
-	let t_1_value = /*m*/ ctx[147].label + "";
+	let t_1_value = /*m*/ ctx[151].label + "";
 	let t_1;
 
 	return {
 		c() {
 			option = element("option");
 			t_1 = text(t_1_value);
-			option.__value = /*m*/ ctx[147].key;
+			option.__value = /*m*/ ctx[151].key;
 			set_input_value(option, option.__value);
 		},
 		m(target, anchor) {
@@ -6944,7 +6976,7 @@ function create_each_block_4(ctx) {
 	};
 }
 
-// (64:20) {#if !isPro}
+// (66:20) {#if !isPro}
 function create_if_block_24(ctx) {
 	let span;
 
@@ -6965,7 +6997,7 @@ function create_if_block_24(ctx) {
 	};
 }
 
-// (72:19) 
+// (74:19) 
 function create_if_block_3(ctx) {
 	let t0;
 	let div12;
@@ -6973,7 +7005,7 @@ function create_if_block_3(ctx) {
 	let div0;
 	let t2;
 	let div1;
-	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42], false) + "";
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43], false) + "";
 	let t3;
 	let span0;
 	let t5;
@@ -6986,10 +7018,10 @@ function create_if_block_3(ctx) {
 	let div3;
 	let t9;
 	let div4;
-	let t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42], false) + "";
+	let t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43], false) + "";
 	let t10;
 	let span1;
-	let t11_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t11_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t11;
 	let t12;
 	let div5;
@@ -7001,10 +7033,10 @@ function create_if_block_3(ctx) {
 	let div6;
 	let t16;
 	let div7;
-	let t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42], false) + "";
+	let t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43], false) + "";
 	let t17;
 	let span2;
-	let t18_value = (/*units*/ ctx[42] === 'imperial' ? 'in' : 'mm') + "";
+	let t18_value = (/*units*/ ctx[43] === 'imperial' ? 'in' : 'mm') + "";
 	let t18;
 	let t19;
 	let div8;
@@ -7026,7 +7058,7 @@ function create_if_block_3(ctx) {
 	let button3_class_value;
 	let t28;
 	let t29;
-	let show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[47](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+	let show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[48](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
 	let t30;
 	let t31;
 	let if_block4_anchor;
@@ -7202,10 +7234,10 @@ function create_if_block_3(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*click_handler_5*/ ctx[73]),
-					listen(button1, "click", /*click_handler_6*/ ctx[74]),
-					listen(button2, "click", /*click_handler_7*/ ctx[75]),
-					listen(button3, "click", /*click_handler_8*/ ctx[76])
+					listen(button0, "click", /*click_handler_5*/ ctx[77]),
+					listen(button1, "click", /*click_handler_6*/ ctx[78]),
+					listen(button2, "click", /*click_handler_7*/ ctx[79]),
+					listen(button3, "click", /*click_handler_8*/ ctx[80])
 				];
 
 				mounted = true;
@@ -7224,7 +7256,7 @@ function create_if_block_3(ctx) {
 				}
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42], false) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43], false) + "")) set_data(t3, t3_value);
 			if (dirty[0] & /*heat*/ 65536 && t6_value !== (t6_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "")) set_data(t6, t6_value);
 
 			if (dirty[0] & /*heat*/ 65536) {
@@ -7239,8 +7271,8 @@ function create_if_block_3(ctx) {
 				set_style(button0, "border-color", /*heat*/ ctx[16].zoneInfo.color);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t10_value !== (t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42], false) + "")) set_data(t10, t10_value);
-			if (dirty[1] & /*units*/ 2048 && t11_value !== (t11_value = (/*units*/ ctx[42] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t10_value !== (t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43], false) + "")) set_data(t10, t10_value);
+			if (dirty[1] & /*units*/ 4096 && t11_value !== (t11_value = (/*units*/ ctx[43] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t11, t11_value);
 			if (dirty[0] & /*windResult*/ 131072 && t13_value !== (t13_value = /*windResult*/ ctx[17]?.riskLabel + "")) set_data(t13, t13_value);
 
 			if (dirty[0] & /*windResult*/ 131072) {
@@ -7255,8 +7287,8 @@ function create_if_block_3(ctx) {
 				set_style(button1, "border-color", /*windResult*/ ctx[17]?.riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t17_value !== (t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42], false) + "")) set_data(t17, t17_value);
-			if (dirty[1] & /*units*/ 2048 && t18_value !== (t18_value = (/*units*/ ctx[42] === 'imperial' ? 'in' : 'mm') + "")) set_data(t18, t18_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t17_value !== (t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43], false) + "")) set_data(t17, t17_value);
+			if (dirty[1] & /*units*/ 4096 && t18_value !== (t18_value = (/*units*/ ctx[43] === 'imperial' ? 'in' : 'mm') + "")) set_data(t18, t18_value);
 			if (dirty[0] & /*rainResult*/ 262144 && t20_value !== (t20_value = /*rainResult*/ ctx[18]?.riskLabel + "")) set_data(t20, t20_value);
 
 			if (dirty[0] & /*rainResult*/ 262144) {
@@ -7298,7 +7330,7 @@ function create_if_block_3(ctx) {
 				}
 			}
 
-			if (dirty[0] & /*selectedHazard, coldResult*/ 2621440) show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[47](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+			if (dirty[0] & /*selectedHazard, coldResult*/ 2621440) show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[48](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
 
 			if (show_if) {
 				if (if_block2) {
@@ -7367,7 +7399,7 @@ function create_if_block_3(ctx) {
 	};
 }
 
-// (70:20) 
+// (72:20) 
 function create_if_block_2(ctx) {
 	let div;
 	let t0;
@@ -7396,7 +7428,7 @@ function create_if_block_2(ctx) {
 	};
 }
 
-// (68:4) {#if loading}
+// (70:4) {#if loading}
 function create_if_block_1(ctx) {
 	let div;
 	let t0;
@@ -7435,7 +7467,7 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (80:26) 
+// (82:26) 
 function create_if_block_23(ctx) {
 	let div;
 	let t0;
@@ -7473,7 +7505,7 @@ function create_if_block_23(ctx) {
 	};
 }
 
-// (75:6) {#if heat.isBanPeriod && activeBan}
+// (77:6) {#if heat.isBanPeriod && activeBan}
 function create_if_block_22(ctx) {
 	let div;
 	let t0;
@@ -7522,7 +7554,7 @@ function create_if_block_22(ctx) {
 	};
 }
 
-// (269:43) 
+// (271:43) 
 function create_if_block_20(ctx) {
 	let div1;
 	let div0;
@@ -7597,7 +7629,7 @@ function create_if_block_20(ctx) {
 	};
 }
 
-// (237:42) 
+// (239:42) 
 function create_if_block_18(ctx) {
 	let div1;
 	let div0;
@@ -7672,7 +7704,7 @@ function create_if_block_18(ctx) {
 	};
 }
 
-// (201:42) 
+// (203:42) 
 function create_if_block_16(ctx) {
 	let div1;
 	let div0;
@@ -7747,7 +7779,7 @@ function create_if_block_16(ctx) {
 	};
 }
 
-// (108:6) {#if selectedHazard === 'heat'}
+// (110:6) {#if selectedHazard === 'heat'}
 function create_if_block_8(ctx) {
 	let div6;
 	let div0;
@@ -7763,7 +7795,7 @@ function create_if_block_8(ctx) {
 	let t4;
 	let div3;
 	let t5;
-	let t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[42]) + "";
+	let t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[43]) + "";
 	let t6;
 	let t7;
 	let div5;
@@ -7981,7 +8013,7 @@ function create_if_block_8(ctx) {
 			}
 
 			if (dirty[0] & /*heat*/ 65536 && t3_value !== (t3_value = /*heat*/ ctx[16].zoneInfo.label + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t6_value !== (t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[42]) + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t6_value !== (t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[43]) + "")) set_data(t6, t6_value);
 
 			if (/*isPro*/ ctx[3]) {
 				if (if_block0) {
@@ -8095,7 +8127,7 @@ function create_if_block_8(ctx) {
 	};
 }
 
-// (292:8) {:else}
+// (294:8) {:else}
 function create_else_block_4(ctx) {
 	let div3;
 	let div2;
@@ -8150,7 +8182,7 @@ function create_else_block_4(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_12*/ ctx[80]);
+				dispose = listen(button, "click", /*click_handler_12*/ ctx[84]);
 				mounted = true;
 			}
 		},
@@ -8170,7 +8202,7 @@ function create_else_block_4(ctx) {
 	};
 }
 
-// (276:8) {#if isPro}
+// (278:8) {#if isPro}
 function create_if_block_21(ctx) {
 	let div9;
 	let div2;
@@ -8278,12 +8310,12 @@ function create_if_block_21(ctx) {
 	};
 }
 
-// (256:8) {:else}
+// (258:8) {:else}
 function create_else_block_3(ctx) {
 	let div3;
 	let div2;
 	let div0;
-	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42]) + "";
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8328,12 +8360,12 @@ function create_else_block_3(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_11*/ ctx[79]);
+				dispose = listen(button, "click", /*click_handler_11*/ ctx[83]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43]) + "")) set_data(t0, t0_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8348,12 +8380,12 @@ function create_else_block_3(ctx) {
 	};
 }
 
-// (244:8) {#if isPro}
+// (246:8) {#if isPro}
 function create_if_block_19(ctx) {
 	let div6;
 	let div2;
 	let div0;
-	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42]) + "";
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8367,10 +8399,10 @@ function create_if_block_19(ctx) {
 	let t7;
 	let div7;
 	let t8;
-	let t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[42]) + "";
+	let t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[43]) + "";
 	let t9;
 	let t10;
-	let t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[42]) + "";
+	let t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[43]) + "";
 	let t11;
 
 	return {
@@ -8425,10 +8457,10 @@ function create_if_block_19(ctx) {
 			append(div7, t11);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[42]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[43]) + "")) set_data(t0, t0_value);
 			if (dirty[0] & /*rainResult*/ 262144 && t4_value !== (t4_value = /*rainResult*/ ctx[18]?.intensityLabel + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t9_value !== (t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[42]) + "")) set_data(t9, t9_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t11_value !== (t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[42]) + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t9_value !== (t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[43]) + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t11_value !== (t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[43]) + "")) set_data(t11, t11_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8440,12 +8472,12 @@ function create_if_block_19(ctx) {
 	};
 }
 
-// (224:8) {:else}
+// (226:8) {:else}
 function create_else_block_2(ctx) {
 	let div3;
 	let div2;
 	let div0;
-	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "";
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8490,12 +8522,12 @@ function create_else_block_2(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_10*/ ctx[78]);
+				dispose = listen(button, "click", /*click_handler_10*/ ctx[82]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "")) set_data(t0, t0_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8510,23 +8542,23 @@ function create_else_block_2(ctx) {
 	};
 }
 
-// (208:8) {#if isPro}
+// (210:8) {#if isPro}
 function create_if_block_17(ctx) {
 	let div9;
 	let div2;
 	let div0;
-	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "";
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "";
 	let t0;
 	let t1;
 	let div1;
 	let t3;
 	let div5;
 	let div3;
-	let t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]).val + "";
+	let t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]).val + "";
 	let t4;
 	let t5;
 	let div4;
-	let t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]).lbl + "";
+	let t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]).lbl + "";
 	let t6;
 	let t7;
 	let div8;
@@ -8541,10 +8573,10 @@ function create_if_block_17(ctx) {
 	let t12;
 	let div10;
 	let t13;
-	let t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[42]) + "";
+	let t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[43]) + "";
 	let t14;
 	let t15;
-	let t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[42]) + "";
+	let t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[43]) + "";
 	let t16;
 
 	return {
@@ -8619,13 +8651,13 @@ function create_if_block_17(ctx) {
 			append(div10, t16);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t4_value !== (t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]).val + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t6_value !== (t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]).lbl + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t4_value !== (t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]).val + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t6_value !== (t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]).lbl + "")) set_data(t6, t6_value);
 			if (dirty[0] & /*windResult*/ 131072 && t9_value !== (t9_value = /*windResult*/ ctx[17]?.beaufort + "")) set_data(t9, t9_value);
 			if (dirty[0] & /*windResult*/ 131072 && t11_value !== (t11_value = /*windResult*/ ctx[17]?.beaufortDesc + "")) set_data(t11, t11_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t14_value !== (t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[42]) + "")) set_data(t14, t14_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t16_value !== (t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[42]) + "")) set_data(t16, t16_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t14_value !== (t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[43]) + "")) set_data(t14, t14_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t16_value !== (t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[43]) + "")) set_data(t16, t16_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8637,10 +8669,10 @@ function create_if_block_17(ctx) {
 	};
 }
 
-// (115:90) {#if isPro}
+// (117:90) {#if isPro}
 function create_if_block_15(ctx) {
 	let t0;
-	let t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[42]) + "";
+	let t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[43]) + "";
 	let t1;
 
 	return {
@@ -8653,7 +8685,7 @@ function create_if_block_15(ctx) {
 			insert(target, t1, anchor);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t1_value !== (t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[42]) + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t1_value !== (t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[43]) + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8664,7 +8696,7 @@ function create_if_block_15(ctx) {
 	};
 }
 
-// (122:50) {#if isPro}
+// (124:50) {#if isPro}
 function create_if_block_14(ctx) {
 	let t_1;
 
@@ -8683,12 +8715,12 @@ function create_if_block_14(ctx) {
 	};
 }
 
-// (123:8) {#if isPro}
+// (125:8) {#if isPro}
 function create_if_block_13(ctx) {
 	let div18;
 	let div2;
 	let div0;
-	let t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42]) + "";
+	let t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8703,7 +8735,7 @@ function create_if_block_13(ctx) {
 	let t8;
 	let div8;
 	let div6;
-	let t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[42]) + "";
+	let t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[43]) + "";
 	let t9;
 	let t10;
 	let div7;
@@ -8713,7 +8745,7 @@ function create_if_block_13(ctx) {
 
 	let t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
 	? 'NW'
-	: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[42])) + "";
+	: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[43])) + "";
 
 	let t13;
 	let t14;
@@ -8721,14 +8753,14 @@ function create_if_block_13(ctx) {
 	let t16;
 	let div14;
 	let div12;
-	let t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[42]) + "";
+	let t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[43]) + "";
 	let t17;
 	let t18;
 	let div13;
 	let t20;
 	let div17;
 	let div15;
-	let t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[42]) + "";
+	let t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[43]) + "";
 	let t21;
 	let t22;
 	let div16;
@@ -8846,20 +8878,20 @@ function create_if_block_13(ctx) {
 			append(div17, div16);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t0_value !== (t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t0_value !== (t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43]) + "")) set_data(t0, t0_value);
 			if (dirty[0] & /*rawData*/ 32768 && t4_value !== (t4_value = /*rawData*/ ctx[15]?.humidity + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t9_value !== (t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[42]) + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t9_value !== (t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[43]) + "")) set_data(t9, t9_value);
 
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t13_value !== (t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t13_value !== (t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
 			? 'NW'
-			: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[42])) + "")) set_data(t13, t13_value);
+			: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[43])) + "")) set_data(t13, t13_value);
 
 			if (dirty[0] & /*heat*/ 65536) {
 				set_style(div9, "color", /*heat*/ ctx[16].zoneInfo.color);
 			}
 
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t17_value !== (t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[42]) + "")) set_data(t17, t17_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 2048 && t21_value !== (t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[42]) + "")) set_data(t21, t21_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t17_value !== (t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[43]) + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 4096 && t21_value !== (t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[43]) + "")) set_data(t21, t21_value);
 
 			if (dirty[0] & /*heat, settings*/ 65540) {
 				set_style(div15, "color", /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtDangerC
@@ -8877,7 +8909,7 @@ function create_if_block_13(ctx) {
 	};
 }
 
-// (171:10) {#if isPro}
+// (173:10) {#if isPro}
 function create_if_block_12(ctx) {
 	let div;
 	let span0;
@@ -8925,7 +8957,7 @@ function create_if_block_12(ctx) {
 	};
 }
 
-// (184:8) {:else}
+// (186:8) {:else}
 function create_else_block_1(ctx) {
 	let div;
 	let t0;
@@ -8948,7 +8980,7 @@ function create_else_block_1(ctx) {
 			append(div, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_9*/ ctx[77]);
+				dispose = listen(button, "click", /*click_handler_9*/ ctx[81]);
 				mounted = true;
 			}
 		},
@@ -8964,7 +8996,7 @@ function create_else_block_1(ctx) {
 	};
 }
 
-// (179:8) {#if isPro}
+// (181:8) {#if isPro}
 function create_if_block_10(ctx) {
 	let div;
 	let t0;
@@ -9031,7 +9063,7 @@ function create_if_block_10(ctx) {
 	};
 }
 
-// (181:10) {#if worstCaseMode && worstModelLabel}
+// (183:10) {#if worstCaseMode && worstModelLabel}
 function create_if_block_11(ctx) {
 	let div;
 	let t0;
@@ -9061,7 +9093,7 @@ function create_if_block_11(ctx) {
 	};
 }
 
-// (192:6) {#if isPro}
+// (194:6) {#if isPro}
 function create_if_block_9(ctx) {
 	let div1;
 	let div0;
@@ -9148,11 +9180,11 @@ function create_if_block_9(ctx) {
 	};
 }
 
-// (195:8) {#each heat.zoneInfo.mandatoryControls as ctrl}
+// (197:8) {#each heat.zoneInfo.mandatoryControls as ctrl}
 function create_each_block_3(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*ctrl*/ ctx[142] + "";
+	let t1_value = /*ctrl*/ ctx[146] + "";
 	let t1;
 
 	return {
@@ -9168,7 +9200,7 @@ function create_each_block_3(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*ctrl*/ ctx[142] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*ctrl*/ ctx[146] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9178,7 +9210,7 @@ function create_each_block_3(ctx) {
 	};
 }
 
-// (307:6) {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
+// (309:6) {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
 function create_if_block_7(ctx) {
 	let div12;
 	let div0;
@@ -9190,21 +9222,21 @@ function create_if_block_7(ctx) {
 	let div10;
 	let div3;
 	let div1;
-	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42]) + "";
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43]) + "";
 	let t3;
 	let t4;
 	let div2;
 	let t6;
 	let div6;
 	let div4;
-	let t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[42]) + "";
+	let t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[43]) + "";
 	let t7;
 	let t8;
 	let div5;
 	let t10;
 	let div9;
 	let div7;
-	let t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "";
+	let t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "";
 	let t11;
 	let t12;
 	let div8;
@@ -9322,14 +9354,14 @@ function create_if_block_7(ctx) {
 				set_style(span, "background", /*coldResult*/ ctx[19].riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[42]) + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*coldResult*/ 524288 | dirty[1] & /*units*/ 2048 && t7_value !== (t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[42]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[43]) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*coldResult*/ 524288 | dirty[1] & /*units*/ 4096 && t7_value !== (t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[43]) + "")) set_data(t7, t7_value);
 
 			if (dirty[0] & /*coldResult*/ 524288) {
 				set_style(div4, "color", /*coldResult*/ ctx[19].riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 2048 && t11_value !== (t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[42]) + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 4096 && t11_value !== (t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[43]) + "")) set_data(t11, t11_value);
 			if (dirty[0] & /*coldResult*/ 524288 && t16_value !== (t16_value = /*coldResult*/ ctx[19].frostbite + "")) set_data(t16, t16_value);
 
 			if (dirty[0] & /*coldResult*/ 524288) {
@@ -9369,11 +9401,11 @@ function create_if_block_7(ctx) {
 	};
 }
 
-// (328:10) {#each coldResult.controls as ctrl}
+// (330:10) {#each coldResult.controls as ctrl}
 function create_each_block_2(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*ctrl*/ ctx[142] + "";
+	let t1_value = /*ctrl*/ ctx[146] + "";
 	let t1;
 
 	return {
@@ -9389,7 +9421,7 @@ function create_each_block_2(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*ctrl*/ ctx[142] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*ctrl*/ ctx[146] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9399,7 +9431,7 @@ function create_each_block_2(ctx) {
 	};
 }
 
-// (335:6) {#if selectedHazard === 'rain' && isPro && thunderResult}
+// (337:6) {#if selectedHazard === 'rain' && isPro && thunderResult}
 function create_if_block_5(ctx) {
 	let div2;
 	let div0;
@@ -9411,10 +9443,10 @@ function create_if_block_5(ctx) {
 	let t3;
 	let div1;
 	let t4;
-	let t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[42]) + "";
+	let t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[43]) + "";
 	let t5;
 	let t6;
-	let t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[42]) + "";
+	let t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[43]) + "";
 	let t7;
 	let t8;
 	let t9;
@@ -9504,8 +9536,8 @@ function create_if_block_5(ctx) {
 				}
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t5_value !== (t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[42]) + "")) set_data(t5, t5_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 2048 && t7_value !== (t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[42]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t5_value !== (t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[43]) + "")) set_data(t5, t5_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 4096 && t7_value !== (t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[43]) + "")) set_data(t7, t7_value);
 
 			if (dirty[0] & /*thunderResult*/ 1048576) {
 				each_value_1 = ensure_array_like(/*thunderResult*/ ctx[20].guidance);
@@ -9545,7 +9577,7 @@ function create_if_block_5(ctx) {
 	};
 }
 
-// (352:10) {:else}
+// (354:10) {:else}
 function create_else_block(ctx) {
 	let div;
 	let t_1_value = /*thunderResult*/ ctx[20].instability + "";
@@ -9572,7 +9604,7 @@ function create_else_block(ctx) {
 	};
 }
 
-// (341:10) {#if thunderResult.available}
+// (343:10) {#if thunderResult.available}
 function create_if_block_6(ctx) {
 	let div6;
 	let div2;
@@ -9647,11 +9679,11 @@ function create_if_block_6(ctx) {
 	};
 }
 
-// (356:10) {#each thunderResult.guidance as g}
+// (358:10) {#each thunderResult.guidance as g}
 function create_each_block_1(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*g*/ ctx[139] + "";
+	let t1_value = /*g*/ ctx[143] + "";
 	let t1;
 
 	return {
@@ -9667,7 +9699,7 @@ function create_each_block_1(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*g*/ ctx[139] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*g*/ ctx[143] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9677,7 +9709,7 @@ function create_each_block_1(ctx) {
 	};
 }
 
-// (363:6) {#if worstCaseMode && modelResults.length > 1}
+// (365:6) {#if worstCaseMode && modelResults.length > 1}
 function create_if_block_4(ctx) {
 	let div1;
 	let div0;
@@ -9729,7 +9761,7 @@ function create_if_block_4(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 2048) {
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 4096) {
 				each_value = ensure_array_like(/*modelResults*/ ctx[22]);
 				let i;
 
@@ -9762,29 +9794,29 @@ function create_if_block_4(ctx) {
 	};
 }
 
-// (369:14) {#each modelResults as mr}
+// (371:14) {#each modelResults as mr}
 function create_each_block(ctx) {
 	let tr;
 	let td0;
-	let t0_value = /*mr*/ ctx[136].modelLabel + "";
+	let t0_value = /*mr*/ ctx[140].modelLabel + "";
 	let t0;
-	let t1_value = (/*mr*/ ctx[136].isWorst ? ' ⚡' : '') + "";
+	let t1_value = (/*mr*/ ctx[140].isWorst ? ' ⚡' : '') + "";
 	let t1;
 	let t2;
 	let td1;
-	let t3_value = /*mr*/ ctx[136].heat.zoneInfo.riskLabel + "";
+	let t3_value = /*mr*/ ctx[140].heat.zoneInfo.riskLabel + "";
 	let t3;
 	let t4;
 	let td2;
 
-	let t5_value = (/*mr*/ ctx[136].heat.apparentTempFinal === 999
+	let t5_value = (/*mr*/ ctx[140].heat.apparentTempFinal === 999
 	? 'NW'
-	: fmtTemp(/*mr*/ ctx[136].heat.apparentTempFinal, /*units*/ ctx[42])) + "";
+	: fmtTemp(/*mr*/ ctx[140].heat.apparentTempFinal, /*units*/ ctx[43])) + "";
 
 	let t5;
 	let t6;
 	let td3;
-	let t7_value = fmtWind(/*mr*/ ctx[136].raw.windMs, /*units*/ ctx[42]) + "";
+	let t7_value = fmtWind(/*mr*/ ctx[140].raw.windMs, /*units*/ ctx[43]) + "";
 	let t7;
 	let t8;
 	let tr_class_value;
@@ -9806,13 +9838,13 @@ function create_each_block(ctx) {
 			t7 = text(t7_value);
 			t8 = space();
 			attr(td0, "class", "svelte-vomya3");
-			set_style(td1, "color", /*mr*/ ctx[136].heat.zoneInfo.color);
+			set_style(td1, "color", /*mr*/ ctx[140].heat.zoneInfo.color);
 			attr(td1, "class", "svelte-vomya3");
-			set_style(td2, "color", /*mr*/ ctx[136].heat.zoneInfo.color);
+			set_style(td2, "color", /*mr*/ ctx[140].heat.zoneInfo.color);
 			attr(td2, "class", "svelte-vomya3");
-			set_style(td3, "color", /*mr*/ ctx[136].wind.riskColor);
+			set_style(td3, "color", /*mr*/ ctx[140].wind.riskColor);
 			attr(td3, "class", "svelte-vomya3");
-			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[136].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"));
+			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[140].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"));
 		},
 		m(target, anchor) {
 			insert(target, tr, anchor);
@@ -9831,29 +9863,29 @@ function create_each_block(ctx) {
 			append(tr, t8);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4194304 && t0_value !== (t0_value = /*mr*/ ctx[136].modelLabel + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*modelResults*/ 4194304 && t1_value !== (t1_value = (/*mr*/ ctx[136].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*modelResults*/ 4194304 && t3_value !== (t3_value = /*mr*/ ctx[136].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t0_value !== (t0_value = /*mr*/ ctx[140].modelLabel + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t1_value !== (t1_value = (/*mr*/ ctx[140].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*modelResults*/ 4194304 && t3_value !== (t3_value = /*mr*/ ctx[140].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
 
 			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td1, "color", /*mr*/ ctx[136].heat.zoneInfo.color);
+				set_style(td1, "color", /*mr*/ ctx[140].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 2048 && t5_value !== (t5_value = (/*mr*/ ctx[136].heat.apparentTempFinal === 999
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 4096 && t5_value !== (t5_value = (/*mr*/ ctx[140].heat.apparentTempFinal === 999
 			? 'NW'
-			: fmtTemp(/*mr*/ ctx[136].heat.apparentTempFinal, /*units*/ ctx[42])) + "")) set_data(t5, t5_value);
+			: fmtTemp(/*mr*/ ctx[140].heat.apparentTempFinal, /*units*/ ctx[43])) + "")) set_data(t5, t5_value);
 
 			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td2, "color", /*mr*/ ctx[136].heat.zoneInfo.color);
+				set_style(td2, "color", /*mr*/ ctx[140].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 2048 && t7_value !== (t7_value = fmtWind(/*mr*/ ctx[136].raw.windMs, /*units*/ ctx[42]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 4096 && t7_value !== (t7_value = fmtWind(/*mr*/ ctx[140].raw.windMs, /*units*/ ctx[43]) + "")) set_data(t7, t7_value);
 
 			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td3, "color", /*mr*/ ctx[136].wind.riskColor);
+				set_style(td3, "color", /*mr*/ ctx[140].wind.riskColor);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[136].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"))) {
+			if (dirty[0] & /*modelResults*/ 4194304 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[140].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"))) {
 				attr(tr, "class", tr_class_value);
 			}
 		},
@@ -9889,7 +9921,7 @@ function create_fragment(ctx) {
 	let t10;
 	let mounted;
 	let dispose;
-	let each_value_11 = ensure_array_like(/*TABS*/ ctx[45]);
+	let each_value_11 = ensure_array_like(/*TABS*/ ctx[46]);
 	let each_blocks = [];
 
 	for (let i = 0; i < each_value_11.length; i += 1) {
@@ -9963,7 +9995,7 @@ function create_fragment(ctx) {
 			if (if_block) if_block.m(section, null);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler*/ ctx[65]);
+				dispose = listen(button, "click", /*click_handler*/ ctx[67]);
 				mounted = true;
 			}
 		},
@@ -9978,8 +10010,8 @@ function create_fragment(ctx) {
 
 			if (dirty[0] & /*tab*/ 16 && t8_value !== (t8_value = (/*tab*/ ctx[4] === 'settings' ? '← Back' : '⚙ Config') + "")) set_data(t8, t8_value);
 
-			if (dirty[0] & /*tab*/ 16 | dirty[1] & /*TABS*/ 16384) {
-				each_value_11 = ensure_array_like(/*TABS*/ ctx[45]);
+			if (dirty[0] & /*tab*/ 16 | dirty[1] & /*TABS*/ 32768) {
+				each_value_11 = ensure_array_like(/*TABS*/ ctx[46]);
 				let i;
 
 				for (i = 0; i < each_value_11.length; i += 1) {
@@ -10091,6 +10123,7 @@ function instance($$self, $$props, $$invalidate) {
 	let savedSites = [];
 	let activeSiteId = '';
 	let newSiteName = '';
+	let coordInput = '';
 	let isStale = false, staleTime = '';
 	let bgStatus = {};
 
@@ -10331,10 +10364,10 @@ function instance($$self, $$props, $$invalidate) {
 			$$invalidate(19, coldResult = results[0].cold);
 			$$invalidate(20, thunderResult = results[0].thunder);
 			$$invalidate(27, worstModelLabel = results[0].modelLabel);
-			$$invalidate(38, isStale = false);
+			$$invalidate(39, isStale = false);
 			if (rawData) cacheReading(rawData);
 
-			if (activeSiteId && heat) $$invalidate(40, bgStatus = {
+			if (activeSiteId && heat) $$invalidate(41, bgStatus = {
 				...bgStatus,
 				[activeSiteId]: {
 					color: heat.zoneInfo.color,
@@ -10371,8 +10404,8 @@ function instance($$self, $$props, $$invalidate) {
 				]);
 
 				$$invalidate(27, worstModelLabel = 'cached');
-				$$invalidate(38, isStale = true);
-				$$invalidate(39, staleTime = cached.time);
+				$$invalidate(39, isStale = true);
+				$$invalidate(40, staleTime = cached.time);
 				$$invalidate(9, error = '');
 			} else {
 				$$invalidate(9, error = 'Failed to fetch data. Check network or try a different model.');
@@ -10640,9 +10673,9 @@ function instance($$self, $$props, $$invalidate) {
 				body: JSON.stringify({
 					key: licenseKey,
 					email,
-					name: locationName
+					name: savedSites.find(s => s.id === activeSiteId)?.name || (locationName
 					? locationName.split(',')[0]
-					: `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
+					: `${lat.toFixed(3)}, ${lon.toFixed(3)}`),
 					lat,
 					lon,
 					ppe: settings.ppeProfile
@@ -10767,6 +10800,37 @@ function instance($$self, $$props, $$invalidate) {
 		persistSites();
 	}
 
+	function addSiteByCoords() {
+		if (!canAddSite()) return;
+		const m = (coordInput || '').trim().match(/^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+
+		if (!m) {
+			$$invalidate(7, locationName = 'Enter coords as: lat, lon');
+			return;
+		}
+
+		const la = parseFloat(m[1]), lo = parseFloat(m[2]);
+
+		if (la < -90 || la > 90 || lo < -180 || lo > 180) {
+			$$invalidate(7, locationName = 'Coords out of range');
+			return;
+		}
+
+		const id = `${Date.now()}`;
+		const name = (newSiteName || '').trim() || `${la.toFixed(3)}, ${lo.toFixed(3)}`;
+		$$invalidate(35, savedSites = [...savedSites, { id, name, lat: la, lon: lo }]);
+		$$invalidate(36, activeSiteId = id);
+		$$invalidate(37, newSiteName = '');
+		$$invalidate(38, coordInput = '');
+		$$invalidate(5, lat = la);
+		$$invalidate(6, lon = lo);
+		$$invalidate(7, locationName = name);
+		$$invalidate(11, locked = true);
+		geocodedFor = '';
+		persistSites();
+		refreshData();
+	}
+
 	function selectSite(s) {
 		$$invalidate(36, activeSiteId = s.id);
 		$$invalidate(11, locked = true);
@@ -10859,7 +10923,7 @@ function instance($$self, $$props, $$invalidate) {
 				const now = new Date();
 				const h = assessHeatStress(inputs, settings.ppeProfile, now.getUTCHours() + s.lon / 15, now.getMonth() + 1, null);
 
-				$$invalidate(40, bgStatus = {
+				$$invalidate(41, bgStatus = {
 					...bgStatus,
 					[s.id]: {
 						color: h.zoneInfo.color,
@@ -10892,10 +10956,17 @@ function instance($$self, $$props, $$invalidate) {
 	}
 
 	function onMapClick(e) {
-		if (locked) return;
-		$$invalidate(5, lat = e.latlng.lat);
-		$$invalidate(6, lon = e.latlng.lng);
-		refreshData();
+		if (!locked) {
+			$$invalidate(5, lat = e.latlng.lat);
+			$$invalidate(6, lon = e.latlng.lng);
+			refreshData();
+		}
+
+		try {
+			broadcast.emit('rqstOpen', 'windy-plugin-fieldguard', { lat, lon });
+		} catch {
+			
+		}
 	}
 
 	onMount(() => {
@@ -10948,15 +11019,22 @@ function instance($$self, $$props, $$invalidate) {
 	const click_handler_3 = s => removeSite(s);
 	const click_handler_4 = s => selectSite(s);
 
-	function input_input_handler() {
+	function input0_input_handler() {
 		newSiteName = this.value;
 		$$invalidate(37, newSiteName);
 	}
 
+	function input1_input_handler() {
+		coordInput = this.value;
+		$$invalidate(38, coordInput);
+	}
+
+	const keydown_handler = e => e.key === 'Enter' && addSiteByCoords();
+
 	function select_change_handler() {
 		selectedModel = select_value(this);
 		$$invalidate(28, selectedModel);
-		$$invalidate(46, MODELS);
+		$$invalidate(47, MODELS);
 	}
 
 	function input_change_handler() {
@@ -10974,72 +11052,72 @@ function instance($$self, $$props, $$invalidate) {
 	const click_handler_12 = () => $$invalidate(4, tab = 'settings');
 	const click_handler_13 = () => $$invalidate(4, tab = 'settings');
 
-	function input0_input_handler() {
+	function input0_input_handler_1() {
 		reportMeta.projectName = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
-	function input1_input_handler() {
+	function input1_input_handler_1() {
 		reportMeta.contractNumber = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input2_input_handler() {
 		reportMeta.country = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input3_input_handler() {
 		reportMeta.clientName = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input4_input_handler() {
 		reportMeta.contractorName = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input5_input_handler() {
 		reportMeta.hseManagerName = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input6_input_handler() {
 		reportMeta.regulatoryRef = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input7_input_handler() {
 		reportMeta.banStart = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input8_input_handler() {
 		reportMeta.banEnd = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input9_input_handler() {
 		reportMeta.banMonths = this.value;
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function select_change_handler_1() {
 		reportMeta.fidic = select_value(this);
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
 	function input10_input_handler() {
 		reportMeta.delayDays = to_number(this.value);
-		$$invalidate(41, reportMeta);
+		$$invalidate(42, reportMeta);
 	}
 
-	function input_input_handler_1() {
+	function input_input_handler() {
 		licenseKey = this.value;
 		$$invalidate(23, licenseKey);
 	}
 
-	const keydown_handler = e => {
+	const keydown_handler_1 = e => {
 		if (e.key === 'Enter') activateLicense();
 	};
 
@@ -11118,7 +11196,7 @@ function instance($$self, $$props, $$invalidate) {
 		$$invalidate(2, settings);
 	}
 
-	function input_input_handler_2() {
+	function input_input_handler_1() {
 		alertEmail = this.value;
 		$$invalidate(31, alertEmail);
 	}
@@ -11131,7 +11209,7 @@ function instance($$self, $$props, $$invalidate) {
 		}
 
 		if ($$self.$$.dirty[0] & /*isPro, settings*/ 12) {
-			$$invalidate(42, units = isPro && settings.units === 'imperial'
+			$$invalidate(43, units = isPro && settings.units === 'imperial'
 			? 'imperial'
 			: 'metric');
 		}
@@ -11180,6 +11258,7 @@ function instance($$self, $$props, $$invalidate) {
 		savedSites,
 		activeSiteId,
 		newSiteName,
+		coordInput,
 		isStale,
 		staleTime,
 		bgStatus,
@@ -11203,6 +11282,7 @@ function instance($$self, $$props, $$invalidate) {
 		copyReport,
 		downloadReport,
 		addCurrentSite,
+		addSiteByCoords,
 		selectSite,
 		removeSite,
 		downloadCSV,
@@ -11212,7 +11292,9 @@ function instance($$self, $$props, $$invalidate) {
 		click_handler_2,
 		click_handler_3,
 		click_handler_4,
-		input_input_handler,
+		input0_input_handler,
+		input1_input_handler,
+		keydown_handler,
 		select_change_handler,
 		input_change_handler,
 		click_handler_5,
@@ -11224,8 +11306,8 @@ function instance($$self, $$props, $$invalidate) {
 		click_handler_11,
 		click_handler_12,
 		click_handler_13,
-		input0_input_handler,
-		input1_input_handler,
+		input0_input_handler_1,
+		input1_input_handler_1,
 		input2_input_handler,
 		input3_input_handler,
 		input4_input_handler,
@@ -11236,8 +11318,8 @@ function instance($$self, $$props, $$invalidate) {
 		input9_input_handler,
 		select_change_handler_1,
 		input10_input_handler,
-		input_input_handler_1,
-		keydown_handler,
+		input_input_handler,
+		keydown_handler_1,
 		input0_change_handler,
 		$$binding_groups,
 		input1_change_handler,
@@ -11254,7 +11336,7 @@ function instance($$self, $$props, $$invalidate) {
 		input11_change_input_handler,
 		input12_change_handler,
 		input13_change_handler,
-		input_input_handler_2,
+		input_input_handler_1,
 		click_handler_14
 	];
 }
@@ -11262,11 +11344,11 @@ function instance($$self, $$props, $$invalidate) {
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 64 }, add_css, [-1, -1, -1, -1, -1, -1]);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 66 }, add_css, [-1, -1, -1, -1, -1, -1]);
 	}
 
 	get onopen() {
-		return this.$$.ctx[64];
+		return this.$$.ctx[66];
 	}
 }
 
