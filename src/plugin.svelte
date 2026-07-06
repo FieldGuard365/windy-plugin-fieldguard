@@ -36,9 +36,15 @@
     <!-- SAVED SITES (multi-site + background monitor) -->
     <div class="fg-sites">
       {#each savedSites as s}
-        <button class="fg-site-chip {s.id === activeSiteId ? 'active' : ''}" on:click={() => selectSite(s)}>
-          <span class="fg-site-dot" style="background:{bgStatus[s.id]?.color || '#475569'}"></span>{s.name}<span class="fg-site-x" title="Remove" on:click|stopPropagation={() => removeSite(s)}>×</span>
-        </button>
+        {#if editingSiteId === s.id}
+          <input class="fg-site-name" bind:value={editName} use:focusInput
+            on:keydown={(e) => { if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') editingSiteId = ''; }}
+            on:blur={commitRename} />
+        {:else}
+          <button class="fg-site-chip {s.id === activeSiteId ? 'active' : ''}" on:click={() => selectSite(s)} on:dblclick={() => startRename(s)} title="Click to view · double-click to rename">
+            <span class="fg-site-dot" style="background:{bgStatus[s.id]?.color || '#475569'}"></span>{s.name}<span class="fg-site-x" title="Remove" on:click|stopPropagation={() => removeSite(s)}>×</span>
+          </button>
+        {/if}
       {/each}
       {#if canAddSite()}
         <input class="fg-site-name" bind:value={newSiteName} placeholder="Name…" />
@@ -718,6 +724,8 @@
   let activeSiteId = '';
   let newSiteName = '';
   let coordInput = '';                       // "lat, lon" to add a site by exact coordinates
+  let editingSiteId = '';                     // saved site currently being renamed
+  let editName = '';
   let isStale = false, staleTime = '';
   let bgStatus: Record<string, { color: string; label: string; time: string }> = {};
   // Saved-site limit is tier-based — multi-site is a paid feature.
@@ -875,25 +883,50 @@
         if (!inputs) throw new Error('No data available');
         const { heat: h, wind: w, rain: r, cold: cd, thunder: th } = processInputs(inputs);
         results.push({ modelKey: selectedModel, modelLabel: MODELS.find(m => m.key === selectedModel)?.label ?? selectedModel, raw: inputs, heat: h, wind: w, rain: r, cold: cd, thunder: th, isWorst: true });
+      }
+
+      modelResults = results;
+      if (results.length === 1) {
+        results[0].isWorst = true;
+        rawData = results[0].raw;
+        heat = results[0].heat;
+        windResult = results[0].wind;
+        rainResult = results[0].rain;
+        coldResult = results[0].cold;
+        thunderResult = results[0].thunder;
+        worstModelLabel = results[0].modelLabel;
       } else {
-        // Pick worst: highest zone severity, then highest apparent temp
-        results.sort((a, b) => {
+        // Worst-case = the worst value for EACH hazard across ALL models (a defensive
+        // envelope) — NOT just the single worst-heat model's numbers. This is what makes
+        // e.g. CAPE/thunderstorm show the highest instability any model predicts.
+        const worstBy = (sel: (r: any) => number, better: (a: number, b: number) => boolean) =>
+          results.reduce((best, r) => (better(sel(r), sel(best)) ? r : best), results[0]);
+        const heatW = [...results].sort((a, b) => {
           const zd = zoneSeverity(b.heat.zone) - zoneSeverity(a.heat.zone);
           if (zd !== 0) return zd;
           return (b.heat.apparentTempFinal === 999 ? 99 : b.heat.apparentTempFinal)
                - (a.heat.apparentTempFinal === 999 ? 99 : a.heat.apparentTempFinal);
-        });
-        results[0].isWorst = true;
-      }
+        })[0];
+        const windW = worstBy(r => r.raw.windMs ?? 0,  (a, b) => a > b);   // strongest wind
+        const rainW = worstBy(r => r.raw.rainMmH ?? 0, (a, b) => a > b);   // heaviest rain
+        const capeW = worstBy(r => r.raw.capeJkg ?? 0, (a, b) => a > b);   // highest CAPE / storm
+        const coldW = worstBy(r => r.cold?.windChillC ?? 999, (a, b) => a < b); // coldest wind chill
+        const solarMax = Math.max(...results.map(r => r.raw.solarWm2 ?? 0));
 
-      modelResults = results;
-      rawData = results[0].raw;
-      heat = results[0].heat;
-      windResult = results[0].wind;
-      rainResult = results[0].rain;
-      coldResult = results[0].cold;
-      thunderResult = results[0].thunder;
-      worstModelLabel = results[0].modelLabel;
+        results.forEach(r => (r.isWorst = false));
+        heatW.isWorst = true;
+        heat = heatW.heat;
+        windResult = windW.wind;
+        rainResult = rainW.rain;
+        coldResult = coldW.cold;
+        thunderResult = capeW.thunder;
+        worstModelLabel = heatW.modelLabel;
+        rawData = {
+          tempC: heatW.raw.tempC, humidity: heatW.raw.humidity,
+          windMs: windW.raw.windMs, solarWm2: solarMax,
+          rainMmH: rainW.raw.rainMmH, capeJkg: capeW.raw.capeJkg,
+        };
+      }
       isStale = false;
       if (rawData) cacheReading(rawData);
       if (activeSiteId && heat) bgStatus = { ...bgStatus, [activeSiteId]: { color: heat.zoneInfo.color, label: heat.zoneInfo.riskLabel, time: new Date().toLocaleTimeString() } };
@@ -929,12 +962,16 @@
       }
     }
     if (windResult.exceedsThreshold) {
-      alertLog = [...alertLog, { time, type: '💨 WIND ALERT', color: windResult.riskColor,
-        message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})` }];
+      const entry = { time, type: '💨 WIND ALERT', color: windResult.riskColor,
+        message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})` };
+      alertLog = [...alertLog, entry];
+      if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
     if (rainResult.exceedsThreshold) {
-      alertLog = [...alertLog, { time, type: '🌧 RAIN ALERT', color: rainResult.riskColor,
-        message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}` }];
+      const entry = { time, type: '🌧 RAIN ALERT', color: rainResult.riskColor,
+        message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}` };
+      alertLog = [...alertLog, entry];
+      if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
     if (isPro && coldResult && coldResult.exceedsThreshold) {
       const entry = { time, type: `❄ COLD — ${coldResult.riskLabel}`, color: coldResult.riskColor,
@@ -945,6 +982,13 @@
     if (isPro && thunderResult && thunderResult.exceedsThreshold) {
       const entry = { time, type: `⛈ STORM — ${thunderResult.riskLabel}`, color: thunderResult.riskColor,
         message: `CAPE ${thunderResult.capeJkg} J/kg — ${thunderResult.instability}` };
+      alertLog = [...alertLog, entry];
+      if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
+    }
+    const sBand = solarBand(rawData?.solarWm2 ?? 0, isDay);
+    if (sBand.label === 'HIGH' || sBand.label === 'EXTREME') {
+      const entry = { time, type: `☀ SOLAR — ${sBand.label}`, color: sBand.color,
+        message: `${rawData?.solarWm2 ?? 0} W/m² — high solar heat load` };
       alertLog = [...alertLog, entry];
       if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
@@ -1135,6 +1179,19 @@
     lat = la; lon = lo; locationName = name; locked = true; geocodedFor = '';
     persistSites(); refreshData();
   }
+  // Rename a saved site (double-click its chip). Fixes "can't edit the name".
+  function startRename(s: SavedSite) { editingSiteId = s.id; editName = s.name; }
+  function commitRename() {
+    if (!editingSiteId) return;
+    const nm = (editName || '').trim();
+    if (nm) {
+      savedSites = savedSites.map(x => x.id === editingSiteId ? { ...x, name: nm } : x);
+      if (activeSiteId === editingSiteId) locationName = nm;
+      persistSites();
+    }
+    editingSiteId = '';
+  }
+  function focusInput(node: HTMLInputElement) { node.focus(); node.select(); }
   function selectSite(s: SavedSite) {
     activeSiteId = s.id; locked = true;
     lat = s.lat; lon = s.lon; locationName = s.name; geocodedFor = '';
