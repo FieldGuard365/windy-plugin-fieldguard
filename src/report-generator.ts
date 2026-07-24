@@ -180,7 +180,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v3.0.9
+FieldGuard Version:     v3.0.8
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 

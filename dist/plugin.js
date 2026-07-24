@@ -1,6 +1,6 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "3.0.9",
+  "version": "3.0.8",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Heat stress (WBGT), cold stress (wind chill), wind, rain and thunderstorm/lightning risk across all Windy models. Metric or imperial units (°C/°F, m/s/mph), worst-case engine, customizable thresholds, and ISO 7933-compliant weekly reports.",
@@ -10,8 +10,8 @@ const __pluginConfig =  {
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1784888935696,
-  "builtReadable": "2026-07-24T10:28:55.696Z",
+  "built": 1784899889665,
+  "builtReadable": "2026-07-24T13:31:29.665Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -3258,7 +3258,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v3.0.9
+FieldGuard Version:     v3.0.8
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 
