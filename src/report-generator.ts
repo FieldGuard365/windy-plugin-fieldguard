@@ -21,6 +21,21 @@ export interface DailyMet {
     day: string; maxTemp: number; minTemp: number;
     maxRH: number; maxWind: number; peakSolar: number;
 }
+// Current risk snapshot for each non-heat hazard (display strings — already
+// unit-formatted by the caller so the report stays unit-agnostic).
+export interface HazardSnapshot {
+    wind: { speed: string; label: string; beaufort: string };
+    rain: { rate: string; intensity: string; label: string };
+    thunder: { available: boolean; cape: string; label: string; instability: string };
+    cold: { active: boolean; windChill: string; label: string; frostbite: string };
+    solar: { irradiance: string; label: string; period: string };
+}
+
+// One row of the forecast outlook (a hazard predicted to cross a threshold).
+export interface ForecastRow {
+    icon: string; label: string; peak: string; hoursAway: number; when: string;
+}
+
 export interface WeeklyReportData {
     projectName: string; contractNumber: string; siteAddress: string;
     lat: number; lon: number; country: string;
@@ -36,6 +51,11 @@ export interface WeeklyReportData {
     totalSuspensionHours: number; cumulativeSuspensionHours: number;
     fidic: string; delayDays: number;
     forecastNarrative: string;
+    // Multi-hazard extensions (optional — older callers still work).
+    hazardSnapshot?: HazardSnapshot;
+    forecastEnabled?: boolean;
+    forecastHorizon?: string;      // e.g. "24 h"
+    forecastRows?: ForecastRow[];
 }
 
 function pad(s: string | number, n = 8): string { return String(s).padEnd(n); }
@@ -89,6 +109,34 @@ export function generateWeeklyReport(d: WeeklyReportData): string {
         return [sep, hdr, sep, rows, sep].join('\n');
     };
 
+    const hazardSection = () => {
+        const h = d.hazardSnapshot;
+        if (!h) return '  Multi-hazard snapshot not available for this report.';
+        const line = (label: string, value: string, risk: string, note: string) =>
+            `  ${pad(label, 16)} ${pad(value, 20)} ${pad(risk, 12)} ${note}`;
+        return [
+            `  ${pad('HAZARD', 16)} ${pad('READING', 20)} ${pad('RISK', 12)} DETAIL`,
+            '─'.repeat(88),
+            line('Wind', h.wind.speed, h.wind.label, h.wind.beaufort),
+            line('Rain', h.rain.rate, h.rain.label, h.rain.intensity),
+            line('Thunderstorm', h.thunder.available ? h.thunder.cape : 'N/A', h.thunder.label, h.thunder.instability),
+            line('Cold stress', h.cold.active ? h.cold.windChill : 'Not active', h.cold.active ? h.cold.label : '—', h.cold.active ? h.cold.frostbite : 'Ambient above 10°C — cold stress not in play'),
+            line('Solar radiation', h.solar.irradiance, h.solar.label, h.solar.period),
+            line('Heat stress', 'see Section D', '', 'PPE-adjusted WBGT / Apparent Temperature zone'),
+            '─'.repeat(88),
+        ].join('\n');
+    };
+
+    const forecastSection = () => {
+        if (!d.forecastEnabled) return '  Forecast Watch disabled — enable it in Config to include a lookahead.';
+        if (!d.forecastRows || d.forecastRows.length === 0)
+            return `  No threshold crossings forecast in the next ${d.forecastHorizon ?? '24 h'}.`;
+        const rows = d.forecastRows.map(r =>
+            `  ${pad(r.label, 16)} ${pad(r.peak, 12)} expected ${r.hoursAway === 0 ? 'within 1 hour' : `in ~${r.hoursAway} h`} (${r.when})`
+        ).join('\n');
+        return [`  Lookahead horizon: next ${d.forecastHorizon ?? '24 h'} (selected model)`, '─'.repeat(88), rows, '─'.repeat(88)].join('\n');
+    };
+
     const suspTable = () => {
         if (!d.suspensions.length) return '  No suspensions recorded.';
         const sep = '━'.repeat(90);
@@ -126,7 +174,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v3.0.5
+FieldGuard Version:     v3.0.8
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 
@@ -163,6 +211,22 @@ ${metTable()}
 Weekly Max Temp:     ${Math.max(...d.dailyMet.map(m => m.maxTemp))}°C
 Weekly Max Humidity: ${Math.max(...d.dailyMet.map(m => m.maxRH))}%
 Weekly Max Wind:     ${Math.max(...d.dailyMet.map(m => m.maxWind))} m/s
+
+
+SECTION C2 — MULTI-HAZARD RISK SNAPSHOT (CURRENT)
+──────────────────────────────────────────────────────────────────────────────
+FieldGuard tracks six field hazards. Heat stress is analysed in full in Section D;
+the current status of the other five hazards at the pin is summarised below.
+
+${hazardSection()}
+
+Hazard controls (apply when the corresponding risk is active):
+  ● Wind        — stop lifting/height work, secure loads & loose materials
+  ● Rain        — evacuate excavations, de-energise exposed electrics, stop earthworks
+  ● Thunderstorm— 30-30 rule; clear elevated/exposed areas; shelter in hard-roofed vehicle
+  ● Cold stress — cover exposed skin, scheduled warm-up breaks, buddy system
+  ● Solar/UV    — shade, SPF 30+, UV eye protection, extra hydration
+Full response steps for every hazard are on the FieldGuard SOS screen.
 
 
 SECTION D — HEAT STRESS ZONE ANALYSIS (ISO 7243 / ISO 7933)
@@ -287,6 +351,9 @@ models used for zone determination and alerts.
 
 CURRENT WEEK ASSESSMENT:
 ${d.forecastNarrative}
+
+FORECAST OUTLOOK (Forecast Watch — all hazards):
+${forecastSection()}
 
 IMPORTANT: Risk of heat stress increases when apparent temperature exceeds 35°C.
 Heat is not defined by temperature alone but also depends on relative humidity and

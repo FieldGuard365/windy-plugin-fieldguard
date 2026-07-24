@@ -632,3 +632,141 @@ export const MIDDAY_BANS: Record<string, MiddayBan> = {
 export function getMiddayBan(countryCode: string): MiddayBan | null {
     return MIDDAY_BANS[(countryCode || '').toUpperCase()] ?? null;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  MULTI-HAZARD EMERGENCY REFERENCE (SOS page)
+//  Warning signs + immediate response steps for every hazard FieldGuard tracks,
+//  not just heat. Heat reuses the legacy HEAT_STRESS_SYMPTOMS / EMERGENCY_RESPONSE
+//  arrays so existing references stay in sync.
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface HazardEmergency {
+    key: 'heat' | 'cold' | 'wind' | 'rain' | 'thunder' | 'solar';
+    icon: string;
+    title: string;
+    danger: string;        // one-line reason it is life-/safety-critical
+    signsLabel: string;    // heading for the "signs" list
+    signs: string[];       // warning signs / when it applies
+    response: string[];    // immediate response steps (last item may be CRITICAL)
+}
+
+export const HAZARD_EMERGENCIES: HazardEmergency[] = [
+    {
+        key: 'heat', icon: '🌡️', title: 'Heat Stress',
+        danger: 'The body starts shutting down and cannot recover without help.',
+        signsLabel: 'SYMPTOMS TO MONITOR (every 2 hours)',
+        signs: HEAT_STRESS_SYMPTOMS,
+        response: EMERGENCY_RESPONSE,
+    },
+    {
+        key: 'cold', icon: '❄️', title: 'Cold Stress / Hypothermia',
+        danger: 'Hypothermia and frostbite develop silently — judgment fails before the body does.',
+        signsLabel: 'SYMPTOMS TO MONITOR',
+        signs: [
+            'Uncontrollable shivering — then shivering STOPS (danger sign)',
+            'Numb, waxy, white or grey skin (frostbite)',
+            'Slurred speech, clumsiness, confusion',
+            'Drowsiness or extreme exhaustion',
+        ],
+        response: [
+            'Move to a heated shelter immediately',
+            'Remove wet clothing; wrap in dry blankets',
+            'Warm the core first (chest, neck, groin) — not the hands/feet',
+            'Give warm sweet drinks only if fully conscious',
+            'Do NOT rub frostbitten skin',
+            'FOR NO SHIVERING / UNCONSCIOUS: handle gently — GET IMMEDIATE MEDICAL CARE',
+        ],
+    },
+    {
+        key: 'wind', icon: '💨', title: 'High Wind',
+        danger: 'High wind topples lifts and scaffolds and turns loose material into projectiles.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Gusts making footing or balance difficult',
+            'Suspended loads swinging / crane in-service limits reached',
+            'Dust storm reducing visibility',
+            'Loose sheeting, netting or tools starting to lift',
+        ],
+        response: [
+            'Stop crane, MEWP and all working-at-height operations',
+            'Land and secure suspended loads',
+            'Secure or remove loose materials and light structures',
+            'Move crews clear of scaffolds, signage and temporary structures',
+            'Resume only when sustained wind AND gusts fall below limits',
+        ],
+    },
+    {
+        key: 'rain', icon: '🌧️', title: 'Heavy Rain / Flooding',
+        danger: 'Heavy rain floods excavations, collapses trench walls and creates electrocution hazards.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Water pooling in or near excavations / trenches',
+            'Ground becoming soft, slippery or unstable',
+            'Reduced visibility for plant and traffic',
+            'Water reaching live electrical equipment / temporary supplies',
+        ],
+        response: [
+            'Evacuate excavations and trenches — risk of collapse',
+            'De-energise exposed temporary electrical equipment',
+            'Stop earthworks, hot works and road operations',
+            'Move crews to a safe, dry muster point',
+            'Inspect ground and shoring before resuming',
+        ],
+    },
+    {
+        key: 'thunder', icon: '⛈️', title: 'Thunderstorm / Lightning',
+        danger: 'Lightning kills instantly and can strike up to 10 km from the storm — before the rain arrives.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Thunder heard — any thunder means lightning is in range',
+            'Flash-to-bang under 30 seconds (≈10 km away)',
+            'Towering dark cloud build-up, sudden wind shift',
+            'Hair standing on end or buzzing metal (imminent strike)',
+        ],
+        response: [
+            'Apply the 30-30 rule: suspend work when flash-to-bang < 30 s',
+            'Get off elevated ground; leave cranes, scaffolds and roofs',
+            'Shelter in a hard-roofed vehicle or building — never under trees',
+            'Avoid metal, water and open ground',
+            'Resume only 30 minutes after the last thunder',
+        ],
+    },
+    {
+        key: 'solar', icon: '☀️', title: 'Solar Radiation / UV',
+        danger: 'Prolonged solar radiation causes burns, dehydration, heat load and long-term skin damage.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Intense midday sun / high UV index',
+            'Reddening skin or sunburn on exposed areas',
+            'Glare reducing visibility',
+            'Rising solar heat load adding to WBGT',
+        ],
+        response: [
+            'Provide and use shade for rest and fixed tasks',
+            'Cover exposed skin; apply SPF 30+ sunscreen',
+            'Wear UV-rated eye protection',
+            'Increase hydration and rest frequency',
+            'Reschedule sustained tasks away from the solar peak (10:00–15:00)',
+        ],
+    },
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FORECAST LOOKAHEAD — next hour / day / days
+//  Scans an hourly forecast window and reports the first time each hazard is
+//  predicted to cross its warning/danger threshold, plus the peak severity.
+//  The scan itself lives in the plugin (it needs the user's thresholds & PPE);
+//  this is the shared shape used by the dashboard card and the weekly report.
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface HazardForecast {
+    hazard: 'heat' | 'wind' | 'rain' | 'thunder' | 'cold' | 'solar';
+    icon: string;
+    label: string;              // hazard name, e.g. "Heat"
+    willExceed: boolean;        // true if a threshold is crossed in the window
+    firstISO: string | null;    // ISO timestamp of the first exceedance
+    firstLocal: string | null;  // human-friendly local time of first exceedance
+    hoursAway: number | null;   // whole hours from now to first exceedance
+    peakLabel: string;          // worst risk label reached in the window (e.g. RED)
+    peakColor: string;          // colour for that peak label
+}

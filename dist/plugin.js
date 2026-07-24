@@ -1,6 +1,6 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for field workers. Heat stress (WBGT), cold stress (wind chill), wind, rain and thunderstorm/lightning risk across all Windy models. Metric or imperial units (°C/°F, m/s/mph), worst-case engine, customizable thresholds, and ISO 7933-compliant weekly reports.",
@@ -10,8 +10,8 @@ const __pluginConfig =  {
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1783341295179,
-  "builtReadable": "2026-07-06T12:34:55.179Z",
+  "built": 1784885916238,
+  "builtReadable": "2026-07-24T09:38:36.238Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -3008,6 +3008,118 @@ const MIDDAY_BANS = {
 function getMiddayBan(countryCode) {
     return MIDDAY_BANS[(countryCode || '').toUpperCase()] ?? null;
 }
+const HAZARD_EMERGENCIES = [
+    {
+        key: 'heat',
+        icon: '🌡️',
+        title: 'Heat Stress',
+        danger: 'The body starts shutting down and cannot recover without help.',
+        signsLabel: 'SYMPTOMS TO MONITOR (every 2 hours)',
+        signs: HEAT_STRESS_SYMPTOMS,
+        response: EMERGENCY_RESPONSE
+    },
+    {
+        key: 'cold',
+        icon: '❄️',
+        title: 'Cold Stress / Hypothermia',
+        danger: 'Hypothermia and frostbite develop silently — judgment fails before the body does.',
+        signsLabel: 'SYMPTOMS TO MONITOR',
+        signs: [
+            'Uncontrollable shivering — then shivering STOPS (danger sign)',
+            'Numb, waxy, white or grey skin (frostbite)',
+            'Slurred speech, clumsiness, confusion',
+            'Drowsiness or extreme exhaustion'
+        ],
+        response: [
+            'Move to a heated shelter immediately',
+            'Remove wet clothing; wrap in dry blankets',
+            'Warm the core first (chest, neck, groin) — not the hands/feet',
+            'Give warm sweet drinks only if fully conscious',
+            'Do NOT rub frostbitten skin',
+            'FOR NO SHIVERING / UNCONSCIOUS: handle gently — GET IMMEDIATE MEDICAL CARE'
+        ]
+    },
+    {
+        key: 'wind',
+        icon: '💨',
+        title: 'High Wind',
+        danger: 'High wind topples lifts and scaffolds and turns loose material into projectiles.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Gusts making footing or balance difficult',
+            'Suspended loads swinging / crane in-service limits reached',
+            'Dust storm reducing visibility',
+            'Loose sheeting, netting or tools starting to lift'
+        ],
+        response: [
+            'Stop crane, MEWP and all working-at-height operations',
+            'Land and secure suspended loads',
+            'Secure or remove loose materials and light structures',
+            'Move crews clear of scaffolds, signage and temporary structures',
+            'Resume only when sustained wind AND gusts fall below limits'
+        ]
+    },
+    {
+        key: 'rain',
+        icon: '🌧️',
+        title: 'Heavy Rain / Flooding',
+        danger: 'Heavy rain floods excavations, collapses trench walls and creates electrocution hazards.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Water pooling in or near excavations / trenches',
+            'Ground becoming soft, slippery or unstable',
+            'Reduced visibility for plant and traffic',
+            'Water reaching live electrical equipment / temporary supplies'
+        ],
+        response: [
+            'Evacuate excavations and trenches — risk of collapse',
+            'De-energise exposed temporary electrical equipment',
+            'Stop earthworks, hot works and road operations',
+            'Move crews to a safe, dry muster point',
+            'Inspect ground and shoring before resuming'
+        ]
+    },
+    {
+        key: 'thunder',
+        icon: '⛈️',
+        title: 'Thunderstorm / Lightning',
+        danger: 'Lightning kills instantly and can strike up to 10 km from the storm — before the rain arrives.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Thunder heard — any thunder means lightning is in range',
+            'Flash-to-bang under 30 seconds (≈10 km away)',
+            'Towering dark cloud build-up, sudden wind shift',
+            'Hair standing on end or buzzing metal (imminent strike)'
+        ],
+        response: [
+            'Apply the 30-30 rule: suspend work when flash-to-bang < 30 s',
+            'Get off elevated ground; leave cranes, scaffolds and roofs',
+            'Shelter in a hard-roofed vehicle or building — never under trees',
+            'Avoid metal, water and open ground',
+            'Resume only 30 minutes after the last thunder'
+        ]
+    },
+    {
+        key: 'solar',
+        icon: '☀️',
+        title: 'Solar Radiation / UV',
+        danger: 'Prolonged solar radiation causes burns, dehydration, heat load and long-term skin damage.',
+        signsLabel: 'WARNING SIGNS',
+        signs: [
+            'Intense midday sun / high UV index',
+            'Reddening skin or sunburn on exposed areas',
+            'Glare reducing visibility',
+            'Rising solar heat load adding to WBGT'
+        ],
+        response: [
+            'Provide and use shade for rest and fixed tasks',
+            'Cover exposed skin; apply SPF 30+ sunscreen',
+            'Wear UV-rated eye protection',
+            'Increase hydration and rest frequency',
+            'Reschedule sustained tasks away from the solar peak (10:00–15:00)'
+        ]
+    }
+];
 
 /**
  * FieldGuard Weekly Report Generator
@@ -3074,6 +3186,33 @@ function generateWeeklyReport(d) {
             sep
         ].join('\n');
     };
+    const hazardSection = ()=>{
+        const h = d.hazardSnapshot;
+        if (!h) return '  Multi-hazard snapshot not available for this report.';
+        const line = (label, value, risk, note)=>`  ${pad(label, 16)} ${pad(value, 20)} ${pad(risk, 12)} ${note}`;
+        return [
+            `  ${pad('HAZARD', 16)} ${pad('READING', 20)} ${pad('RISK', 12)} DETAIL`,
+            '─'.repeat(88),
+            line('Wind', h.wind.speed, h.wind.label, h.wind.beaufort),
+            line('Rain', h.rain.rate, h.rain.label, h.rain.intensity),
+            line('Thunderstorm', h.thunder.available ? h.thunder.cape : 'N/A', h.thunder.label, h.thunder.instability),
+            line('Cold stress', h.cold.active ? h.cold.windChill : 'Not active', h.cold.active ? h.cold.label : '—', h.cold.active ? h.cold.frostbite : 'Ambient above 10°C — cold stress not in play'),
+            line('Solar radiation', h.solar.irradiance, h.solar.label, h.solar.period),
+            line('Heat stress', 'see Section D', '', 'PPE-adjusted WBGT / Apparent Temperature zone'),
+            '─'.repeat(88)
+        ].join('\n');
+    };
+    const forecastSection = ()=>{
+        if (!d.forecastEnabled) return '  Forecast Watch disabled — enable it in Config to include a lookahead.';
+        if (!d.forecastRows || d.forecastRows.length === 0) return `  No threshold crossings forecast in the next ${d.forecastHorizon ?? '24 h'}.`;
+        const rows = d.forecastRows.map((r)=>`  ${pad(r.label, 16)} ${pad(r.peak, 12)} expected ${r.hoursAway === 0 ? 'within 1 hour' : `in ~${r.hoursAway} h`} (${r.when})`).join('\n');
+        return [
+            `  Lookahead horizon: next ${d.forecastHorizon ?? '24 h'} (selected model)`,
+            '─'.repeat(88),
+            rows,
+            '─'.repeat(88)
+        ].join('\n');
+    };
     const suspTable = ()=>{
         if (!d.suspensions.length) return '  No suspensions recorded.';
         const sep = '━'.repeat(90);
@@ -3115,7 +3254,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v3.0.5
+FieldGuard Version:     v3.0.8
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 
@@ -3152,6 +3291,22 @@ ${metTable()}
 Weekly Max Temp:     ${Math.max(...d.dailyMet.map((m)=>m.maxTemp))}°C
 Weekly Max Humidity: ${Math.max(...d.dailyMet.map((m)=>m.maxRH))}%
 Weekly Max Wind:     ${Math.max(...d.dailyMet.map((m)=>m.maxWind))} m/s
+
+
+SECTION C2 — MULTI-HAZARD RISK SNAPSHOT (CURRENT)
+──────────────────────────────────────────────────────────────────────────────
+FieldGuard tracks six field hazards. Heat stress is analysed in full in Section D;
+the current status of the other five hazards at the pin is summarised below.
+
+${hazardSection()}
+
+Hazard controls (apply when the corresponding risk is active):
+  ● Wind        — stop lifting/height work, secure loads & loose materials
+  ● Rain        — evacuate excavations, de-energise exposed electrics, stop earthworks
+  ● Thunderstorm— 30-30 rule; clear elevated/exposed areas; shelter in hard-roofed vehicle
+  ● Cold stress — cover exposed skin, scheduled warm-up breaks, buddy system
+  ● Solar/UV    — shade, SPF 30+, UV eye protection, extra hydration
+Full response steps for every hazard are on the FieldGuard SOS screen.
 
 
 SECTION D — HEAT STRESS ZONE ANALYSIS (ISO 7243 / ISO 7933)
@@ -3277,6 +3432,9 @@ models used for zone determination and alerts.
 CURRENT WEEK ASSESSMENT:
 ${d.forecastNarrative}
 
+FORECAST OUTLOOK (Forecast Watch — all hazards):
+${forecastSection()}
+
 IMPORTANT: Risk of heat stress increases when apparent temperature exceeds 35°C.
 Heat is not defined by temperature alone but also depends on relative humidity and
 wind speed.
@@ -3322,90 +3480,117 @@ END OF REPORT — ${reportId}
 /* src\plugin.svelte generated by Svelte v4.2.20 */
 
 function add_css(target) {
-	append_styles(target, "svelte-vomya3", ".fieldguard.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;color:#e2e8f0;font-size:13px;padding:0 0 14px;background:#0f172a;min-height:100%}.fg-header.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0f172a;border-bottom:1px solid #1e293b}.fg-logo.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:26px;flex-shrink:0}.fg-titlewrap.svelte-vomya3.svelte-vomya3.svelte-vomya3{min-width:0;flex:1;overflow:hidden}.fg-title.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:16px;font-weight:700;color:#f8fafc;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-subtitle.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-settings-btn.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:11px}.fg-tabs.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;background:#0f172a;border-bottom:1px solid #1e293b}.fg-tab.svelte-vomya3.svelte-vomya3.svelte-vomya3{flex:1;padding:7px 2px;background:transparent;border:none;color:#64748b;cursor:pointer;font-size:11px}.fg-tab.active.svelte-vomya3.svelte-vomya3.svelte-vomya3{color:#38bdf8;border-bottom:2px solid #38bdf8}.fg-location-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#1e293b;font-size:11px;color:#94a3b8}.fg-loc-text.svelte-vomya3.svelte-vomya3.svelte-vomya3{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fg-model-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px;padding:5px 12px;background:#0f172a;font-size:11px;color:#94a3b8}.fg-model-row.svelte-vomya3 select.svelte-vomya3.svelte-vomya3{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:3px 6px;border-radius:4px;font-size:11px}.fg-worst-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto}.fg-mini-btn.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#334155;border:none;color:#94a3b8;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:11px}.fg-mini-btn.locked.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#b45309;color:#fff}.fg-sites.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 12px;background:#1e293b;border-top:1px solid #0f172a}.fg-site-chip.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:inline-flex;align-items:center;gap:4px;background:#0f172a;border:1px solid #334155;color:#cbd5e1;padding:3px 7px;border-radius:14px;cursor:pointer;font-size:10px}.fg-site-chip.active.svelte-vomya3.svelte-vomya3.svelte-vomya3{border-color:#38bdf8;color:#38bdf8}.fg-site-dot.svelte-vomya3.svelte-vomya3.svelte-vomya3{width:7px;height:7px;border-radius:50%;flex-shrink:0}.fg-site-x.svelte-vomya3.svelte-vomya3.svelte-vomya3{color:#64748b;font-weight:700;padding:0 2px}.fg-site-x.svelte-vomya3.svelte-vomya3.svelte-vomya3:hover{color:#f87171}.fg-site-name.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:3px 7px;border-radius:14px;font-size:10px;width:74px;box-sizing:border-box}.fg-site-add.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0284c7;border:none;color:#fff;padding:3px 9px;border-radius:14px;cursor:pointer;font-size:10px;font-weight:600}.fg-site-max.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:9px;color:#64748b}.fg-site-locked.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0f172a;border:1px dashed #334155;color:#94a3b8;padding:3px 9px;border-radius:14px;font-size:10px;text-decoration:none}.fg-stale.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:6px 12px 0;padding:5px 10px;background:#422006;border:1px solid #a16207;color:#fde68a;font-size:10px;border-radius:6px}.fg-mon-list.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-top:8px;display:flex;flex-direction:column;gap:4px}.fg-mon-item.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:7px;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:11px;color:#cbd5e1}.fg-mon-dot.svelte-vomya3.svelte-vomya3.svelte-vomya3{width:8px;height:8px;border-radius:50%;flex-shrink:0}.fg-daynight.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0}.fg-daynight.day.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#78350f;color:#fcd34d}.fg-daynight.night.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#1e3a8a;color:#bfdbfe}.fg-ban-info.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:5px 12px 0;padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;font-size:10px;color:#94a3b8}.fg-hazard-strip.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;gap:6px;padding:8px 12px 4px}.fg-hz.svelte-vomya3.svelte-vomya3.svelte-vomya3{flex:1;background:#1e293b;border:2px solid #334155;border-radius:10px;padding:8px 4px 7px;cursor:pointer;text-align:center;min-width:0}.fg-hz.sel.svelte-vomya3.svelte-vomya3.svelte-vomya3{outline:2px solid #f8fafc;outline-offset:-2px}.fg-hz-ic.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:16px;line-height:1}.fg-hz-val.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:15px;font-weight:800;color:#f8fafc;margin-top:3px;line-height:1;white-space:nowrap}.fg-hz-u.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:9px;font-weight:600;color:#94a3b8;margin-left:1px}.fg-hz-st.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:8.5px;font-weight:700;letter-spacing:0.3px;margin-top:4px}.fg-loading.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:20px;text-align:center;color:#64748b}.fg-error.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:12px;background:#450a0a;color:#fca5a5;border-radius:6px;margin:8px 12px}.fg-ban-alert.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:6px 12px;padding:10px 12px;background:#7c2d12;border:1px solid #ea580c;border-radius:7px;color:#fed7aa;font-size:12px;font-weight:600;text-align:center}.fg-ban-alert.svelte-vomya3 small.svelte-vomya3.svelte-vomya3{font-weight:400;font-size:10px;display:block;margin-top:3px;color:#fdba74}.fg-zone-banner.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:10px;margin:8px 12px;padding:10px 12px;border-radius:8px;border:1px solid}.fg-zone-dot.svelte-vomya3.svelte-vomya3.svelte-vomya3{width:14px;height:14px;border-radius:50%;flex-shrink:0}.fg-zone-main.svelte-vomya3.svelte-vomya3.svelte-vomya3{flex:1}.fg-zone-name.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:17px;font-weight:800;letter-spacing:1px}.fg-zone-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#94a3b8}.fg-zone-sub.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#64748b;margin-top:2px}.fg-zone-time.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#475569}.fg-card.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#1e293b;border:1px solid #334155;border-left-width:3px;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-flat.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#1e293b;border:1px solid #334155;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-header.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-weight:600;font-size:12px;margin-bottom:8px;color:#f1f5f9;display:flex;align-items:center}.fg-badge.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-left:auto;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;color:#fff}.fg-metrics-grid.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}.fg-metric.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0f172a;border-radius:6px;padding:5px;text-align:center}.fg-metric-val.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:14px;font-weight:700;color:#f8fafc}.fg-metric-lbl.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:9px;color:#64748b;text-transform:uppercase}.fg-work-schedule.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0f172a;border-radius:6px;padding:7px;margin-bottom:6px}.fg-ws-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:baseline;gap:6px;padding:2px 0}.fg-ws-icon.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px}.fg-ws-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#64748b;min-width:70px}.fg-ws-val.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#94a3b8;font-weight:500}.fg-ppe-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#475569;margin-top:4px}.fg-control-item.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#94a3b8;padding:3px 0;border-bottom:1px solid #0f172a}.fg-control-item.svelte-vomya3.svelte-vomya3.svelte-vomya3:last-child{border-bottom:none}.fg-threshold-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#475569;margin-top:4px}.fg-table.svelte-vomya3.svelte-vomya3.svelte-vomya3{width:100%;border-collapse:collapse;font-size:11px}.fg-table.svelte-vomya3 th.svelte-vomya3.svelte-vomya3{color:#64748b;text-align:left;padding:3px 4px;border-bottom:1px solid #334155}.fg-table.svelte-vomya3 td.svelte-vomya3.svelte-vomya3{padding:3px 4px;color:#94a3b8}.fg-worst-row.svelte-vomya3 td.svelte-vomya3.svelte-vomya3{color:#f1f5f9;font-weight:600;background:#0f172a}.fg-section-title.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:10px 12px 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px}.fg-empty.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:16px;text-align:center;color:#475569;font-size:11px}.fg-alert-item.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:3px 12px;padding:7px 10px;background:#1e293b;border-radius:6px}.fg-alert-time.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#64748b}.fg-alert-type.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:12px;font-weight:600;color:#f1f5f9}.fg-alert-msg.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#94a3b8}.fg-emergency-card.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#1e293b;border-radius:8px;margin:6px 12px;padding:12px;border:1px solid #dc2626}.fg-emg-title.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:14px;font-weight:700;color:#f87171;margin-bottom:4px}.fg-emg-sub.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#94a3b8;margin-bottom:10px}.fg-emg-section.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-bottom:12px}.fg-emg-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}.fg-emg-item.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#fca5a5;padding:2px 0}.fg-emg-step.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:11px;color:#94a3b8}.fg-emg-num.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#334155;color:#e2e8f0;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;flex-shrink:0}.fg-emg-critical.svelte-vomya3.svelte-vomya3.svelte-vomya3{color:#f87171 !important;font-weight:600}.fg-emg-critical.svelte-vomya3 .fg-emg-num.svelte-vomya3.svelte-vomya3{background:#dc2626}.fg-report-note.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:0 12px 6px;padding:7px 10px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b}.fg-form.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:0 12px;display:grid;grid-template-columns:1fr 1fr;gap:5px}label.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:block;color:#94a3b8;font-size:11px;margin-bottom:4px}.fg-form.svelte-vomya3 label.svelte-vomya3 input.svelte-vomya3,.fg-form.svelte-vomya3 label select.svelte-vomya3.svelte-vomya3{display:block;width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:5px;font-size:11px;margin-top:2px;box-sizing:border-box}.fg-radio-label.svelte-vomya3 input[type=\"radio\"].svelte-vomya3.svelte-vomya3,.fg-toggle-label.svelte-vomya3 input[type=\"checkbox\"].svelte-vomya3.svelte-vomya3,.fg-worst-label.svelte-vomya3 input[type=\"checkbox\"].svelte-vomya3.svelte-vomya3{width:auto;flex:0 0 auto;margin:0}.fg-radio-text.svelte-vomya3.svelte-vomya3.svelte-vomya3{text-align:left}.fg-btn.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:block;width:calc(100% - 24px);margin:6px 12px;padding:9px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}.fg-btn-primary.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0284c7;color:#fff}.fg-btn-secondary.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#334155;color:#94a3b8}.fg-report-preview.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;overflow:hidden}.fg-report-toolbar.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1e293b;border-bottom:1px solid #334155;font-size:11px;color:#64748b}.fg-report-toolbar.svelte-vomya3 span.svelte-vomya3.svelte-vomya3{flex:1}.fg-report-text.svelte-vomya3.svelte-vomya3.svelte-vomya3{padding:10px;font-size:9px;color:#94a3b8;white-space:pre;overflow:auto;max-height:280px;font-family:'Courier New',monospace;line-height:1.5}.fg-settings-section.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#1e293b;border-radius:8px;margin:5px 12px;padding:10px}.fg-settings-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;font-weight:600;color:#38bdf8;margin-bottom:7px;text-transform:uppercase;letter-spacing:0.5px}.fg-note.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:10px;color:#475569;margin-bottom:7px}.fg-radio-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid #0f172a}.fg-radio-label.svelte-vomya3.svelte-vomya3.svelte-vomya3:last-child{border-bottom:none}.fg-radio-text.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:11px;color:#cbd5e1;flex:1}.fg-adj.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#334155;color:#94a3b8;border-radius:3px;padding:1px 5px;font-size:9px;margin-left:4px}.fg-pro-tag.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#f59e0b;color:#0f172a;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;margin-left:6px;letter-spacing:0.5px}.fg-tier.svelte-vomya3.svelte-vomya3.svelte-vomya3{font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-left:6px;flex-shrink:0}.fg-tier.free.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#334155;color:#94a3b8}.fg-tier.pro.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#f59e0b;color:#0f172a}.fg-license-active.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1}.fg-pro-badge.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#16a34a;color:#fff;font-weight:700;font-size:10px;padding:2px 8px;border-radius:4px}.fg-license-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;gap:6px;margin-top:6px}.fg-license-input.svelte-vomya3.svelte-vomya3.svelte-vomya3{flex:1;min-width:0;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:5px;font-size:12px;font-family:monospace;letter-spacing:0.5px;text-transform:uppercase}.fg-btn-inline.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#0284c7;color:#fff;border:none;border-radius:5px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.fg-btn-inline.svelte-vomya3.svelte-vomya3.svelte-vomya3:disabled{opacity:0.6;cursor:default}.fg-buy-link.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:inline-block;margin-top:7px;font-size:11px;color:#38bdf8;text-decoration:none}.fg-license-msg.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-top:7px;font-size:11px;color:#fcd34d}.fg-upgrade.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin:8px 12px;padding:12px;background:#1e293b;border:1px solid var(--amber, #f59e0b);border-radius:8px;font-size:12px;color:#fcd34d;line-height:1.6}input.svelte-vomya3.svelte-vomya3.svelte-vomya3:disabled{opacity:0.45;cursor:not-allowed}.fg-lock.svelte-vomya3.svelte-vomya3.svelte-vomya3{margin-top:8px;padding:8px 10px;background:#0f172a;border:1px dashed #475569;border-radius:6px;font-size:10px;color:#94a3b8;display:flex;flex-direction:column;gap:7px}.fg-lock-btn.svelte-vomya3.svelte-vomya3.svelte-vomya3{background:#f59e0b;color:#0f172a;border:none;border-radius:5px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}.fg-pro-feature.svelte-vomya3.svelte-vomya3.svelte-vomya3{text-align:center;padding:32px 16px}.fg-pro-feature.svelte-vomya3 .pf-ic.svelte-vomya3.svelte-vomya3{font-size:34px}.fg-pro-feature.svelte-vomya3 .pf-t.svelte-vomya3.svelte-vomya3{font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 16px}.fg-pro-feature.svelte-vomya3 .pf-btn.svelte-vomya3.svelte-vomya3{display:inline-block;background:#f59e0b;color:#0f172a;border:none;border-radius:7px;padding:10px 28px;font-size:13px;font-weight:700;cursor:pointer}.fg-slider-row.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px}.fg-slider-row.svelte-vomya3 input[type=\"range\"].svelte-vomya3.svelte-vomya3{flex:1}.fg-slider-row.svelte-vomya3 span.svelte-vomya3.svelte-vomya3{min-width:55px;text-align:right;color:#38bdf8;font-size:11px;font-weight:600}.fg-toggle-label.svelte-vomya3.svelte-vomya3.svelte-vomya3{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:11px;color:#cbd5e1}");
+	append_styles(target, "svelte-11fx3n2", ".fieldguard.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;color:#e2e8f0;font-size:13px;padding:0 0 14px;background:#0f172a;min-height:100%}.fg-header.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0f172a;border-bottom:1px solid #1e293b}.fg-logo.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:26px;flex-shrink:0}.fg-titlewrap.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{min-width:0;flex:1;overflow:hidden}.fg-title.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:16px;font-weight:700;color:#f8fafc;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-subtitle.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fg-settings-btn.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:11px}.fg-tabs.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;background:#0f172a;border-bottom:1px solid #1e293b}.fg-tab.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{flex:1;padding:7px 2px;background:transparent;border:none;color:#64748b;cursor:pointer;font-size:11px}.fg-tab.active.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{color:#38bdf8;border-bottom:2px solid #38bdf8}.fg-location-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#1e293b;font-size:11px;color:#94a3b8}.fg-loc-text.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fg-model-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;padding:5px 12px;background:#0f172a;font-size:11px;color:#94a3b8}.fg-model-row.svelte-11fx3n2 select.svelte-11fx3n2.svelte-11fx3n2{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:3px 6px;border-radius:4px;font-size:11px}.fg-worst-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto}.fg-mini-btn.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#334155;border:none;color:#94a3b8;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:11px}.fg-mini-btn.locked.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#b45309;color:#fff}.fg-sites.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 12px;background:#1e293b;border-top:1px solid #0f172a}.fg-site-chip.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:inline-flex;align-items:center;gap:4px;background:#0f172a;border:1px solid #334155;color:#cbd5e1;padding:3px 7px;border-radius:14px;cursor:pointer;font-size:10px}.fg-site-chip.active.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{border-color:#38bdf8;color:#38bdf8}.fg-site-dot.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{width:7px;height:7px;border-radius:50%;flex-shrink:0}.fg-site-x.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{color:#64748b;font-weight:700;padding:0 2px}.fg-site-x.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2:hover{color:#f87171}.fg-site-name.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:3px 7px;border-radius:14px;font-size:10px;width:74px;box-sizing:border-box}.fg-site-add.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0284c7;border:none;color:#fff;padding:3px 9px;border-radius:14px;cursor:pointer;font-size:10px;font-weight:600}.fg-site-max.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;color:#64748b}.fg-site-locked.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0f172a;border:1px dashed #334155;color:#94a3b8;padding:3px 9px;border-radius:14px;font-size:10px;text-decoration:none}.fg-stale.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:6px 12px 0;padding:5px 10px;background:#422006;border:1px solid #a16207;color:#fde68a;font-size:10px;border-radius:6px}.fg-mon-list.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-top:8px;display:flex;flex-direction:column;gap:4px}.fg-mon-item.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:7px;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:11px;color:#cbd5e1}.fg-mon-dot.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{width:8px;height:8px;border-radius:50%;flex-shrink:0}.fg-daynight.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0}.fg-daynight.day.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#78350f;color:#fcd34d}.fg-daynight.night.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#1e3a8a;color:#bfdbfe}.fg-ban-info.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:5px 12px 0;padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;font-size:10px;color:#94a3b8}.fg-hazard-strip.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;gap:6px;padding:8px 12px 4px}.fg-hz.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{flex:1;background:#1e293b;border:2px solid #334155;border-radius:10px;padding:8px 4px 7px;cursor:pointer;text-align:center;min-width:0}.fg-hz.sel.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{outline:2px solid #f8fafc;outline-offset:-2px}.fg-hz-ic.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:16px;line-height:1}.fg-hz-val.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:15px;font-weight:800;color:#f8fafc;margin-top:3px;line-height:1;white-space:nowrap}.fg-hz-u.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;font-weight:600;color:#94a3b8;margin-left:1px}.fg-hz-st.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:8.5px;font-weight:700;letter-spacing:0.3px;margin-top:4px}.fg-loading.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:20px;text-align:center;color:#64748b}.fg-error.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:12px;background:#450a0a;color:#fca5a5;border-radius:6px;margin:8px 12px}.fg-ban-alert.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:6px 12px;padding:10px 12px;background:#7c2d12;border:1px solid #ea580c;border-radius:7px;color:#fed7aa;font-size:12px;font-weight:600;text-align:center}.fg-ban-alert.svelte-11fx3n2 small.svelte-11fx3n2.svelte-11fx3n2{font-weight:400;font-size:10px;display:block;margin-top:3px;color:#fdba74}.fg-zone-banner.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:10px;margin:8px 12px;padding:10px 12px;border-radius:8px;border:1px solid}.fg-zone-dot.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{width:14px;height:14px;border-radius:50%;flex-shrink:0}.fg-zone-main.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{flex:1}.fg-zone-name.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:17px;font-weight:800;letter-spacing:1px}.fg-zone-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#94a3b8}.fg-zone-sub.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#64748b;margin-top:2px}.fg-zone-time.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#475569}.fg-card.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#1e293b;border:1px solid #334155;border-left-width:3px;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-flat.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#1e293b;border:1px solid #334155;border-radius:8px;margin:5px 12px;padding:10px}.fg-card-header.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-weight:600;font-size:12px;margin-bottom:8px;color:#f1f5f9;display:flex;align-items:center}.fg-badge.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-left:auto;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;color:#fff}.fg-metrics-grid.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}.fg-metric.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0f172a;border-radius:6px;padding:5px;text-align:center}.fg-metric-val.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:14px;font-weight:700;color:#f8fafc}.fg-metric-lbl.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;color:#64748b;text-transform:uppercase}.fg-work-schedule.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0f172a;border-radius:6px;padding:7px;margin-bottom:6px}.fg-ws-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:baseline;gap:6px;padding:2px 0}.fg-ws-icon.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px}.fg-ws-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#64748b;min-width:70px}.fg-ws-val.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#94a3b8;font-weight:500}.fg-ppe-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#475569;margin-top:4px}.fg-control-item.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#94a3b8;padding:3px 0;border-bottom:1px solid #0f172a}.fg-control-item.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2:last-child{border-bottom:none}.fg-threshold-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#475569;margin-top:4px}.fg-table.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{width:100%;border-collapse:collapse;font-size:11px}.fg-table.svelte-11fx3n2 th.svelte-11fx3n2.svelte-11fx3n2{color:#64748b;text-align:left;padding:3px 4px;border-bottom:1px solid #334155}.fg-table.svelte-11fx3n2 td.svelte-11fx3n2.svelte-11fx3n2{padding:3px 4px;color:#94a3b8}.fg-worst-row.svelte-11fx3n2 td.svelte-11fx3n2.svelte-11fx3n2{color:#f1f5f9;font-weight:600;background:#0f172a}.fg-section-title.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:10px 12px 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px}.fg-empty.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:16px;text-align:center;color:#475569;font-size:11px}.fg-alert-item.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:3px 12px;padding:7px 10px;background:#1e293b;border-radius:6px}.fg-alert-time.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#64748b}.fg-alert-type.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:12px;font-weight:600;color:#f1f5f9}.fg-alert-msg.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#94a3b8}.fg-forecast.svelte-11fx3n2 .fg-card-header.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:6px}.fg-fc-busy.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;color:#64748b;font-weight:400;margin-left:auto}.fg-fc-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;margin:3px 12px;padding:6px 10px;background:#1e293b;border-radius:6px}.fg-fc-ic.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:15px;flex-shrink:0}.fg-fc-name.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:12px;font-weight:600;color:#f1f5f9;flex:1}.fg-fc-badge.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;font-weight:800;color:#fff;padding:2px 6px;border-radius:4px;letter-spacing:0.3px}.fg-fc-when.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#cbd5e1;text-align:right;line-height:1.3;flex-shrink:0}.fg-fc-when.svelte-11fx3n2 small.svelte-11fx3n2.svelte-11fx3n2{color:#64748b}.fg-emg-jump.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;flex-wrap:wrap;gap:5px;padding:4px 12px 2px}.fg-emg-chip.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:inline-flex;align-items:center;gap:4px;background:#1e293b;border:2px solid #334155;border-radius:14px;padding:4px 9px;cursor:pointer;font-size:14px;line-height:1}.fg-emg-chip.sel.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{outline:2px solid #f8fafc;outline-offset:-2px}.fg-emg-chip-st.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:8px;font-weight:800;letter-spacing:0.3px}.fg-emergency-card.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#1e293b;border-radius:8px;margin:6px 12px;padding:12px;border:1px solid #dc2626}.fg-emg-title.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;color:#f87171;margin-bottom:4px}.fg-emg-sub.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#94a3b8;margin-bottom:10px}.fg-emg-section.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-bottom:12px}.fg-emg-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}.fg-emg-item.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#fca5a5;padding:2px 0}.fg-emg-step.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:11px;color:#94a3b8}.fg-emg-num.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#334155;color:#e2e8f0;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;flex-shrink:0}.fg-emg-critical.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{color:#f87171 !important;font-weight:600}.fg-emg-critical.svelte-11fx3n2 .fg-emg-num.svelte-11fx3n2.svelte-11fx3n2{background:#dc2626}.fg-report-note.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:0 12px 6px;padding:7px 10px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b}.fg-form.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:0 12px;display:grid;grid-template-columns:1fr 1fr;gap:5px}label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:block;color:#94a3b8;font-size:11px;margin-bottom:4px}.fg-form.svelte-11fx3n2 label.svelte-11fx3n2 input.svelte-11fx3n2,.fg-form.svelte-11fx3n2 label.svelte-11fx3n2 select.svelte-11fx3n2{display:block;width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:5px;font-size:11px;margin-top:2px;box-sizing:border-box}.fg-radio-label.svelte-11fx3n2 input[type=\"radio\"].svelte-11fx3n2.svelte-11fx3n2,.fg-toggle-label.svelte-11fx3n2 input[type=\"checkbox\"].svelte-11fx3n2.svelte-11fx3n2,.fg-worst-label.svelte-11fx3n2 input[type=\"checkbox\"].svelte-11fx3n2.svelte-11fx3n2{width:auto;flex:0 0 auto;margin:0}.fg-radio-text.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{text-align:left}.fg-btn.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:block;width:calc(100% - 24px);margin:6px 12px;padding:9px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}.fg-btn-primary.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0284c7;color:#fff}.fg-btn-secondary.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#334155;color:#94a3b8}.fg-report-preview.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;overflow:hidden}.fg-report-toolbar.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1e293b;border-bottom:1px solid #334155;font-size:11px;color:#64748b}.fg-report-toolbar.svelte-11fx3n2 span.svelte-11fx3n2.svelte-11fx3n2{flex:1}.fg-report-text.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{padding:10px;font-size:9px;color:#94a3b8;white-space:pre;overflow:auto;max-height:280px;font-family:'Courier New',monospace;line-height:1.5}.fg-settings-section.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#1e293b;border-radius:8px;margin:5px 12px;padding:10px}.fg-settings-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;font-weight:600;color:#38bdf8;margin-bottom:7px;text-transform:uppercase;letter-spacing:0.5px}.fg-note.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:10px;color:#475569;margin-bottom:7px}.fg-radio-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid #0f172a}.fg-radio-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2:last-child{border-bottom:none}.fg-radio-text.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:11px;color:#cbd5e1;flex:1}.fg-adj.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#334155;color:#94a3b8;border-radius:3px;padding:1px 5px;font-size:9px;margin-left:4px}.fg-pro-tag.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#f59e0b;color:#0f172a;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;margin-left:6px;letter-spacing:0.5px}.fg-tier.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-left:6px;flex-shrink:0}.fg-tier.free.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#334155;color:#94a3b8}.fg-tier.pro.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#f59e0b;color:#0f172a}.fg-license-active.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1}.fg-pro-badge.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#16a34a;color:#fff;font-weight:700;font-size:10px;padding:2px 8px;border-radius:4px}.fg-license-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;gap:6px;margin-top:6px}.fg-license-input.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{flex:1;min-width:0;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:5px;font-size:12px;font-family:monospace;letter-spacing:0.5px;text-transform:uppercase}.fg-btn-inline.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#0284c7;color:#fff;border:none;border-radius:5px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.fg-btn-inline.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2:disabled{opacity:0.6;cursor:default}.fg-buy-link.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:inline-block;margin-top:7px;font-size:11px;color:#38bdf8;text-decoration:none}.fg-license-msg.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-top:7px;font-size:11px;color:#fcd34d}.fg-upgrade.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin:8px 12px;padding:12px;background:#1e293b;border:1px solid var(--amber, #f59e0b);border-radius:8px;font-size:12px;color:#fcd34d;line-height:1.6}input.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2:disabled{opacity:0.45;cursor:not-allowed}.fg-lock.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{margin-top:8px;padding:8px 10px;background:#0f172a;border:1px dashed #475569;border-radius:6px;font-size:10px;color:#94a3b8;display:flex;flex-direction:column;gap:7px}.fg-lock-btn.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{background:#f59e0b;color:#0f172a;border:none;border-radius:5px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}.fg-pro-feature.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{text-align:center;padding:32px 16px}.fg-pro-feature.svelte-11fx3n2 .pf-ic.svelte-11fx3n2.svelte-11fx3n2{font-size:34px}.fg-pro-feature.svelte-11fx3n2 .pf-t.svelte-11fx3n2.svelte-11fx3n2{font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 16px}.fg-pro-feature.svelte-11fx3n2 .pf-btn.svelte-11fx3n2.svelte-11fx3n2{display:inline-block;background:#f59e0b;color:#0f172a;border:none;border-radius:7px;padding:10px 28px;font-size:13px;font-weight:700;cursor:pointer}.fg-slider-row.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px}.fg-slider-row.svelte-11fx3n2 input[type=\"range\"].svelte-11fx3n2.svelte-11fx3n2{flex:1}.fg-slider-row.svelte-11fx3n2 span.svelte-11fx3n2.svelte-11fx3n2{min-width:55px;text-align:right;color:#38bdf8;font-size:11px;font-weight:600}.fg-toggle-label.svelte-11fx3n2.svelte-11fx3n2.svelte-11fx3n2{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:11px;color:#cbd5e1}");
 }
 
-function get_each_context_9(ctx, list, i) {
+function get_each_context_12(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[158] = list[i];
+	child_ctx[175] = list[i];
 	return child_ctx;
 }
 
-function get_each_context_10(ctx, list, i) {
+function get_each_context_13(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[174] = list[i][0];
-	child_ctx[175] = list[i][1];
-	return child_ctx;
-}
-
-function get_each_context_6(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[164] = list[i];
+	child_ctx[197] = list[i][0];
+	child_ctx[198] = list[i][1];
 	return child_ctx;
 }
 
 function get_each_context_7(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[167] = list[i];
-	child_ctx[169] = i;
+	child_ctx[181] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_8(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[161] = list[i];
+	child_ctx[184] = list[i];
 	return child_ctx;
 }
 
-function get_each_context(ctx, list, i) {
+function get_each_context_9(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[147] = list[i];
+	child_ctx[188] = list[i];
+	child_ctx[190] = i;
 	return child_ctx;
 }
 
-function get_each_context_1(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[150] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_2(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[153] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_3(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[153] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_4(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[158] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_5(ctx, list, i) {
-	const child_ctx = ctx.slice();
-	child_ctx[161] = list[i];
-	return child_ctx;
-}
-
-function get_each_context_11(ctx, list, i) {
+function get_each_context_10(ctx, list, i) {
 	const child_ctx = ctx.slice();
 	child_ctx[178] = list[i];
 	return child_ctx;
 }
 
+function get_if_ctx(ctx) {
+	const child_ctx = ctx.slice();
+	const constants_0 = /*currentHazardStatus*/ child_ctx[56](/*hz*/ child_ctx[184].key);
+	child_ctx[187] = constants_0;
+	return child_ctx;
+}
+
+function get_each_context_11(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[184] = list[i];
+	const constants_0 = /*currentHazardStatus*/ child_ctx[56](/*hz*/ child_ctx[184].key);
+	child_ctx[187] = constants_0;
+	return child_ctx;
+}
+
+function get_each_context(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[161] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_1(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[164] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_2(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[167] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_3(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[167] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_4(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[172] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_5(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[175] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_6(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[178] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_14(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[201] = list[i];
+	return child_ctx;
+}
+
 // (18:4) {#each TABS as t}
-function create_each_block_11(ctx) {
+function create_each_block_14(ctx) {
 	let button;
-	let t0_value = /*t*/ ctx[178].icon + "";
+	let t0_value = /*t*/ ctx[201].icon + "";
 	let t0;
 	let t1;
-	let t2_value = /*t*/ ctx[178].label + "";
+	let t2_value = /*t*/ ctx[201].label + "";
 	let t2;
 	let t3;
 	let button_class_value;
@@ -3413,7 +3598,7 @@ function create_each_block_11(ctx) {
 	let dispose;
 
 	function click_handler_1() {
-		return /*click_handler_1*/ ctx[72](/*t*/ ctx[178]);
+		return /*click_handler_1*/ ctx[79](/*t*/ ctx[201]);
 	}
 
 	return {
@@ -3423,7 +3608,7 @@ function create_each_block_11(ctx) {
 			t1 = space();
 			t2 = text(t2_value);
 			t3 = space();
-			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[178].id ? 'active' : '') + " svelte-vomya3");
+			attr(button, "class", button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[201].id ? 'active' : '') + " svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, button, anchor);
@@ -3440,7 +3625,7 @@ function create_each_block_11(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[0] & /*tab*/ 16 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[178].id ? 'active' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*tab*/ 16 && button_class_value !== (button_class_value = "fg-tab " + (/*tab*/ ctx[4] === /*t*/ ctx[201].id ? 'active' : '') + " svelte-11fx3n2")) {
 				attr(button, "class", button_class_value);
 			}
 		},
@@ -3455,8 +3640,8 @@ function create_each_block_11(ctx) {
 	};
 }
 
-// (488:31) 
-function create_if_block_36(ctx) {
+// (528:31) 
+function create_if_block_42(ctx) {
 	let div0;
 	let t1;
 	let div2;
@@ -3518,7 +3703,7 @@ function create_if_block_36(ctx) {
 	let t38;
 	let label5;
 	let t39;
-	let t40_value = (/*units*/ ctx[45] === 'imperial' ? '°F' : '°C') + "";
+	let t40_value = (/*units*/ ctx[50] === 'imperial' ? '°F' : '°C') + "";
 	let t40;
 	let t41;
 	let div13;
@@ -3526,12 +3711,12 @@ function create_if_block_36(ctx) {
 	let input5_disabled_value;
 	let t42;
 	let span8;
-	let t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[45]) + "";
+	let t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[50]) + "";
 	let t43;
 	let t44;
 	let label6;
 	let t45;
-	let t46_value = (/*units*/ ctx[45] === 'imperial' ? '°F' : '°C') + "";
+	let t46_value = (/*units*/ ctx[50] === 'imperial' ? '°F' : '°C') + "";
 	let t46;
 	let t47;
 	let div14;
@@ -3539,7 +3724,7 @@ function create_if_block_36(ctx) {
 	let input6_disabled_value;
 	let t48;
 	let span9;
-	let t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[45]) + "";
+	let t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[50]) + "";
 	let t49;
 	let t50;
 	let div19;
@@ -3548,7 +3733,7 @@ function create_if_block_36(ctx) {
 	let t52;
 	let label7;
 	let t53;
-	let t54_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t54_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t54;
 	let t55;
 	let div17;
@@ -3556,12 +3741,12 @@ function create_if_block_36(ctx) {
 	let input7_disabled_value;
 	let t56;
 	let span10;
-	let t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[45]) + "";
+	let t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[50]) + "";
 	let t57;
 	let t58;
 	let label8;
 	let t59;
-	let t60_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t60_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t60;
 	let t61;
 	let div18;
@@ -3569,7 +3754,7 @@ function create_if_block_36(ctx) {
 	let input8_disabled_value;
 	let t62;
 	let span11;
-	let t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[45]) + "";
+	let t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[50]) + "";
 	let t63;
 	let t64;
 	let div23;
@@ -3578,7 +3763,7 @@ function create_if_block_36(ctx) {
 	let t66;
 	let label9;
 	let t67;
-	let t68_value = (/*units*/ ctx[45] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t68_value = (/*units*/ ctx[50] === 'imperial' ? 'in/h' : 'mm/h') + "";
 	let t68;
 	let t69;
 	let div21;
@@ -3586,12 +3771,12 @@ function create_if_block_36(ctx) {
 	let input9_disabled_value;
 	let t70;
 	let span12;
-	let t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[45]) + "";
+	let t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[50]) + "";
 	let t71;
 	let t72;
 	let label10;
 	let t73;
-	let t74_value = (/*units*/ ctx[45] === 'imperial' ? 'in/h' : 'mm/h') + "";
+	let t74_value = (/*units*/ ctx[50] === 'imperial' ? 'in/h' : 'mm/h') + "";
 	let t74;
 	let t75;
 	let div22;
@@ -3599,7 +3784,7 @@ function create_if_block_36(ctx) {
 	let input10_disabled_value;
 	let t76;
 	let span13;
-	let t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[45]) + "";
+	let t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[50]) + "";
 	let t77;
 	let t78;
 	let div27;
@@ -3610,7 +3795,7 @@ function create_if_block_36(ctx) {
 	let t82;
 	let label11;
 	let t83;
-	let t84_value = (/*units*/ ctx[45] === 'imperial' ? 'mi' : 'km') + "";
+	let t84_value = (/*units*/ ctx[50] === 'imperial' ? 'mi' : 'km') + "";
 	let t84;
 	let t85;
 	let div26;
@@ -3618,10 +3803,10 @@ function create_if_block_36(ctx) {
 	let input11_disabled_value;
 	let t86;
 	let span14;
-	let t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[45]) + "";
+	let t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[50]) + "";
 	let t87;
 	let t88;
-	let t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[45]) + "";
+	let t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[50]) + "";
 	let t89;
 	let t90;
 	let div29;
@@ -3636,51 +3821,66 @@ function create_if_block_36(ctx) {
 	let input13_disabled_value;
 	let t95;
 	let t96;
-	let div32;
-	let div30;
+	let label14;
+	let input14;
+	let input14_disabled_value;
 	let t97;
 	let t98;
-	let div31;
 	let t99;
-	let b;
+	let div32;
+	let div30;
+	let t100;
 	let t101;
+	let div31;
 	let t102;
-	let t103;
+	let b;
 	let t104;
+	let t105;
+	let t106;
+	let t107;
 	let button;
 	let binding_group;
 	let binding_group_1;
 	let mounted;
 	let dispose;
 
-	function select_block_type_14(ctx, dirty) {
-		if (/*isPro*/ ctx[3]) return create_if_block_50;
-		return create_else_block_10;
+	function select_block_type_15(ctx, dirty) {
+		if (/*isPro*/ ctx[3]) return create_if_block_59;
+		return create_else_block_11;
 	}
 
-	let current_block_type = select_block_type_14(ctx);
+	let current_block_type = select_block_type_15(ctx);
 	let if_block0 = current_block_type(ctx);
-	let if_block1 = /*licenseMsg*/ ctx[25] && create_if_block_49(ctx);
-	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_48();
-	let if_block3 = !/*isPro*/ ctx[3] && create_if_block_47();
-	let each_value_10 = ensure_array_like(Object.entries(PPE_PROFILES));
+	let if_block1 = /*licenseMsg*/ ctx[29] && create_if_block_58(ctx);
+	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_57();
+	let if_block3 = !/*isPro*/ ctx[3] && create_if_block_56();
+	let each_value_13 = ensure_array_like(Object.entries(PPE_PROFILES));
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_10.length; i += 1) {
-		each_blocks[i] = create_each_block_10(get_each_context_10(ctx, each_value_10, i));
+	for (let i = 0; i < each_value_13.length; i += 1) {
+		each_blocks[i] = create_each_block_13(get_each_context_13(ctx, each_value_13, i));
 	}
 
-	let if_block4 = !/*isPro*/ ctx[3] && create_if_block_46();
-	let if_block5 = !/*isPro*/ ctx[3] && create_if_block_45();
-	let if_block6 = !/*isPro*/ ctx[3] && create_if_block_44();
-	let if_block7 = !/*isPro*/ ctx[3] && create_if_block_43();
-	let if_block8 = !/*isPro*/ ctx[3] && create_if_block_42();
-	let if_block9 = !/*isPro*/ ctx[3] && create_if_block_41();
-	let if_block10 = !/*isPro*/ ctx[3] && create_if_block_40();
-	let if_block11 = /*isPro*/ ctx[3] && create_if_block_38(ctx);
-	let if_block12 = /*monitorMsg*/ ctx[32] && create_if_block_37(ctx);
-	binding_group = init_binding_group(/*$$binding_groups*/ ctx[108][1]);
-	binding_group_1 = init_binding_group(/*$$binding_groups*/ ctx[108][2]);
+	let if_block4 = !/*isPro*/ ctx[3] && create_if_block_55();
+	let if_block5 = !/*isPro*/ ctx[3] && create_if_block_54();
+	let if_block6 = !/*isPro*/ ctx[3] && create_if_block_53();
+	let if_block7 = !/*isPro*/ ctx[3] && create_if_block_52();
+	let if_block8 = !/*isPro*/ ctx[3] && create_if_block_51();
+	let if_block9 = !/*isSite*/ ctx[49] && create_if_block_50();
+
+	function select_block_type_16(ctx, dirty) {
+		if (/*isSite*/ ctx[49] && /*settings*/ ctx[2].forecastAlerts) return create_if_block_48;
+		if (!/*isSite*/ ctx[49]) return create_if_block_49;
+	}
+
+	let current_block_type_1 = select_block_type_16(ctx);
+	let if_block10 = current_block_type_1 && current_block_type_1(ctx);
+	let if_block11 = !/*isPro*/ ctx[3] && create_if_block_47();
+	let if_block12 = !/*isPro*/ ctx[3] && create_if_block_46();
+	let if_block13 = /*isPro*/ ctx[3] && create_if_block_44(ctx);
+	let if_block14 = /*monitorMsg*/ ctx[36] && create_if_block_43(ctx);
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[116][1]);
+	binding_group_1 = init_binding_group(/*$$binding_groups*/ ctx[116][2]);
 
 	return {
 		c() {
@@ -3704,13 +3904,13 @@ function create_if_block_36(ctx) {
 			input0 = element("input");
 			t8 = space();
 			span1 = element("span");
-			span1.innerHTML = `Metric <span class="fg-adj svelte-vomya3">°C · m/s · mm/h</span>`;
+			span1.innerHTML = `Metric <span class="fg-adj svelte-11fx3n2">°C · m/s · mm/h</span>`;
 			t11 = space();
 			label1 = element("label");
 			input1 = element("input");
 			t12 = space();
 			span3 = element("span");
-			span3.innerHTML = `Imperial <span class="fg-adj svelte-vomya3">°F · mph · in/h</span>`;
+			span3.innerHTML = `Imperial <span class="fg-adj svelte-11fx3n2">°F · mph · in/h</span>`;
 			t15 = space();
 			div4 = element("div");
 			div4.textContent = "WBGT/heat-stress standards (ISO 7933/7243) are defined in °C; values are converted for display.";
@@ -3727,7 +3927,7 @@ function create_if_block_36(ctx) {
 			input2 = element("input");
 			t22 = space();
 			span5 = element("span");
-			span5.innerHTML = `Auto <span class="fg-adj svelte-vomya3">show when ≤ 10°C</span>`;
+			span5.innerHTML = `Auto <span class="fg-adj svelte-11fx3n2">show when ≤ 10°C</span>`;
 			t25 = space();
 			label3 = element("label");
 			input3 = element("input");
@@ -3862,156 +4062,167 @@ function create_if_block_36(ctx) {
 			t95 = text("\n        Auto-refresh + background site monitor (every 15 min, tab open)");
 			if (if_block8) if_block8.c();
 			t96 = space();
-			div32 = element("div");
-			div30 = element("div");
-			t97 = text("📡 24/7 Monitoring — email me ");
+			label14 = element("label");
+			input14 = element("input");
+			t97 = text("\n        Forecast Watch — alert me before hazards hit (lookahead)");
 			if (if_block9) if_block9.c();
 			t98 = space();
+			if (if_block10) if_block10.c();
+			t99 = space();
+			div32 = element("div");
+			div30 = element("div");
+			t100 = text("📡 24/7 Monitoring — email me ");
+			if (if_block11) if_block11.c();
+			t101 = space();
 			div31 = element("div");
-			t99 = text("Our server checks this site's WBGT every 15 min and emails an alert when it enters a danger zone — ");
+			t102 = text("Our server checks this site's WBGT every 15 min and emails an alert when it enters a danger zone — ");
 			b = element("b");
 			b.textContent = "even with your browser closed";
-			t101 = text(". ");
-			if (if_block10) if_block10.c();
-			t102 = space();
-			if (if_block11) if_block11.c();
-			t103 = space();
+			t104 = text(". ");
 			if (if_block12) if_block12.c();
-			t104 = space();
+			t105 = space();
+			if (if_block13) if_block13.c();
+			t106 = space();
+			if (if_block14) if_block14.c();
+			t107 = space();
 			button = element("button");
 			button.textContent = "↩ Reset to Defaults";
-			attr(div0, "class", "fg-section-title svelte-vomya3");
-			attr(div1, "class", "fg-settings-label svelte-vomya3");
-			attr(div2, "class", "fg-settings-section svelte-vomya3");
-			attr(div3, "class", "fg-settings-label svelte-vomya3");
+			attr(div0, "class", "fg-section-title svelte-11fx3n2");
+			attr(div1, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div2, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div3, "class", "fg-settings-label svelte-11fx3n2");
 			attr(input0, "type", "radio");
 			input0.__value = "metric";
 			set_input_value(input0, input0.__value);
 			input0.disabled = input0_disabled_value = !/*isPro*/ ctx[3];
-			attr(input0, "class", "svelte-vomya3");
-			attr(span1, "class", "fg-radio-text svelte-vomya3");
-			attr(label0, "class", "fg-radio-label svelte-vomya3");
+			attr(input0, "class", "svelte-11fx3n2");
+			attr(span1, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label0, "class", "fg-radio-label svelte-11fx3n2");
 			attr(input1, "type", "radio");
 			input1.__value = "imperial";
 			set_input_value(input1, input1.__value);
 			input1.disabled = input1_disabled_value = !/*isPro*/ ctx[3];
-			attr(input1, "class", "svelte-vomya3");
-			attr(span3, "class", "fg-radio-text svelte-vomya3");
-			attr(label1, "class", "fg-radio-label svelte-vomya3");
-			attr(div4, "class", "fg-note svelte-vomya3");
-			attr(div5, "class", "fg-settings-section svelte-vomya3");
-			attr(div6, "class", "fg-settings-label svelte-vomya3");
-			attr(div7, "class", "fg-note svelte-vomya3");
+			attr(input1, "class", "svelte-11fx3n2");
+			attr(span3, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label1, "class", "fg-radio-label svelte-11fx3n2");
+			attr(div4, "class", "fg-note svelte-11fx3n2");
+			attr(div5, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div6, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div7, "class", "fg-note svelte-11fx3n2");
 			attr(input2, "type", "radio");
 			input2.__value = "auto";
 			set_input_value(input2, input2.__value);
 			input2.disabled = input2_disabled_value = !/*isPro*/ ctx[3];
-			attr(input2, "class", "svelte-vomya3");
-			attr(span5, "class", "fg-radio-text svelte-vomya3");
-			attr(label2, "class", "fg-radio-label svelte-vomya3");
+			attr(input2, "class", "svelte-11fx3n2");
+			attr(span5, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label2, "class", "fg-radio-label svelte-11fx3n2");
 			attr(input3, "type", "radio");
 			input3.__value = "on";
 			set_input_value(input3, input3.__value);
 			input3.disabled = input3_disabled_value = !/*isPro*/ ctx[3];
-			attr(input3, "class", "svelte-vomya3");
-			attr(span6, "class", "fg-radio-text svelte-vomya3");
-			attr(label3, "class", "fg-radio-label svelte-vomya3");
+			attr(input3, "class", "svelte-11fx3n2");
+			attr(span6, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label3, "class", "fg-radio-label svelte-11fx3n2");
 			attr(input4, "type", "radio");
 			input4.__value = "off";
 			set_input_value(input4, input4.__value);
 			input4.disabled = input4_disabled_value = !/*isPro*/ ctx[3];
-			attr(input4, "class", "svelte-vomya3");
-			attr(span7, "class", "fg-radio-text svelte-vomya3");
-			attr(label4, "class", "fg-radio-label svelte-vomya3");
-			attr(div8, "class", "fg-settings-section svelte-vomya3");
-			attr(div9, "class", "fg-settings-label svelte-vomya3");
-			attr(div10, "class", "fg-settings-section svelte-vomya3");
-			attr(div11, "class", "fg-settings-label svelte-vomya3");
-			attr(div12, "class", "fg-note svelte-vomya3");
+			attr(input4, "class", "svelte-11fx3n2");
+			attr(span7, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label4, "class", "fg-radio-label svelte-11fx3n2");
+			attr(div8, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div9, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div10, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div11, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div12, "class", "fg-note svelte-11fx3n2");
 			attr(input5, "type", "range");
 			attr(input5, "min", "28");
 			attr(input5, "max", "38");
 			attr(input5, "step", "0.5");
 			input5.disabled = input5_disabled_value = !/*isPro*/ ctx[3];
-			attr(input5, "class", "svelte-vomya3");
-			attr(span8, "class", "svelte-vomya3");
-			attr(div13, "class", "fg-slider-row svelte-vomya3");
-			attr(label5, "class", "svelte-vomya3");
+			attr(input5, "class", "svelte-11fx3n2");
+			attr(span8, "class", "svelte-11fx3n2");
+			attr(div13, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label5, "class", "svelte-11fx3n2");
 			attr(input6, "type", "range");
 			attr(input6, "min", "30");
 			attr(input6, "max", "42");
 			attr(input6, "step", "0.5");
 			input6.disabled = input6_disabled_value = !/*isPro*/ ctx[3];
-			attr(input6, "class", "svelte-vomya3");
-			attr(span9, "class", "svelte-vomya3");
-			attr(div14, "class", "fg-slider-row svelte-vomya3");
-			attr(label6, "class", "svelte-vomya3");
-			attr(div15, "class", "fg-settings-section svelte-vomya3");
-			attr(div16, "class", "fg-settings-label svelte-vomya3");
+			attr(input6, "class", "svelte-11fx3n2");
+			attr(span9, "class", "svelte-11fx3n2");
+			attr(div14, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label6, "class", "svelte-11fx3n2");
+			attr(div15, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div16, "class", "fg-settings-label svelte-11fx3n2");
 			attr(input7, "type", "range");
 			attr(input7, "min", "5");
 			attr(input7, "max", "25");
 			attr(input7, "step", "0.5");
 			input7.disabled = input7_disabled_value = !/*isPro*/ ctx[3];
-			attr(input7, "class", "svelte-vomya3");
-			attr(span10, "class", "svelte-vomya3");
-			attr(div17, "class", "fg-slider-row svelte-vomya3");
-			attr(label7, "class", "svelte-vomya3");
+			attr(input7, "class", "svelte-11fx3n2");
+			attr(span10, "class", "svelte-11fx3n2");
+			attr(div17, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label7, "class", "svelte-11fx3n2");
 			attr(input8, "type", "range");
 			attr(input8, "min", "10");
 			attr(input8, "max", "35");
 			attr(input8, "step", "0.5");
 			input8.disabled = input8_disabled_value = !/*isPro*/ ctx[3];
-			attr(input8, "class", "svelte-vomya3");
-			attr(span11, "class", "svelte-vomya3");
-			attr(div18, "class", "fg-slider-row svelte-vomya3");
-			attr(label8, "class", "svelte-vomya3");
-			attr(div19, "class", "fg-settings-section svelte-vomya3");
-			attr(div20, "class", "fg-settings-label svelte-vomya3");
+			attr(input8, "class", "svelte-11fx3n2");
+			attr(span11, "class", "svelte-11fx3n2");
+			attr(div18, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label8, "class", "svelte-11fx3n2");
+			attr(div19, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div20, "class", "fg-settings-label svelte-11fx3n2");
 			attr(input9, "type", "range");
 			attr(input9, "min", "1");
 			attr(input9, "max", "25");
 			attr(input9, "step", "0.5");
 			input9.disabled = input9_disabled_value = !/*isPro*/ ctx[3];
-			attr(input9, "class", "svelte-vomya3");
-			attr(span12, "class", "svelte-vomya3");
-			attr(div21, "class", "fg-slider-row svelte-vomya3");
-			attr(label9, "class", "svelte-vomya3");
+			attr(input9, "class", "svelte-11fx3n2");
+			attr(span12, "class", "svelte-11fx3n2");
+			attr(div21, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label9, "class", "svelte-11fx3n2");
 			attr(input10, "type", "range");
 			attr(input10, "min", "5");
 			attr(input10, "max", "60");
 			attr(input10, "step", "1");
 			input10.disabled = input10_disabled_value = !/*isPro*/ ctx[3];
-			attr(input10, "class", "svelte-vomya3");
-			attr(span13, "class", "svelte-vomya3");
-			attr(div22, "class", "fg-slider-row svelte-vomya3");
-			attr(label10, "class", "svelte-vomya3");
-			attr(div23, "class", "fg-settings-section svelte-vomya3");
-			attr(div24, "class", "fg-settings-label svelte-vomya3");
-			attr(div25, "class", "fg-note svelte-vomya3");
+			attr(input10, "class", "svelte-11fx3n2");
+			attr(span13, "class", "svelte-11fx3n2");
+			attr(div22, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label10, "class", "svelte-11fx3n2");
+			attr(div23, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div24, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div25, "class", "fg-note svelte-11fx3n2");
 			attr(input11, "type", "range");
 			attr(input11, "min", "5");
 			attr(input11, "max", "25");
 			attr(input11, "step", "1");
 			input11.disabled = input11_disabled_value = !/*isPro*/ ctx[3];
-			attr(input11, "class", "svelte-vomya3");
-			attr(span14, "class", "svelte-vomya3");
-			attr(div26, "class", "fg-slider-row svelte-vomya3");
-			attr(label11, "class", "svelte-vomya3");
-			attr(div27, "class", "fg-settings-section svelte-vomya3");
-			attr(div28, "class", "fg-settings-label svelte-vomya3");
+			attr(input11, "class", "svelte-11fx3n2");
+			attr(span14, "class", "svelte-11fx3n2");
+			attr(div26, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label11, "class", "svelte-11fx3n2");
+			attr(div27, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div28, "class", "fg-settings-label svelte-11fx3n2");
 			attr(input12, "type", "checkbox");
-			attr(input12, "class", "svelte-vomya3");
-			attr(label12, "class", "fg-toggle-label svelte-vomya3");
+			attr(input12, "class", "svelte-11fx3n2");
+			attr(label12, "class", "fg-toggle-label svelte-11fx3n2");
 			attr(input13, "type", "checkbox");
 			input13.disabled = input13_disabled_value = !/*isPro*/ ctx[3];
-			attr(input13, "class", "svelte-vomya3");
-			attr(label13, "class", "fg-toggle-label svelte-vomya3");
-			attr(div29, "class", "fg-settings-section svelte-vomya3");
-			attr(div30, "class", "fg-settings-label svelte-vomya3");
-			attr(div31, "class", "fg-note svelte-vomya3");
-			attr(div32, "class", "fg-settings-section svelte-vomya3");
-			attr(button, "class", "fg-btn fg-btn-secondary svelte-vomya3");
+			attr(input13, "class", "svelte-11fx3n2");
+			attr(label13, "class", "fg-toggle-label svelte-11fx3n2");
+			attr(input14, "type", "checkbox");
+			input14.disabled = input14_disabled_value = !/*isSite*/ ctx[49];
+			attr(input14, "class", "svelte-11fx3n2");
+			attr(label14, "class", "fg-toggle-label svelte-11fx3n2");
+			attr(div29, "class", "fg-settings-section svelte-11fx3n2");
+			attr(div30, "class", "fg-settings-label svelte-11fx3n2");
+			attr(div31, "class", "fg-note svelte-11fx3n2");
+			attr(div32, "class", "fg-settings-section svelte-11fx3n2");
+			attr(button, "class", "fg-btn fg-btn-secondary svelte-11fx3n2");
 			binding_group.p(input2, input3, input4);
 			binding_group_1.p(input0, input1);
 		},
@@ -4196,69 +4407,79 @@ function create_if_block_36(ctx) {
 			input13.checked = /*settings*/ ctx[2].autoRefresh;
 			append(label13, t95);
 			if (if_block8) if_block8.m(label13, null);
-			insert(target, t96, anchor);
+			append(div29, t96);
+			append(div29, label14);
+			append(label14, input14);
+			input14.checked = /*settings*/ ctx[2].forecastAlerts;
+			append(label14, t97);
+			if (if_block9) if_block9.m(label14, null);
+			append(div29, t98);
+			if (if_block10) if_block10.m(div29, null);
+			insert(target, t99, anchor);
 			insert(target, div32, anchor);
 			append(div32, div30);
-			append(div30, t97);
-			if (if_block9) if_block9.m(div30, null);
-			append(div32, t98);
+			append(div30, t100);
+			if (if_block11) if_block11.m(div30, null);
+			append(div32, t101);
 			append(div32, div31);
-			append(div31, t99);
+			append(div31, t102);
 			append(div31, b);
-			append(div31, t101);
-			if (if_block10) if_block10.m(div31, null);
-			append(div32, t102);
-			if (if_block11) if_block11.m(div32, null);
-			append(div32, t103);
-			if (if_block12) if_block12.m(div32, null);
-			insert(target, t104, anchor);
+			append(div31, t104);
+			if (if_block12) if_block12.m(div31, null);
+			append(div32, t105);
+			if (if_block13) if_block13.m(div32, null);
+			append(div32, t106);
+			if (if_block14) if_block14.m(div32, null);
+			insert(target, t107, anchor);
 			insert(target, button, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "change", /*input0_change_handler*/ ctx[107]),
-					listen(input0, "change", /*saveSettings*/ ctx[52]),
-					listen(input1, "change", /*input1_change_handler*/ ctx[109]),
-					listen(input1, "change", /*saveSettings*/ ctx[52]),
-					listen(input2, "change", /*input2_change_handler*/ ctx[110]),
-					listen(input2, "change", /*saveSettings*/ ctx[52]),
-					listen(input3, "change", /*input3_change_handler*/ ctx[111]),
-					listen(input3, "change", /*saveSettings*/ ctx[52]),
-					listen(input4, "change", /*input4_change_handler*/ ctx[112]),
-					listen(input4, "change", /*saveSettings*/ ctx[52]),
-					listen(input5, "change", /*input5_change_input_handler*/ ctx[114]),
-					listen(input5, "input", /*input5_change_input_handler*/ ctx[114]),
-					listen(input5, "change", /*saveSettings*/ ctx[52]),
-					listen(input6, "change", /*input6_change_input_handler*/ ctx[115]),
-					listen(input6, "input", /*input6_change_input_handler*/ ctx[115]),
-					listen(input6, "change", /*saveSettings*/ ctx[52]),
-					listen(input7, "change", /*input7_change_input_handler*/ ctx[116]),
-					listen(input7, "input", /*input7_change_input_handler*/ ctx[116]),
-					listen(input7, "change", /*saveSettings*/ ctx[52]),
-					listen(input8, "change", /*input8_change_input_handler*/ ctx[117]),
-					listen(input8, "input", /*input8_change_input_handler*/ ctx[117]),
-					listen(input8, "change", /*saveSettings*/ ctx[52]),
-					listen(input9, "change", /*input9_change_input_handler*/ ctx[118]),
-					listen(input9, "input", /*input9_change_input_handler*/ ctx[118]),
-					listen(input9, "change", /*saveSettings*/ ctx[52]),
-					listen(input10, "change", /*input10_change_input_handler*/ ctx[119]),
-					listen(input10, "input", /*input10_change_input_handler*/ ctx[119]),
-					listen(input10, "change", /*saveSettings*/ ctx[52]),
-					listen(input11, "change", /*input11_change_input_handler*/ ctx[120]),
-					listen(input11, "input", /*input11_change_input_handler*/ ctx[120]),
-					listen(input11, "change", /*saveSettings*/ ctx[52]),
-					listen(input12, "change", /*input12_change_handler*/ ctx[121]),
-					listen(input12, "change", /*saveSettings*/ ctx[52]),
-					listen(input13, "change", /*input13_change_handler*/ ctx[122]),
-					listen(input13, "change", /*setupAutoRefresh*/ ctx[54]),
-					listen(button, "click", /*resetSettings*/ ctx[53])
+					listen(input0, "change", /*input0_change_handler*/ ctx[115]),
+					listen(input0, "change", /*saveSettings*/ ctx[59]),
+					listen(input1, "change", /*input1_change_handler*/ ctx[117]),
+					listen(input1, "change", /*saveSettings*/ ctx[59]),
+					listen(input2, "change", /*input2_change_handler*/ ctx[118]),
+					listen(input2, "change", /*saveSettings*/ ctx[59]),
+					listen(input3, "change", /*input3_change_handler*/ ctx[119]),
+					listen(input3, "change", /*saveSettings*/ ctx[59]),
+					listen(input4, "change", /*input4_change_handler*/ ctx[120]),
+					listen(input4, "change", /*saveSettings*/ ctx[59]),
+					listen(input5, "change", /*input5_change_input_handler*/ ctx[122]),
+					listen(input5, "input", /*input5_change_input_handler*/ ctx[122]),
+					listen(input5, "change", /*saveSettings*/ ctx[59]),
+					listen(input6, "change", /*input6_change_input_handler*/ ctx[123]),
+					listen(input6, "input", /*input6_change_input_handler*/ ctx[123]),
+					listen(input6, "change", /*saveSettings*/ ctx[59]),
+					listen(input7, "change", /*input7_change_input_handler*/ ctx[124]),
+					listen(input7, "input", /*input7_change_input_handler*/ ctx[124]),
+					listen(input7, "change", /*saveSettings*/ ctx[59]),
+					listen(input8, "change", /*input8_change_input_handler*/ ctx[125]),
+					listen(input8, "input", /*input8_change_input_handler*/ ctx[125]),
+					listen(input8, "change", /*saveSettings*/ ctx[59]),
+					listen(input9, "change", /*input9_change_input_handler*/ ctx[126]),
+					listen(input9, "input", /*input9_change_input_handler*/ ctx[126]),
+					listen(input9, "change", /*saveSettings*/ ctx[59]),
+					listen(input10, "change", /*input10_change_input_handler*/ ctx[127]),
+					listen(input10, "input", /*input10_change_input_handler*/ ctx[127]),
+					listen(input10, "change", /*saveSettings*/ ctx[59]),
+					listen(input11, "change", /*input11_change_input_handler*/ ctx[128]),
+					listen(input11, "input", /*input11_change_input_handler*/ ctx[128]),
+					listen(input11, "change", /*saveSettings*/ ctx[59]),
+					listen(input12, "change", /*input12_change_handler*/ ctx[129]),
+					listen(input12, "change", /*saveSettings*/ ctx[59]),
+					listen(input13, "change", /*input13_change_handler*/ ctx[130]),
+					listen(input13, "change", /*setupAutoRefresh*/ ctx[61]),
+					listen(input14, "change", /*input14_change_handler*/ ctx[131]),
+					listen(input14, "change", /*saveSettings*/ ctx[59]),
+					listen(button, "click", /*resetSettings*/ ctx[60])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_14(ctx)) && if_block0) {
+			if (current_block_type === (current_block_type = select_block_type_15(ctx)) && if_block0) {
 				if_block0.p(ctx, dirty);
 			} else {
 				if_block0.d(1);
@@ -4270,11 +4491,11 @@ function create_if_block_36(ctx) {
 				}
 			}
 
-			if (/*licenseMsg*/ ctx[25]) {
+			if (/*licenseMsg*/ ctx[29]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
-					if_block1 = create_if_block_49(ctx);
+					if_block1 = create_if_block_58(ctx);
 					if_block1.c();
 					if_block1.m(div2, null);
 				}
@@ -4285,7 +4506,7 @@ function create_if_block_36(ctx) {
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block2) ; else {
-					if_block2 = create_if_block_48();
+					if_block2 = create_if_block_57();
 					if_block2.c();
 					if_block2.m(div3, null);
 				}
@@ -4312,7 +4533,7 @@ function create_if_block_36(ctx) {
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block3) ; else {
-					if_block3 = create_if_block_47();
+					if_block3 = create_if_block_56();
 					if_block3.c();
 					if_block3.m(div6, null);
 				}
@@ -4345,17 +4566,17 @@ function create_if_block_36(ctx) {
 				input4.checked = input4.__value === /*settings*/ ctx[2].winterMode;
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*saveSettings*/ 2097152) {
-				each_value_10 = ensure_array_like(Object.entries(PPE_PROFILES));
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*saveSettings*/ 268435456) {
+				each_value_13 = ensure_array_like(Object.entries(PPE_PROFILES));
 				let i;
 
-				for (i = 0; i < each_value_10.length; i += 1) {
-					const child_ctx = get_each_context_10(ctx, each_value_10, i);
+				for (i = 0; i < each_value_13.length; i += 1) {
+					const child_ctx = get_each_context_13(ctx, each_value_13, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_10(child_ctx);
+						each_blocks[i] = create_each_block_13(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(div10, null);
 					}
@@ -4365,12 +4586,12 @@ function create_if_block_36(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_10.length;
+				each_blocks.length = each_value_13.length;
 			}
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block4) ; else {
-					if_block4 = create_if_block_46();
+					if_block4 = create_if_block_55();
 					if_block4.c();
 					if_block4.m(div11, null);
 				}
@@ -4379,7 +4600,7 @@ function create_if_block_36(ctx) {
 				if_block4 = null;
 			}
 
-			if (dirty[1] & /*units*/ 16384 && t40_value !== (t40_value = (/*units*/ ctx[45] === 'imperial' ? '°F' : '°C') + "")) set_data(t40, t40_value);
+			if (dirty[1] & /*units*/ 524288 && t40_value !== (t40_value = (/*units*/ ctx[50] === 'imperial' ? '°F' : '°C') + "")) set_data(t40, t40_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input5_disabled_value !== (input5_disabled_value = !/*isPro*/ ctx[3])) {
 				input5.disabled = input5_disabled_value;
@@ -4389,8 +4610,8 @@ function create_if_block_36(ctx) {
 				set_input_value(input5, /*settings*/ ctx[2].wbgtWarnC);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t43_value !== (t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[45]) + "")) set_data(t43, t43_value);
-			if (dirty[1] & /*units*/ 16384 && t46_value !== (t46_value = (/*units*/ ctx[45] === 'imperial' ? '°F' : '°C') + "")) set_data(t46, t46_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t43_value !== (t43_value = fmtTemp(/*settings*/ ctx[2].wbgtWarnC, /*units*/ ctx[50]) + "")) set_data(t43, t43_value);
+			if (dirty[1] & /*units*/ 524288 && t46_value !== (t46_value = (/*units*/ ctx[50] === 'imperial' ? '°F' : '°C') + "")) set_data(t46, t46_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input6_disabled_value !== (input6_disabled_value = !/*isPro*/ ctx[3])) {
 				input6.disabled = input6_disabled_value;
@@ -4400,11 +4621,11 @@ function create_if_block_36(ctx) {
 				set_input_value(input6, /*settings*/ ctx[2].wbgtDangerC);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t49_value !== (t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[45]) + "")) set_data(t49, t49_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t49_value !== (t49_value = fmtTemp(/*settings*/ ctx[2].wbgtDangerC, /*units*/ ctx[50]) + "")) set_data(t49, t49_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block5) ; else {
-					if_block5 = create_if_block_45();
+					if_block5 = create_if_block_54();
 					if_block5.c();
 					if_block5.m(div16, null);
 				}
@@ -4413,7 +4634,7 @@ function create_if_block_36(ctx) {
 				if_block5 = null;
 			}
 
-			if (dirty[1] & /*units*/ 16384 && t54_value !== (t54_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t54, t54_value);
+			if (dirty[1] & /*units*/ 524288 && t54_value !== (t54_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t54, t54_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input7_disabled_value !== (input7_disabled_value = !/*isPro*/ ctx[3])) {
 				input7.disabled = input7_disabled_value;
@@ -4423,8 +4644,8 @@ function create_if_block_36(ctx) {
 				set_input_value(input7, /*settings*/ ctx[2].windWarnMs);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t57_value !== (t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[45]) + "")) set_data(t57, t57_value);
-			if (dirty[1] & /*units*/ 16384 && t60_value !== (t60_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t60, t60_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t57_value !== (t57_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[50]) + "")) set_data(t57, t57_value);
+			if (dirty[1] & /*units*/ 524288 && t60_value !== (t60_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t60, t60_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input8_disabled_value !== (input8_disabled_value = !/*isPro*/ ctx[3])) {
 				input8.disabled = input8_disabled_value;
@@ -4434,11 +4655,11 @@ function create_if_block_36(ctx) {
 				set_input_value(input8, /*settings*/ ctx[2].windDangerMs);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t63_value !== (t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[45]) + "")) set_data(t63, t63_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t63_value !== (t63_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[50]) + "")) set_data(t63, t63_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block6) ; else {
-					if_block6 = create_if_block_44();
+					if_block6 = create_if_block_53();
 					if_block6.c();
 					if_block6.m(div20, null);
 				}
@@ -4447,7 +4668,7 @@ function create_if_block_36(ctx) {
 				if_block6 = null;
 			}
 
-			if (dirty[1] & /*units*/ 16384 && t68_value !== (t68_value = (/*units*/ ctx[45] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t68, t68_value);
+			if (dirty[1] & /*units*/ 524288 && t68_value !== (t68_value = (/*units*/ ctx[50] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t68, t68_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input9_disabled_value !== (input9_disabled_value = !/*isPro*/ ctx[3])) {
 				input9.disabled = input9_disabled_value;
@@ -4457,8 +4678,8 @@ function create_if_block_36(ctx) {
 				set_input_value(input9, /*settings*/ ctx[2].rainWarnMmh);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t71_value !== (t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[45]) + "")) set_data(t71, t71_value);
-			if (dirty[1] & /*units*/ 16384 && t74_value !== (t74_value = (/*units*/ ctx[45] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t74, t74_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t71_value !== (t71_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[50]) + "")) set_data(t71, t71_value);
+			if (dirty[1] & /*units*/ 524288 && t74_value !== (t74_value = (/*units*/ ctx[50] === 'imperial' ? 'in/h' : 'mm/h') + "")) set_data(t74, t74_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input10_disabled_value !== (input10_disabled_value = !/*isPro*/ ctx[3])) {
 				input10.disabled = input10_disabled_value;
@@ -4468,11 +4689,11 @@ function create_if_block_36(ctx) {
 				set_input_value(input10, /*settings*/ ctx[2].rainDangerMmh);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t77_value !== (t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[45]) + "")) set_data(t77, t77_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t77_value !== (t77_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[50]) + "")) set_data(t77, t77_value);
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block7) ; else {
-					if_block7 = create_if_block_43();
+					if_block7 = create_if_block_52();
 					if_block7.c();
 					if_block7.m(div24, null);
 				}
@@ -4481,7 +4702,7 @@ function create_if_block_36(ctx) {
 				if_block7 = null;
 			}
 
-			if (dirty[1] & /*units*/ 16384 && t84_value !== (t84_value = (/*units*/ ctx[45] === 'imperial' ? 'mi' : 'km') + "")) set_data(t84, t84_value);
+			if (dirty[1] & /*units*/ 524288 && t84_value !== (t84_value = (/*units*/ ctx[50] === 'imperial' ? 'mi' : 'km') + "")) set_data(t84, t84_value);
 
 			if (dirty[0] & /*isPro*/ 8 && input11_disabled_value !== (input11_disabled_value = !/*isPro*/ ctx[3])) {
 				input11.disabled = input11_disabled_value;
@@ -4491,8 +4712,8 @@ function create_if_block_36(ctx) {
 				set_input_value(input11, /*settings*/ ctx[2].lightningRadiusKm);
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t87_value !== (t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[45]) + "")) set_data(t87, t87_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t89_value !== (t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[45]) + "")) set_data(t89, t89_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t87_value !== (t87_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[50]) + "")) set_data(t87, t87_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t89_value !== (t89_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[50]) + "")) set_data(t89, t89_value);
 
 			if (dirty[0] & /*settings*/ 4) {
 				input12.checked = /*settings*/ ctx[2].soundAlerts;
@@ -4508,7 +4729,7 @@ function create_if_block_36(ctx) {
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block8) ; else {
-					if_block8 = create_if_block_42();
+					if_block8 = create_if_block_51();
 					if_block8.c();
 					if_block8.m(label13, null);
 				}
@@ -4517,52 +4738,83 @@ function create_if_block_36(ctx) {
 				if_block8 = null;
 			}
 
-			if (!/*isPro*/ ctx[3]) {
+			if (dirty[1] & /*isSite*/ 262144 && input14_disabled_value !== (input14_disabled_value = !/*isSite*/ ctx[49])) {
+				input14.disabled = input14_disabled_value;
+			}
+
+			if (dirty[0] & /*settings*/ 4) {
+				input14.checked = /*settings*/ ctx[2].forecastAlerts;
+			}
+
+			if (!/*isSite*/ ctx[49]) {
 				if (if_block9) ; else {
-					if_block9 = create_if_block_41();
+					if_block9 = create_if_block_50();
 					if_block9.c();
-					if_block9.m(div30, null);
+					if_block9.m(label14, null);
 				}
 			} else if (if_block9) {
 				if_block9.d(1);
 				if_block9 = null;
 			}
 
-			if (!/*isPro*/ ctx[3]) {
-				if (if_block10) ; else {
-					if_block10 = create_if_block_40();
+			if (current_block_type_1 === (current_block_type_1 = select_block_type_16(ctx)) && if_block10) {
+				if_block10.p(ctx, dirty);
+			} else {
+				if (if_block10) if_block10.d(1);
+				if_block10 = current_block_type_1 && current_block_type_1(ctx);
+
+				if (if_block10) {
 					if_block10.c();
-					if_block10.m(div31, null);
+					if_block10.m(div29, null);
 				}
-			} else if (if_block10) {
-				if_block10.d(1);
-				if_block10 = null;
 			}
 
-			if (/*isPro*/ ctx[3]) {
-				if (if_block11) {
-					if_block11.p(ctx, dirty);
-				} else {
-					if_block11 = create_if_block_38(ctx);
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block11) ; else {
+					if_block11 = create_if_block_47();
 					if_block11.c();
-					if_block11.m(div32, t103);
+					if_block11.m(div30, null);
 				}
 			} else if (if_block11) {
 				if_block11.d(1);
 				if_block11 = null;
 			}
 
-			if (/*monitorMsg*/ ctx[32]) {
-				if (if_block12) {
-					if_block12.p(ctx, dirty);
-				} else {
-					if_block12 = create_if_block_37(ctx);
+			if (!/*isPro*/ ctx[3]) {
+				if (if_block12) ; else {
+					if_block12 = create_if_block_46();
 					if_block12.c();
-					if_block12.m(div32, null);
+					if_block12.m(div31, null);
 				}
 			} else if (if_block12) {
 				if_block12.d(1);
 				if_block12 = null;
+			}
+
+			if (/*isPro*/ ctx[3]) {
+				if (if_block13) {
+					if_block13.p(ctx, dirty);
+				} else {
+					if_block13 = create_if_block_44(ctx);
+					if_block13.c();
+					if_block13.m(div32, t106);
+				}
+			} else if (if_block13) {
+				if_block13.d(1);
+				if_block13 = null;
+			}
+
+			if (/*monitorMsg*/ ctx[36]) {
+				if (if_block14) {
+					if_block14.p(ctx, dirty);
+				} else {
+					if_block14 = create_if_block_43(ctx);
+					if_block14.c();
+					if_block14.m(div32, null);
+				}
+			} else if (if_block14) {
+				if_block14.d(1);
+				if_block14 = null;
 			}
 		},
 		d(detaching) {
@@ -4586,9 +4838,9 @@ function create_if_block_36(ctx) {
 				detach(div27);
 				detach(t90);
 				detach(div29);
-				detach(t96);
+				detach(t99);
 				detach(div32);
-				detach(t104);
+				detach(t107);
 				detach(button);
 			}
 
@@ -4603,9 +4855,15 @@ function create_if_block_36(ctx) {
 			if (if_block7) if_block7.d();
 			if (if_block8) if_block8.d();
 			if (if_block9) if_block9.d();
-			if (if_block10) if_block10.d();
+
+			if (if_block10) {
+				if_block10.d();
+			}
+
 			if (if_block11) if_block11.d();
 			if (if_block12) if_block12.d();
+			if (if_block13) if_block13.d();
+			if (if_block14) if_block14.d();
 			binding_group.r();
 			binding_group_1.r();
 			mounted = false;
@@ -4614,20 +4872,20 @@ function create_if_block_36(ctx) {
 	};
 }
 
-// (445:29) 
-function create_if_block_33(ctx) {
+// (485:29) 
+function create_if_block_39(ctx) {
 	let div0;
 	let t1;
 	let div1;
 	let t3;
 	let if_block_anchor;
 
-	function select_block_type_13(ctx, dirty) {
-		if (!/*isPro*/ ctx[3]) return create_if_block_34;
-		return create_else_block_9;
+	function select_block_type_14(ctx, dirty) {
+		if (!/*isPro*/ ctx[3]) return create_if_block_40;
+		return create_else_block_10;
 	}
 
-	let current_block_type = select_block_type_13(ctx);
+	let current_block_type = select_block_type_14(ctx);
 	let if_block = current_block_type(ctx);
 
 	return {
@@ -4640,8 +4898,8 @@ function create_if_block_33(ctx) {
 			t3 = space();
 			if_block.c();
 			if_block_anchor = empty();
-			attr(div0, "class", "fg-section-title svelte-vomya3");
-			attr(div1, "class", "fg-report-note svelte-vomya3");
+			attr(div0, "class", "fg-section-title svelte-11fx3n2");
+			attr(div1, "class", "fg-report-note svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div0, anchor);
@@ -4652,7 +4910,7 @@ function create_if_block_33(ctx) {
 			insert(target, if_block_anchor, anchor);
 		},
 		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_13(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_14(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -4678,16 +4936,16 @@ function create_if_block_33(ctx) {
 	};
 }
 
-// (395:32) 
-function create_if_block_29(ctx) {
+// (416:32) 
+function create_if_block_32(ctx) {
 	let if_block_anchor;
 
-	function select_block_type_11(ctx, dirty) {
-		if (!/*isPro*/ ctx[3]) return create_if_block_30;
-		return create_else_block_7;
+	function select_block_type_12(ctx, dirty) {
+		if (!/*isPro*/ ctx[3]) return create_if_block_33;
+		return create_else_block_8;
 	}
 
-	let current_block_type = select_block_type_11(ctx);
+	let current_block_type = select_block_type_12(ctx);
 	let if_block = current_block_type(ctx);
 
 	return {
@@ -4700,7 +4958,7 @@ function create_if_block_29(ctx) {
 			insert(target, if_block_anchor, anchor);
 		},
 		p(ctx, dirty) {
-			if (current_block_type === (current_block_type = select_block_type_11(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_12(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -4762,31 +5020,31 @@ function create_if_block(ctx) {
 	let if_block3_anchor;
 	let mounted;
 	let dispose;
-	let each_value_5 = ensure_array_like(/*savedSites*/ ctx[35]);
+	let each_value_6 = ensure_array_like(/*savedSites*/ ctx[39]);
 	let each_blocks_1 = [];
 
-	for (let i = 0; i < each_value_5.length; i += 1) {
-		each_blocks_1[i] = create_each_block_5(get_each_context_5(ctx, each_value_5, i));
+	for (let i = 0; i < each_value_6.length; i += 1) {
+		each_blocks_1[i] = create_each_block_6(get_each_context_6(ctx, each_value_6, i));
 	}
 
 	function select_block_type_2(ctx, dirty) {
-		if (show_if == null) show_if = !!/*canAddSite*/ ctx[47]();
-		if (show_if) return create_if_block_26;
-		if (/*isPro*/ ctx[3]) return create_if_block_27;
-		return create_else_block_5;
+		if (show_if == null) show_if = !!/*canAddSite*/ ctx[52]();
+		if (show_if) return create_if_block_29;
+		if (/*isPro*/ ctx[3]) return create_if_block_30;
+		return create_else_block_6;
 	}
 
 	let current_block_type = select_block_type_2(ctx);
 	let if_block0 = current_block_type(ctx);
-	let if_block1 = /*isStale*/ ctx[41] && create_if_block_25(ctx);
-	let each_value_4 = ensure_array_like(/*MODELS*/ ctx[49]);
+	let if_block1 = /*isStale*/ ctx[45] && create_if_block_28(ctx);
+	let each_value_5 = ensure_array_like(/*MODELS*/ ctx[54]);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_4.length; i += 1) {
-		each_blocks[i] = create_each_block_4(get_each_context_4(ctx, each_value_4, i));
+	for (let i = 0; i < each_value_5.length; i += 1) {
+		each_blocks[i] = create_each_block_5(get_each_context_5(ctx, each_value_5, i));
 	}
 
-	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_24();
+	let if_block2 = !/*isPro*/ ctx[3] && create_if_block_27();
 
 	function select_block_type_3(ctx, dirty) {
 		if (/*loading*/ ctx[8]) return create_if_block_1;
@@ -4844,28 +5102,28 @@ function create_if_block(ctx) {
 			t17 = space();
 			if (if_block3) if_block3.c();
 			if_block3_anchor = empty();
-			attr(span1, "class", "fg-loc-text svelte-vomya3");
-			attr(span2, "class", span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-vomya3");
-			attr(button0, "class", button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-vomya3");
+			attr(span1, "class", "fg-loc-text svelte-11fx3n2");
+			attr(span2, "class", span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-11fx3n2");
+			attr(button0, "class", button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-11fx3n2");
 
 			attr(button0, "title", button0_title_value = /*locked*/ ctx[11]
 			? 'Unlock pin (map clicks move it)'
 			: 'Lock pin to this location');
 
-			attr(button1, "class", "fg-mini-btn svelte-vomya3");
+			attr(button1, "class", "fg-mini-btn svelte-11fx3n2");
 			attr(button1, "title", "Refresh");
-			attr(div0, "class", "fg-location-row svelte-vomya3");
-			attr(div1, "class", "fg-sites svelte-vomya3");
+			attr(div0, "class", "fg-location-row svelte-11fx3n2");
+			attr(div1, "class", "fg-sites svelte-11fx3n2");
 			set_style(label0, "margin", "0");
-			attr(label0, "class", "svelte-vomya3");
-			attr(select, "class", "svelte-vomya3");
-			if (/*selectedModel*/ ctx[28] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[82].call(select));
+			attr(label0, "class", "svelte-11fx3n2");
+			attr(select, "class", "svelte-11fx3n2");
+			if (/*selectedModel*/ ctx[32] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[89].call(select));
 			attr(input, "type", "checkbox");
 			input.disabled = input_disabled_value = !/*isPro*/ ctx[3];
-			attr(input, "class", "svelte-vomya3");
-			attr(label1, "class", "fg-worst-label svelte-vomya3");
+			attr(input, "class", "svelte-11fx3n2");
+			attr(label1, "class", "fg-worst-label svelte-11fx3n2");
 			set_style(label1, "margin", "0");
-			attr(div2, "class", "fg-model-row svelte-vomya3");
+			attr(div2, "class", "fg-model-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div0, anchor);
@@ -4906,7 +5164,7 @@ function create_if_block(ctx) {
 				}
 			}
 
-			select_option(select, /*selectedModel*/ ctx[28], true);
+			select_option(select, /*selectedModel*/ ctx[32], true);
 			append(div2, t15);
 			append(div2, label1);
 			append(label1, input);
@@ -4919,12 +5177,12 @@ function create_if_block(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*click_handler_2*/ ctx[73]),
-					listen(button1, "click", /*refreshData*/ ctx[51]),
-					listen(select, "change", /*select_change_handler*/ ctx[82]),
-					listen(select, "change", /*refreshData*/ ctx[51]),
-					listen(input, "change", /*input_change_handler*/ ctx[83]),
-					listen(input, "change", /*refreshData*/ ctx[51])
+					listen(button0, "click", /*click_handler_2*/ ctx[80]),
+					listen(button1, "click", /*refreshData*/ ctx[58]),
+					listen(select, "change", /*select_change_handler*/ ctx[89]),
+					listen(select, "change", /*refreshData*/ ctx[58]),
+					listen(input, "change", /*input_change_handler*/ ctx[90]),
+					listen(input, "change", /*refreshData*/ ctx[58])
 				];
 
 				mounted = true;
@@ -4934,13 +5192,13 @@ function create_if_block(ctx) {
 			if (dirty[0] & /*locationName, lat, lon*/ 224 && t2_value !== (t2_value = (/*locationName*/ ctx[7] || /*lat*/ ctx[5].toFixed(3) + ', ' + /*lon*/ ctx[6].toFixed(3)) + "")) set_data(t2, t2_value);
 			if (dirty[0] & /*isDay*/ 4096 && t4_value !== (t4_value = (/*isDay*/ ctx[12] ? '☀ Day' : '🌙 Night') + "")) set_data(t4, t4_value);
 
-			if (dirty[0] & /*isDay*/ 4096 && span2_class_value !== (span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-vomya3")) {
+			if (dirty[0] & /*isDay*/ 4096 && span2_class_value !== (span2_class_value = "fg-daynight " + (/*isDay*/ ctx[12] ? 'day' : 'night') + " svelte-11fx3n2")) {
 				attr(span2, "class", span2_class_value);
 			}
 
 			if (dirty[0] & /*locked*/ 2048 && t6_value !== (t6_value = (/*locked*/ ctx[11] ? '🔒' : '🔓') + "")) set_data(t6, t6_value);
 
-			if (dirty[0] & /*locked*/ 2048 && button0_class_value !== (button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*locked*/ 2048 && button0_class_value !== (button0_class_value = "fg-mini-btn " + (/*locked*/ ctx[11] ? 'locked' : '') + " svelte-11fx3n2")) {
 				attr(button0, "class", button0_class_value);
 			}
 
@@ -4950,17 +5208,17 @@ function create_if_block(ctx) {
 				attr(button0, "title", button0_title_value);
 			}
 
-			if (dirty[1] & /*editName, editingSiteId, savedSites, activeSiteId, bgStatus*/ 4912 | dirty[2] & /*commitRename, selectSite, startRename, removeSite*/ 120) {
-				each_value_5 = ensure_array_like(/*savedSites*/ ctx[35]);
+			if (dirty[1] & /*editName, editingSiteId, savedSites, activeSiteId, bgStatus*/ 78592 | dirty[2] & /*commitRename, selectSite, startRename, removeSite*/ 15360) {
+				each_value_6 = ensure_array_like(/*savedSites*/ ctx[39]);
 				let i;
 
-				for (i = 0; i < each_value_5.length; i += 1) {
-					const child_ctx = get_each_context_5(ctx, each_value_5, i);
+				for (i = 0; i < each_value_6.length; i += 1) {
+					const child_ctx = get_each_context_6(ctx, each_value_6, i);
 
 					if (each_blocks_1[i]) {
 						each_blocks_1[i].p(child_ctx, dirty);
 					} else {
-						each_blocks_1[i] = create_each_block_5(child_ctx);
+						each_blocks_1[i] = create_each_block_6(child_ctx);
 						each_blocks_1[i].c();
 						each_blocks_1[i].m(div1, t10);
 					}
@@ -4970,7 +5228,7 @@ function create_if_block(ctx) {
 					each_blocks_1[i].d(1);
 				}
 
-				each_blocks_1.length = each_value_5.length;
+				each_blocks_1.length = each_value_6.length;
 			}
 
 			if (current_block_type === (current_block_type = select_block_type_2(ctx)) && if_block0) {
@@ -4985,11 +5243,11 @@ function create_if_block(ctx) {
 				}
 			}
 
-			if (/*isStale*/ ctx[41]) {
+			if (/*isStale*/ ctx[45]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
-					if_block1 = create_if_block_25(ctx);
+					if_block1 = create_if_block_28(ctx);
 					if_block1.c();
 					if_block1.m(t12.parentNode, t12);
 				}
@@ -4998,17 +5256,17 @@ function create_if_block(ctx) {
 				if_block1 = null;
 			}
 
-			if (dirty[1] & /*MODELS*/ 262144) {
-				each_value_4 = ensure_array_like(/*MODELS*/ ctx[49]);
+			if (dirty[1] & /*MODELS*/ 8388608) {
+				each_value_5 = ensure_array_like(/*MODELS*/ ctx[54]);
 				let i;
 
-				for (i = 0; i < each_value_4.length; i += 1) {
-					const child_ctx = get_each_context_4(ctx, each_value_4, i);
+				for (i = 0; i < each_value_5.length; i += 1) {
+					const child_ctx = get_each_context_5(ctx, each_value_5, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_4(child_ctx);
+						each_blocks[i] = create_each_block_5(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(select, null);
 					}
@@ -5018,11 +5276,11 @@ function create_if_block(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_4.length;
+				each_blocks.length = each_value_5.length;
 			}
 
-			if (dirty[0] & /*selectedModel*/ 268435456 | dirty[1] & /*MODELS*/ 262144) {
-				select_option(select, /*selectedModel*/ ctx[28]);
+			if (dirty[1] & /*selectedModel, MODELS*/ 8388610) {
+				select_option(select, /*selectedModel*/ ctx[32]);
 			}
 
 			if (dirty[0] & /*isPro*/ 8 && input_disabled_value !== (input_disabled_value = !/*isPro*/ ctx[3])) {
@@ -5035,7 +5293,7 @@ function create_if_block(ctx) {
 
 			if (!/*isPro*/ ctx[3]) {
 				if (if_block2) ; else {
-					if_block2 = create_if_block_24();
+					if_block2 = create_if_block_27();
 					if_block2.c();
 					if_block2.m(label1, null);
 				}
@@ -5084,15 +5342,15 @@ function create_if_block(ctx) {
 	};
 }
 
-// (499:6) {:else}
-function create_else_block_10(ctx) {
+// (539:6) {:else}
+function create_else_block_11(ctx) {
 	let div0;
 	let t1;
 	let div1;
 	let input;
 	let t2;
 	let button;
-	let t3_value = (/*licenseChecking*/ ctx[26] ? '…' : 'Activate') + "";
+	let t3_value = (/*licenseChecking*/ ctx[30] ? '…' : 'Activate') + "";
 	let t3;
 	let t4;
 	let a;
@@ -5112,15 +5370,15 @@ function create_else_block_10(ctx) {
 			t4 = space();
 			a = element("a");
 			a.textContent = "Get a license →";
-			attr(div0, "class", "fg-note svelte-vomya3");
-			attr(input, "class", "fg-license-input svelte-vomya3");
+			attr(div0, "class", "fg-note svelte-11fx3n2");
+			attr(input, "class", "fg-license-input svelte-11fx3n2");
 			attr(input, "type", "text");
 			attr(input, "placeholder", "FG-XXXX-XXXX-XXXX");
 			attr(input, "spellcheck", "false");
-			attr(button, "class", "fg-btn-inline svelte-vomya3");
-			button.disabled = /*licenseChecking*/ ctx[26];
-			attr(div1, "class", "fg-license-row svelte-vomya3");
-			attr(a, "class", "fg-buy-link svelte-vomya3");
+			attr(button, "class", "fg-btn-inline svelte-11fx3n2");
+			button.disabled = /*licenseChecking*/ ctx[30];
+			attr(div1, "class", "fg-license-row svelte-11fx3n2");
+			attr(a, "class", "fg-buy-link svelte-11fx3n2");
 			attr(a, "href", "https://fieldguard-hse.com/#pricing");
 			attr(a, "target", "_blank");
 			attr(a, "rel", "noopener");
@@ -5130,7 +5388,7 @@ function create_else_block_10(ctx) {
 			insert(target, t1, anchor);
 			insert(target, div1, anchor);
 			append(div1, input);
-			set_input_value(input, /*licenseKey*/ ctx[23]);
+			set_input_value(input, /*licenseKey*/ ctx[27]);
 			append(div1, t2);
 			append(div1, button);
 			append(button, t3);
@@ -5139,23 +5397,23 @@ function create_else_block_10(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler_1*/ ctx[105]),
-					listen(input, "keydown", /*keydown_handler_2*/ ctx[106]),
-					listen(button, "click", /*activateLicense*/ ctx[55])
+					listen(input, "input", /*input_input_handler_1*/ ctx[113]),
+					listen(input, "keydown", /*keydown_handler_2*/ ctx[114]),
+					listen(button, "click", /*activateLicense*/ ctx[62])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*licenseKey*/ 8388608 && input.value !== /*licenseKey*/ ctx[23]) {
-				set_input_value(input, /*licenseKey*/ ctx[23]);
+			if (dirty[0] & /*licenseKey*/ 134217728 && input.value !== /*licenseKey*/ ctx[27]) {
+				set_input_value(input, /*licenseKey*/ ctx[27]);
 			}
 
-			if (dirty[0] & /*licenseChecking*/ 67108864 && t3_value !== (t3_value = (/*licenseChecking*/ ctx[26] ? '…' : 'Activate') + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*licenseChecking*/ 1073741824 && t3_value !== (t3_value = (/*licenseChecking*/ ctx[30] ? '…' : 'Activate') + "")) set_data(t3, t3_value);
 
-			if (dirty[0] & /*licenseChecking*/ 67108864) {
-				button.disabled = /*licenseChecking*/ ctx[26];
+			if (dirty[0] & /*licenseChecking*/ 1073741824) {
+				button.disabled = /*licenseChecking*/ ctx[30];
 			}
 		},
 		d(detaching) {
@@ -5173,8 +5431,8 @@ function create_else_block_10(ctx) {
 	};
 }
 
-// (493:6) {#if isPro}
-function create_if_block_50(ctx) {
+// (533:6) {#if isPro}
+function create_if_block_59(ctx) {
 	let div;
 	let span0;
 	let t0;
@@ -5184,8 +5442,8 @@ function create_if_block_50(ctx) {
 	let span1;
 	let t3;
 
-	let t4_value = (/*licenseExpires*/ ctx[24]
-	? ' · expires ' + /*licenseExpires*/ ctx[24]
+	let t4_value = (/*licenseExpires*/ ctx[28]
+	? ' · expires ' + /*licenseExpires*/ ctx[28]
 	: '') + "";
 
 	let t4;
@@ -5207,10 +5465,10 @@ function create_if_block_50(ctx) {
 			t5 = space();
 			button = element("button");
 			button.textContent = "Deactivate";
-			attr(span0, "class", "fg-pro-badge svelte-vomya3");
+			attr(span0, "class", "fg-pro-badge svelte-11fx3n2");
 			set_style(span1, "flex", "1");
-			attr(button, "class", "fg-mini-btn svelte-vomya3");
-			attr(div, "class", "fg-license-active svelte-vomya3");
+			attr(button, "class", "fg-mini-btn svelte-11fx3n2");
+			attr(div, "class", "fg-license-active svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -5225,15 +5483,15 @@ function create_if_block_50(ctx) {
 			append(div, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*deactivateLicense*/ ctx[56]);
+				dispose = listen(button, "click", /*deactivateLicense*/ ctx[63]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
 			if (dirty[0] & /*licenseTier*/ 1 && t1_value !== (t1_value = (/*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO') + "")) set_data(t1, t1_value);
 
-			if (dirty[0] & /*licenseExpires*/ 16777216 && t4_value !== (t4_value = (/*licenseExpires*/ ctx[24]
-			? ' · expires ' + /*licenseExpires*/ ctx[24]
+			if (dirty[0] & /*licenseExpires*/ 268435456 && t4_value !== (t4_value = (/*licenseExpires*/ ctx[28]
+			? ' · expires ' + /*licenseExpires*/ ctx[28]
 			: '') + "")) set_data(t4, t4_value);
 		},
 		d(detaching) {
@@ -5247,23 +5505,23 @@ function create_if_block_50(ctx) {
 	};
 }
 
-// (508:6) {#if licenseMsg}
-function create_if_block_49(ctx) {
+// (548:6) {#if licenseMsg}
+function create_if_block_58(ctx) {
 	let div;
 	let t_1;
 
 	return {
 		c() {
 			div = element("div");
-			t_1 = text(/*licenseMsg*/ ctx[25]);
-			attr(div, "class", "fg-license-msg svelte-vomya3");
+			t_1 = text(/*licenseMsg*/ ctx[29]);
+			attr(div, "class", "fg-license-msg svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, t_1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*licenseMsg*/ 33554432) set_data(t_1, /*licenseMsg*/ ctx[25]);
+			if (dirty[0] & /*licenseMsg*/ 536870912) set_data(t_1, /*licenseMsg*/ ctx[29]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -5273,15 +5531,15 @@ function create_if_block_49(ctx) {
 	};
 }
 
-// (512:60) {#if !isPro}
-function create_if_block_48(ctx) {
+// (552:60) {#if !isPro}
+function create_if_block_57(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
 			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
@@ -5294,15 +5552,15 @@ function create_if_block_48(ctx) {
 	};
 }
 
-// (525:71) {#if !isPro}
-function create_if_block_47(ctx) {
+// (565:71) {#if !isPro}
+function create_if_block_56(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
 			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
@@ -5315,13 +5573,13 @@ function create_if_block_47(ctx) {
 	};
 }
 
-// (543:6) {#each Object.entries(PPE_PROFILES) as [key, prof]}
-function create_each_block_10(ctx) {
+// (583:6) {#each Object.entries(PPE_PROFILES) as [key, prof]}
+function create_each_block_13(ctx) {
 	let label;
 	let input;
 	let t0;
 	let span1;
-	let t1_value = /*prof*/ ctx[175].label + "";
+	let t1_value = /*prof*/ ctx[198].label + "";
 	let t1;
 	let t2;
 	let span0;
@@ -5329,7 +5587,7 @@ function create_each_block_10(ctx) {
 	let binding_group;
 	let mounted;
 	let dispose;
-	binding_group = init_binding_group(/*$$binding_groups*/ ctx[108][0]);
+	binding_group = init_binding_group(/*$$binding_groups*/ ctx[116][0]);
 
 	return {
 		c() {
@@ -5340,15 +5598,15 @@ function create_each_block_10(ctx) {
 			t1 = text(t1_value);
 			t2 = space();
 			span0 = element("span");
-			span0.textContent = `+${/*prof*/ ctx[175].adjustment}°C`;
+			span0.textContent = `+${/*prof*/ ctx[198].adjustment}°C`;
 			t6 = space();
 			attr(input, "type", "radio");
-			input.__value = /*key*/ ctx[174];
+			input.__value = /*key*/ ctx[197];
 			set_input_value(input, input.__value);
-			attr(input, "class", "svelte-vomya3");
-			attr(span0, "class", "fg-adj svelte-vomya3");
-			attr(span1, "class", "fg-radio-text svelte-vomya3");
-			attr(label, "class", "fg-radio-label svelte-vomya3");
+			attr(input, "class", "svelte-11fx3n2");
+			attr(span0, "class", "fg-adj svelte-11fx3n2");
+			attr(span1, "class", "fg-radio-text svelte-11fx3n2");
+			attr(label, "class", "fg-radio-label svelte-11fx3n2");
 			binding_group.p(input);
 		},
 		m(target, anchor) {
@@ -5364,8 +5622,8 @@ function create_each_block_10(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "change", /*input_change_handler_1*/ ctx[113]),
-					listen(input, "change", /*saveSettings*/ ctx[52])
+					listen(input, "change", /*input_change_handler_1*/ ctx[121]),
+					listen(input, "change", /*saveSettings*/ ctx[59])
 				];
 
 				mounted = true;
@@ -5388,134 +5646,263 @@ function create_each_block_10(ctx) {
 	};
 }
 
-// (552:74) {#if !isPro}
+// (592:74) {#if !isPro}
+function create_if_block_55(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (609:56) {#if !isPro}
+function create_if_block_54(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (625:56) {#if !isPro}
+function create_if_block_53(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (641:49) {#if !isPro}
+function create_if_block_52(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (659:71) {#if !isPro}
+function create_if_block_51(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (663:64) {#if !isSite}
+function create_if_block_50(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "SITE";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (676:24) 
+function create_if_block_49(ctx) {
+	let div;
+
+	return {
+		c() {
+			div = element("div");
+			div.innerHTML = `Forecast Watch (hourly lookahead alerts) is available on the <b>Site</b> licence tier.`;
+			attr(div, "class", "fg-note svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (665:6) {#if isSite && settings.forecastAlerts}
+function create_if_block_48(ctx) {
+	let label;
+	let t0;
+	let div0;
+	let select;
+	let option0;
+	let option1;
+	let option2;
+	let t4;
+	let div1;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			label = element("label");
+			t0 = text("Lookahead horizon\n          ");
+			div0 = element("div");
+			select = element("select");
+			option0 = element("option");
+			option0.textContent = "Next 24 hours (1 day)";
+			option1 = element("option");
+			option1.textContent = "Next 48 hours (2 days)";
+			option2 = element("option");
+			option2.textContent = "Next 72 hours (3 days)";
+			t4 = space();
+			div1 = element("div");
+			div1.textContent = "Scans the hourly forecast for the current model and flags the first hour each hazard is predicted to cross your warning/danger thresholds.";
+			option0.__value = 1;
+			set_input_value(option0, option0.__value);
+			option1.__value = 2;
+			set_input_value(option1, option1.__value);
+			option2.__value = 3;
+			set_input_value(option2, option2.__value);
+			set_style(select, "background", "#1e293b");
+			set_style(select, "border", "1px solid #334155");
+			set_style(select, "color", "#e2e8f0");
+			set_style(select, "padding", "3px 6px");
+			set_style(select, "border-radius", "4px");
+			set_style(select, "font-size", "11px");
+			attr(select, "class", "svelte-11fx3n2");
+			if (/*settings*/ ctx[2].forecastDays === void 0) add_render_callback(() => /*select_change_handler_2*/ ctx[132].call(select));
+			attr(div0, "class", "fg-slider-row svelte-11fx3n2");
+			attr(label, "class", "svelte-11fx3n2");
+			attr(div1, "class", "fg-note svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, label, anchor);
+			append(label, t0);
+			append(label, div0);
+			append(div0, select);
+			append(select, option0);
+			append(select, option1);
+			append(select, option2);
+			select_option(select, /*settings*/ ctx[2].forecastDays, true);
+			insert(target, t4, anchor);
+			insert(target, div1, anchor);
+
+			if (!mounted) {
+				dispose = [
+					listen(select, "change", /*select_change_handler_2*/ ctx[132]),
+					listen(select, "change", /*saveSettings*/ ctx[59])
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*settings*/ 4) {
+				select_option(select, /*settings*/ ctx[2].forecastDays);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(label);
+				detach(t4);
+				detach(div1);
+			}
+
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+// (682:67) {#if !isPro}
+function create_if_block_47(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "PRO";
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (683:164) {#if !isPro}
 function create_if_block_46(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (569:56) {#if !isPro}
-function create_if_block_45(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (585:56) {#if !isPro}
-function create_if_block_44(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (601:49) {#if !isPro}
-function create_if_block_43(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (619:71) {#if !isPro}
-function create_if_block_42(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (624:67) {#if !isPro}
-function create_if_block_41(ctx) {
-	let span;
-
-	return {
-		c() {
-			span = element("span");
-			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
-		},
-		m(target, anchor) {
-			insert(target, span, anchor);
-		},
-		d(detaching) {
-			if (detaching) {
-				detach(span);
-			}
-		}
-	};
-}
-
-// (625:164) {#if !isPro}
-function create_if_block_40(ctx) {
 	let t_1;
 
 	return {
@@ -5533,13 +5920,13 @@ function create_if_block_40(ctx) {
 	};
 }
 
-// (626:6) {#if isPro}
-function create_if_block_38(ctx) {
+// (684:6) {#if isPro}
+function create_if_block_44(ctx) {
 	let div0;
 	let input;
 	let t0;
 	let button;
-	let t1_value = (/*monitorBusy*/ ctx[33] ? '…' : '🔔 Monitor') + "";
+	let t1_value = (/*monitorBusy*/ ctx[37] ? '…' : '🔔 Monitor') + "";
 	let t1;
 	let t2;
 	let div1;
@@ -5550,17 +5937,17 @@ function create_if_block_38(ctx) {
 	let t6_value = /*lon*/ ctx[6].toFixed(3) + "";
 	let t6;
 	let t7;
-	let t8_value = /*maxSites*/ ctx[46]() + "";
+	let t8_value = /*maxSites*/ ctx[51]() + "";
 	let t8;
 	let t9;
-	let t10_value = (/*maxSites*/ ctx[46]() > 1 ? 's' : '') + "";
+	let t10_value = (/*maxSites*/ ctx[51]() > 1 ? 's' : '') + "";
 	let t10;
 	let t11;
 	let t12;
 	let if_block_anchor;
 	let mounted;
 	let dispose;
-	let if_block = /*monitoredSites*/ ctx[34].length > 0 && create_if_block_39(ctx);
+	let if_block = /*monitoredSites*/ ctx[38].length > 0 && create_if_block_45(ctx);
 
 	return {
 		c() {
@@ -5583,19 +5970,19 @@ function create_if_block_38(ctx) {
 			t12 = space();
 			if (if_block) if_block.c();
 			if_block_anchor = empty();
-			attr(input, "class", "fg-license-input svelte-vomya3");
+			attr(input, "class", "fg-license-input svelte-11fx3n2");
 			attr(input, "type", "email");
 			attr(input, "placeholder", "you@company.com");
 			attr(input, "spellcheck", "false");
-			attr(button, "class", "fg-btn-inline svelte-vomya3");
-			button.disabled = /*monitorBusy*/ ctx[33];
-			attr(div0, "class", "fg-license-row svelte-vomya3");
-			attr(div1, "class", "fg-note svelte-vomya3");
+			attr(button, "class", "fg-btn-inline svelte-11fx3n2");
+			button.disabled = /*monitorBusy*/ ctx[37];
+			attr(div0, "class", "fg-license-row svelte-11fx3n2");
+			attr(div1, "class", "fg-note svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div0, anchor);
 			append(div0, input);
-			set_input_value(input, /*alertEmail*/ ctx[31]);
+			set_input_value(input, /*alertEmail*/ ctx[35]);
 			append(div0, t0);
 			append(div0, button);
 			append(button, t1);
@@ -5616,32 +6003,32 @@ function create_if_block_38(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler_2*/ ctx[123]),
-					listen(button, "click", /*register24*/ ctx[58])
+					listen(input, "input", /*input_input_handler_2*/ ctx[133]),
+					listen(button, "click", /*register24*/ ctx[65])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*alertEmail*/ 1 && input.value !== /*alertEmail*/ ctx[31]) {
-				set_input_value(input, /*alertEmail*/ ctx[31]);
+			if (dirty[1] & /*alertEmail*/ 16 && input.value !== /*alertEmail*/ ctx[35]) {
+				set_input_value(input, /*alertEmail*/ ctx[35]);
 			}
 
-			if (dirty[1] & /*monitorBusy*/ 4 && t1_value !== (t1_value = (/*monitorBusy*/ ctx[33] ? '…' : '🔔 Monitor') + "")) set_data(t1, t1_value);
+			if (dirty[1] & /*monitorBusy*/ 64 && t1_value !== (t1_value = (/*monitorBusy*/ ctx[37] ? '…' : '🔔 Monitor') + "")) set_data(t1, t1_value);
 
-			if (dirty[1] & /*monitorBusy*/ 4) {
-				button.disabled = /*monitorBusy*/ ctx[33];
+			if (dirty[1] & /*monitorBusy*/ 64) {
+				button.disabled = /*monitorBusy*/ ctx[37];
 			}
 
 			if (dirty[0] & /*lat*/ 32 && t4_value !== (t4_value = /*lat*/ ctx[5].toFixed(3) + "")) set_data(t4, t4_value);
 			if (dirty[0] & /*lon*/ 64 && t6_value !== (t6_value = /*lon*/ ctx[6].toFixed(3) + "")) set_data(t6, t6_value);
 
-			if (/*monitoredSites*/ ctx[34].length > 0) {
+			if (/*monitoredSites*/ ctx[38].length > 0) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_39(ctx);
+					if_block = create_if_block_45(ctx);
 					if_block.c();
 					if_block.m(if_block_anchor.parentNode, if_block_anchor);
 				}
@@ -5666,14 +6053,14 @@ function create_if_block_38(ctx) {
 	};
 }
 
-// (632:8) {#if monitoredSites.length > 0}
-function create_if_block_39(ctx) {
+// (690:8) {#if monitoredSites.length > 0}
+function create_if_block_45(ctx) {
 	let div;
-	let each_value_9 = ensure_array_like(/*monitoredSites*/ ctx[34]);
+	let each_value_12 = ensure_array_like(/*monitoredSites*/ ctx[38]);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_9.length; i += 1) {
-		each_blocks[i] = create_each_block_9(get_each_context_9(ctx, each_value_9, i));
+	for (let i = 0; i < each_value_12.length; i += 1) {
+		each_blocks[i] = create_each_block_12(get_each_context_12(ctx, each_value_12, i));
 	}
 
 	return {
@@ -5684,7 +6071,7 @@ function create_if_block_39(ctx) {
 				each_blocks[i].c();
 			}
 
-			attr(div, "class", "fg-mon-list svelte-vomya3");
+			attr(div, "class", "fg-mon-list svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -5696,17 +6083,17 @@ function create_if_block_39(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*removeMonitor, monitoredSites, monZoneColor*/ 335544328) {
-				each_value_9 = ensure_array_like(/*monitoredSites*/ ctx[34]);
+			if (dirty[1] & /*monitoredSites*/ 128 | dirty[2] & /*removeMonitor, monZoneColor*/ 20) {
+				each_value_12 = ensure_array_like(/*monitoredSites*/ ctx[38]);
 				let i;
 
-				for (i = 0; i < each_value_9.length; i += 1) {
-					const child_ctx = get_each_context_9(ctx, each_value_9, i);
+				for (i = 0; i < each_value_12.length; i += 1) {
+					const child_ctx = get_each_context_12(ctx, each_value_12, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_9(child_ctx);
+						each_blocks[i] = create_each_block_12(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(div, null);
 					}
@@ -5716,7 +6103,7 @@ function create_if_block_39(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_9.length;
+				each_blocks.length = each_value_12.length;
 			}
 		},
 		d(detaching) {
@@ -5729,13 +6116,13 @@ function create_if_block_39(ctx) {
 	};
 }
 
-// (634:12) {#each monitoredSites as m}
-function create_each_block_9(ctx) {
+// (692:12) {#each monitoredSites as m}
+function create_each_block_12(ctx) {
 	let div;
 	let span0;
 	let t0;
 	let span1;
-	let t1_value = /*m*/ ctx[158].name + "";
+	let t1_value = /*m*/ ctx[175].name + "";
 	let t1;
 	let t2;
 	let button;
@@ -5743,8 +6130,8 @@ function create_each_block_9(ctx) {
 	let mounted;
 	let dispose;
 
-	function click_handler_14() {
-		return /*click_handler_14*/ ctx[124](/*m*/ ctx[158]);
+	function click_handler_15() {
+		return /*click_handler_15*/ ctx[134](/*m*/ ctx[175]);
 	}
 
 	return {
@@ -5758,11 +6145,11 @@ function create_each_block_9(ctx) {
 			button = element("button");
 			button.textContent = "✕";
 			t4 = space();
-			attr(span0, "class", "fg-mon-dot svelte-vomya3");
-			set_style(span0, "background", /*monZoneColor*/ ctx[57](/*m*/ ctx[158].last_zone));
+			attr(span0, "class", "fg-mon-dot svelte-11fx3n2");
+			set_style(span0, "background", /*monZoneColor*/ ctx[64](/*m*/ ctx[175].last_zone));
 			set_style(span1, "flex", "1");
-			attr(button, "class", "fg-mini-btn svelte-vomya3");
-			attr(div, "class", "fg-mon-item svelte-vomya3");
+			attr(button, "class", "fg-mini-btn svelte-11fx3n2");
+			attr(div, "class", "fg-mon-item svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -5775,18 +6162,18 @@ function create_each_block_9(ctx) {
 			append(div, t4);
 
 			if (!mounted) {
-				dispose = listen(button, "click", click_handler_14);
+				dispose = listen(button, "click", click_handler_15);
 				mounted = true;
 			}
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[1] & /*monitoredSites*/ 8) {
-				set_style(span0, "background", /*monZoneColor*/ ctx[57](/*m*/ ctx[158].last_zone));
+			if (dirty[1] & /*monitoredSites*/ 128) {
+				set_style(span0, "background", /*monZoneColor*/ ctx[64](/*m*/ ctx[175].last_zone));
 			}
 
-			if (dirty[1] & /*monitoredSites*/ 8 && t1_value !== (t1_value = /*m*/ ctx[158].name + "")) set_data(t1, t1_value);
+			if (dirty[1] & /*monitoredSites*/ 128 && t1_value !== (t1_value = /*m*/ ctx[175].name + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -5799,23 +6186,23 @@ function create_each_block_9(ctx) {
 	};
 }
 
-// (644:6) {#if monitorMsg}
-function create_if_block_37(ctx) {
+// (702:6) {#if monitorMsg}
+function create_if_block_43(ctx) {
 	let div;
 	let t_1;
 
 	return {
 		c() {
 			div = element("div");
-			t_1 = text(/*monitorMsg*/ ctx[32]);
-			attr(div, "class", "fg-license-msg svelte-vomya3");
+			t_1 = text(/*monitorMsg*/ ctx[36]);
+			attr(div, "class", "fg-license-msg svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, t_1);
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*monitorMsg*/ 2) set_data(t_1, /*monitorMsg*/ ctx[32]);
+			if (dirty[1] & /*monitorMsg*/ 32) set_data(t_1, /*monitorMsg*/ ctx[36]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -5825,8 +6212,8 @@ function create_if_block_37(ctx) {
 	};
 }
 
-// (453:4) {:else}
-function create_else_block_9(ctx) {
+// (493:4) {:else}
+function create_else_block_10(ctx) {
 	let div;
 	let label0;
 	let t0;
@@ -5884,7 +6271,7 @@ function create_else_block_9(ctx) {
 	let if_block_anchor;
 	let mounted;
 	let dispose;
-	let if_block = /*reportText*/ ctx[30] && create_if_block_35(ctx);
+	let if_block = /*reportText*/ ctx[34] && create_if_block_41(ctx);
 
 	return {
 		c() {
@@ -5949,102 +6336,102 @@ function create_else_block_9(ctx) {
 			if (if_block) if_block.c();
 			if_block_anchor = empty();
 			attr(input0, "placeholder", "Site/Project Name");
-			attr(input0, "class", "svelte-vomya3");
-			attr(label0, "class", "svelte-vomya3");
+			attr(input0, "class", "svelte-11fx3n2");
+			attr(label0, "class", "svelte-11fx3n2");
 			attr(input1, "placeholder", "CONTRACT-001");
-			attr(input1, "class", "svelte-vomya3");
-			attr(label1, "class", "svelte-vomya3");
+			attr(input1, "class", "svelte-11fx3n2");
+			attr(label1, "class", "svelte-11fx3n2");
 			attr(input2, "placeholder", "Oman, UAE, Qatar…");
-			attr(input2, "class", "svelte-vomya3");
-			attr(label2, "class", "svelte-vomya3");
+			attr(input2, "class", "svelte-11fx3n2");
+			attr(label2, "class", "svelte-11fx3n2");
 			attr(input3, "placeholder", "Client Name");
-			attr(input3, "class", "svelte-vomya3");
-			attr(label3, "class", "svelte-vomya3");
+			attr(input3, "class", "svelte-11fx3n2");
+			attr(label3, "class", "svelte-11fx3n2");
 			attr(input4, "placeholder", "Contractor Name");
-			attr(input4, "class", "svelte-vomya3");
-			attr(label4, "class", "svelte-vomya3");
+			attr(input4, "class", "svelte-11fx3n2");
+			attr(label4, "class", "svelte-11fx3n2");
 			attr(input5, "placeholder", "Name, Cert. No.");
-			attr(input5, "class", "svelte-vomya3");
-			attr(label5, "class", "svelte-vomya3");
+			attr(input5, "class", "svelte-11fx3n2");
+			attr(label5, "class", "svelte-11fx3n2");
 			attr(input6, "placeholder", "e.g. Min. Decision 286/2008");
-			attr(input6, "class", "svelte-vomya3");
-			attr(label6, "class", "svelte-vomya3");
+			attr(input6, "class", "svelte-11fx3n2");
+			attr(label6, "class", "svelte-11fx3n2");
 			attr(input7, "placeholder", "12:30");
-			attr(input7, "class", "svelte-vomya3");
-			attr(label7, "class", "svelte-vomya3");
+			attr(input7, "class", "svelte-11fx3n2");
+			attr(label7, "class", "svelte-11fx3n2");
 			attr(input8, "placeholder", "15:30");
-			attr(input8, "class", "svelte-vomya3");
-			attr(label8, "class", "svelte-vomya3");
+			attr(input8, "class", "svelte-11fx3n2");
+			attr(label8, "class", "svelte-11fx3n2");
 			attr(input9, "placeholder", "June, July, August");
-			attr(input9, "class", "svelte-vomya3");
-			attr(label9, "class", "svelte-vomya3");
+			attr(input9, "class", "svelte-11fx3n2");
+			attr(label9, "class", "svelte-11fx3n2");
 			option0.__value = "ELIGIBLE";
 			set_input_value(option0, option0.__value);
 			option1.__value = "NOT ELIGIBLE";
 			set_input_value(option1, option1.__value);
 			option2.__value = "UNDER REVIEW";
 			set_input_value(option2, option2.__value);
-			attr(select, "class", "svelte-vomya3");
-			if (/*reportMeta*/ ctx[44].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[103].call(select));
-			attr(label10, "class", "svelte-vomya3");
+			attr(select, "class", "svelte-11fx3n2");
+			if (/*reportMeta*/ ctx[48].fidic === void 0) add_render_callback(() => /*select_change_handler_1*/ ctx[111].call(select));
+			attr(label10, "class", "svelte-11fx3n2");
 			attr(input10, "type", "number");
 			attr(input10, "min", "0");
-			attr(input10, "class", "svelte-vomya3");
-			attr(label11, "class", "svelte-vomya3");
-			attr(div, "class", "fg-form svelte-vomya3");
-			attr(button, "class", "fg-btn fg-btn-primary svelte-vomya3");
+			attr(input10, "class", "svelte-11fx3n2");
+			attr(label11, "class", "svelte-11fx3n2");
+			attr(div, "class", "fg-form svelte-11fx3n2");
+			attr(button, "class", "fg-btn fg-btn-primary svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, label0);
 			append(label0, t0);
 			append(label0, input0);
-			set_input_value(input0, /*reportMeta*/ ctx[44].projectName);
+			set_input_value(input0, /*reportMeta*/ ctx[48].projectName);
 			append(div, t1);
 			append(div, label1);
 			append(label1, t2);
 			append(label1, input1);
-			set_input_value(input1, /*reportMeta*/ ctx[44].contractNumber);
+			set_input_value(input1, /*reportMeta*/ ctx[48].contractNumber);
 			append(div, t3);
 			append(div, label2);
 			append(label2, t4);
 			append(label2, input2);
-			set_input_value(input2, /*reportMeta*/ ctx[44].country);
+			set_input_value(input2, /*reportMeta*/ ctx[48].country);
 			append(div, t5);
 			append(div, label3);
 			append(label3, t6);
 			append(label3, input3);
-			set_input_value(input3, /*reportMeta*/ ctx[44].clientName);
+			set_input_value(input3, /*reportMeta*/ ctx[48].clientName);
 			append(div, t7);
 			append(div, label4);
 			append(label4, t8);
 			append(label4, input4);
-			set_input_value(input4, /*reportMeta*/ ctx[44].contractorName);
+			set_input_value(input4, /*reportMeta*/ ctx[48].contractorName);
 			append(div, t9);
 			append(div, label5);
 			append(label5, t10);
 			append(label5, input5);
-			set_input_value(input5, /*reportMeta*/ ctx[44].hseManagerName);
+			set_input_value(input5, /*reportMeta*/ ctx[48].hseManagerName);
 			append(div, t11);
 			append(div, label6);
 			append(label6, t12);
 			append(label6, input6);
-			set_input_value(input6, /*reportMeta*/ ctx[44].regulatoryRef);
+			set_input_value(input6, /*reportMeta*/ ctx[48].regulatoryRef);
 			append(div, t13);
 			append(div, label7);
 			append(label7, t14);
 			append(label7, input7);
-			set_input_value(input7, /*reportMeta*/ ctx[44].banStart);
+			set_input_value(input7, /*reportMeta*/ ctx[48].banStart);
 			append(div, t15);
 			append(div, label8);
 			append(label8, t16);
 			append(label8, input8);
-			set_input_value(input8, /*reportMeta*/ ctx[44].banEnd);
+			set_input_value(input8, /*reportMeta*/ ctx[48].banEnd);
 			append(div, t17);
 			append(div, label9);
 			append(label9, t18);
 			append(label9, input9);
-			set_input_value(input9, /*reportMeta*/ ctx[44].banMonths);
+			set_input_value(input9, /*reportMeta*/ ctx[48].banMonths);
 			append(div, t19);
 			append(div, label10);
 			append(label10, t20);
@@ -6052,12 +6439,12 @@ function create_else_block_9(ctx) {
 			append(select, option0);
 			append(select, option1);
 			append(select, option2);
-			select_option(select, /*reportMeta*/ ctx[44].fidic, true);
+			select_option(select, /*reportMeta*/ ctx[48].fidic, true);
 			append(div, t24);
 			append(div, label11);
 			append(label11, t25);
 			append(label11, input10);
-			set_input_value(input10, /*reportMeta*/ ctx[44].delayDays);
+			set_input_value(input10, /*reportMeta*/ ctx[48].delayDays);
 			insert(target, t26, anchor);
 			insert(target, button, anchor);
 			insert(target, t28, anchor);
@@ -6066,78 +6453,78 @@ function create_else_block_9(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "input", /*input0_input_handler_1*/ ctx[93]),
-					listen(input1, "input", /*input1_input_handler_1*/ ctx[94]),
-					listen(input2, "input", /*input2_input_handler*/ ctx[95]),
-					listen(input3, "input", /*input3_input_handler*/ ctx[96]),
-					listen(input4, "input", /*input4_input_handler*/ ctx[97]),
-					listen(input5, "input", /*input5_input_handler*/ ctx[98]),
-					listen(input6, "input", /*input6_input_handler*/ ctx[99]),
-					listen(input7, "input", /*input7_input_handler*/ ctx[100]),
-					listen(input8, "input", /*input8_input_handler*/ ctx[101]),
-					listen(input9, "input", /*input9_input_handler*/ ctx[102]),
-					listen(select, "change", /*select_change_handler_1*/ ctx[103]),
-					listen(input10, "input", /*input10_input_handler*/ ctx[104]),
-					listen(button, "click", /*generateReport*/ ctx[60])
+					listen(input0, "input", /*input0_input_handler_1*/ ctx[101]),
+					listen(input1, "input", /*input1_input_handler_1*/ ctx[102]),
+					listen(input2, "input", /*input2_input_handler*/ ctx[103]),
+					listen(input3, "input", /*input3_input_handler*/ ctx[104]),
+					listen(input4, "input", /*input4_input_handler*/ ctx[105]),
+					listen(input5, "input", /*input5_input_handler*/ ctx[106]),
+					listen(input6, "input", /*input6_input_handler*/ ctx[107]),
+					listen(input7, "input", /*input7_input_handler*/ ctx[108]),
+					listen(input8, "input", /*input8_input_handler*/ ctx[109]),
+					listen(input9, "input", /*input9_input_handler*/ ctx[110]),
+					listen(select, "change", /*select_change_handler_1*/ ctx[111]),
+					listen(input10, "input", /*input10_input_handler*/ ctx[112]),
+					listen(button, "click", /*generateReport*/ ctx[67])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*reportMeta*/ 8192 && input0.value !== /*reportMeta*/ ctx[44].projectName) {
-				set_input_value(input0, /*reportMeta*/ ctx[44].projectName);
+			if (dirty[1] & /*reportMeta*/ 131072 && input0.value !== /*reportMeta*/ ctx[48].projectName) {
+				set_input_value(input0, /*reportMeta*/ ctx[48].projectName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input1.value !== /*reportMeta*/ ctx[44].contractNumber) {
-				set_input_value(input1, /*reportMeta*/ ctx[44].contractNumber);
+			if (dirty[1] & /*reportMeta*/ 131072 && input1.value !== /*reportMeta*/ ctx[48].contractNumber) {
+				set_input_value(input1, /*reportMeta*/ ctx[48].contractNumber);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input2.value !== /*reportMeta*/ ctx[44].country) {
-				set_input_value(input2, /*reportMeta*/ ctx[44].country);
+			if (dirty[1] & /*reportMeta*/ 131072 && input2.value !== /*reportMeta*/ ctx[48].country) {
+				set_input_value(input2, /*reportMeta*/ ctx[48].country);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input3.value !== /*reportMeta*/ ctx[44].clientName) {
-				set_input_value(input3, /*reportMeta*/ ctx[44].clientName);
+			if (dirty[1] & /*reportMeta*/ 131072 && input3.value !== /*reportMeta*/ ctx[48].clientName) {
+				set_input_value(input3, /*reportMeta*/ ctx[48].clientName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input4.value !== /*reportMeta*/ ctx[44].contractorName) {
-				set_input_value(input4, /*reportMeta*/ ctx[44].contractorName);
+			if (dirty[1] & /*reportMeta*/ 131072 && input4.value !== /*reportMeta*/ ctx[48].contractorName) {
+				set_input_value(input4, /*reportMeta*/ ctx[48].contractorName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input5.value !== /*reportMeta*/ ctx[44].hseManagerName) {
-				set_input_value(input5, /*reportMeta*/ ctx[44].hseManagerName);
+			if (dirty[1] & /*reportMeta*/ 131072 && input5.value !== /*reportMeta*/ ctx[48].hseManagerName) {
+				set_input_value(input5, /*reportMeta*/ ctx[48].hseManagerName);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input6.value !== /*reportMeta*/ ctx[44].regulatoryRef) {
-				set_input_value(input6, /*reportMeta*/ ctx[44].regulatoryRef);
+			if (dirty[1] & /*reportMeta*/ 131072 && input6.value !== /*reportMeta*/ ctx[48].regulatoryRef) {
+				set_input_value(input6, /*reportMeta*/ ctx[48].regulatoryRef);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input7.value !== /*reportMeta*/ ctx[44].banStart) {
-				set_input_value(input7, /*reportMeta*/ ctx[44].banStart);
+			if (dirty[1] & /*reportMeta*/ 131072 && input7.value !== /*reportMeta*/ ctx[48].banStart) {
+				set_input_value(input7, /*reportMeta*/ ctx[48].banStart);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input8.value !== /*reportMeta*/ ctx[44].banEnd) {
-				set_input_value(input8, /*reportMeta*/ ctx[44].banEnd);
+			if (dirty[1] & /*reportMeta*/ 131072 && input8.value !== /*reportMeta*/ ctx[48].banEnd) {
+				set_input_value(input8, /*reportMeta*/ ctx[48].banEnd);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && input9.value !== /*reportMeta*/ ctx[44].banMonths) {
-				set_input_value(input9, /*reportMeta*/ ctx[44].banMonths);
+			if (dirty[1] & /*reportMeta*/ 131072 && input9.value !== /*reportMeta*/ ctx[48].banMonths) {
+				set_input_value(input9, /*reportMeta*/ ctx[48].banMonths);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192) {
-				select_option(select, /*reportMeta*/ ctx[44].fidic);
+			if (dirty[1] & /*reportMeta*/ 131072) {
+				select_option(select, /*reportMeta*/ ctx[48].fidic);
 			}
 
-			if (dirty[1] & /*reportMeta*/ 8192 && to_number(input10.value) !== /*reportMeta*/ ctx[44].delayDays) {
-				set_input_value(input10, /*reportMeta*/ ctx[44].delayDays);
+			if (dirty[1] & /*reportMeta*/ 131072 && to_number(input10.value) !== /*reportMeta*/ ctx[48].delayDays) {
+				set_input_value(input10, /*reportMeta*/ ctx[48].delayDays);
 			}
 
-			if (/*reportText*/ ctx[30]) {
+			if (/*reportText*/ ctx[34]) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_35(ctx);
+					if_block = create_if_block_41(ctx);
 					if_block.c();
 					if_block.m(if_block_anchor.parentNode, if_block_anchor);
 				}
@@ -6162,15 +6549,15 @@ function create_else_block_9(ctx) {
 	};
 }
 
-// (451:4) {#if !isPro}
-function create_if_block_34(ctx) {
+// (491:4) {#if !isPro}
+function create_if_block_40(ctx) {
 	let div;
 
 	return {
 		c() {
 			div = element("div");
 			div.innerHTML = `🔒 ISO 7933 report generation is a <b>Pro</b> feature. Activate a license in <b>Config</b> to produce defensible weekly reports &amp; FIDIC 8.4 evidence.`;
-			attr(div, "class", "fg-upgrade svelte-vomya3");
+			attr(div, "class", "fg-upgrade svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -6184,8 +6571,8 @@ function create_if_block_34(ctx) {
 	};
 }
 
-// (475:4) {#if reportText}
-function create_if_block_35(ctx) {
+// (515:4) {#if reportText}
+function create_if_block_41(ctx) {
 	let div1;
 	let div0;
 	let span;
@@ -6213,13 +6600,13 @@ function create_if_block_35(ctx) {
 			button1.textContent = "⬇ Download .txt";
 			t5 = space();
 			pre = element("pre");
-			t6 = text(/*reportText*/ ctx[30]);
-			attr(span, "class", "svelte-vomya3");
-			attr(button0, "class", "fg-mini-btn svelte-vomya3");
-			attr(button1, "class", "fg-mini-btn svelte-vomya3");
-			attr(div0, "class", "fg-report-toolbar svelte-vomya3");
-			attr(pre, "class", "fg-report-text svelte-vomya3");
-			attr(div1, "class", "fg-report-preview svelte-vomya3");
+			t6 = text(/*reportText*/ ctx[34]);
+			attr(span, "class", "svelte-11fx3n2");
+			attr(button0, "class", "fg-mini-btn svelte-11fx3n2");
+			attr(button1, "class", "fg-mini-btn svelte-11fx3n2");
+			attr(div0, "class", "fg-report-toolbar svelte-11fx3n2");
+			attr(pre, "class", "fg-report-text svelte-11fx3n2");
+			attr(div1, "class", "fg-report-preview svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div1, anchor);
@@ -6235,15 +6622,15 @@ function create_if_block_35(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*copyReport*/ ctx[61]),
-					listen(button1, "click", /*downloadReport*/ ctx[62])
+					listen(button0, "click", /*copyReport*/ ctx[68]),
+					listen(button1, "click", /*downloadReport*/ ctx[69])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*reportText*/ 1073741824) set_data(t6, /*reportText*/ ctx[30]);
+			if (dirty[1] & /*reportText*/ 8) set_data(t6, /*reportText*/ ctx[34]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -6256,153 +6643,159 @@ function create_if_block_35(ctx) {
 	};
 }
 
-// (402:4) {:else}
-function create_else_block_7(ctx) {
+// (423:4) {:else}
+function create_else_block_8(ctx) {
 	let div0;
 	let t1;
-	let div7;
 	let div1;
+	let t2;
 	let t3;
-	let div2;
-	let t5;
-	let div4;
 	let div3;
-	let t7;
-	let t8;
-	let div6;
-	let div5;
-	let t10;
-	let t11;
-	let div9;
-	let div8;
-	let t12;
-	let t13;
-	let each_value_8 = ensure_array_like(HEAT_STRESS_SYMPTOMS);
+	let div2;
+	let t4;
+	let t5;
+	let each_value_11 = ensure_array_like(HAZARD_EMERGENCIES);
 	let each_blocks_1 = [];
 
-	for (let i = 0; i < each_value_8.length; i += 1) {
-		each_blocks_1[i] = create_each_block_8(get_each_context_8(ctx, each_value_8, i));
+	for (let i = 0; i < each_value_11.length; i += 1) {
+		each_blocks_1[i] = create_each_block_11(get_each_context_11(ctx, each_value_11, i));
 	}
 
-	let each_value_7 = ensure_array_like(EMERGENCY_RESPONSE);
+	let each_value_8 = ensure_array_like(HAZARD_EMERGENCIES);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_7.length; i += 1) {
-		each_blocks[i] = create_each_block_7(get_each_context_7(ctx, each_value_7, i));
+	for (let i = 0; i < each_value_8.length; i += 1) {
+		each_blocks[i] = create_each_block_8(get_each_context_8(ctx, each_value_8, i));
 	}
 
-	let if_block0 = /*alertLog*/ ctx[29].length > 0 && create_if_block_32(ctx);
+	let if_block0 = /*alertLog*/ ctx[33].length > 0 && create_if_block_35(ctx);
 
-	function select_block_type_12(ctx, dirty) {
-		if (/*alertLog*/ ctx[29].length === 0) return create_if_block_31;
-		return create_else_block_8;
+	function select_block_type_13(ctx, dirty) {
+		if (/*alertLog*/ ctx[33].length === 0) return create_if_block_34;
+		return create_else_block_9;
 	}
 
-	let current_block_type = select_block_type_12(ctx);
+	let current_block_type = select_block_type_13(ctx);
 	let if_block1 = current_block_type(ctx);
 
 	return {
 		c() {
 			div0 = element("div");
-			div0.textContent = "🚨 Emergency Response";
+			div0.textContent = "🚨 Emergency Response — All Hazards";
 			t1 = space();
-			div7 = element("div");
 			div1 = element("div");
-			div1.textContent = "⚠ Heat Stress Is Life-Threatening";
-			t3 = space();
-			div2 = element("div");
-			div2.textContent = "The body starts shutting down and cannot recover without help.";
-			t5 = space();
-			div4 = element("div");
-			div3 = element("div");
-			div3.textContent = "🔴 SYMPTOMS TO MONITOR (every 2 hours)";
-			t7 = space();
 
 			for (let i = 0; i < each_blocks_1.length; i += 1) {
 				each_blocks_1[i].c();
 			}
 
-			t8 = space();
-			div6 = element("div");
-			div5 = element("div");
-			div5.textContent = "🚑 IMMEDIATE RESPONSE STEPS";
-			t10 = space();
+			t2 = space();
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				each_blocks[i].c();
 			}
 
-			t11 = space();
-			div9 = element("div");
-			div8 = element("div");
-			t12 = text("📋 Alerts Log (This Session)\n        ");
+			t3 = space();
+			div3 = element("div");
+			div2 = element("div");
+			t4 = text("📋 Alerts Log (This Session)\n        ");
 			if (if_block0) if_block0.c();
-			t13 = space();
+			t5 = space();
 			if_block1.c();
-			attr(div0, "class", "fg-section-title svelte-vomya3");
-			attr(div1, "class", "fg-emg-title svelte-vomya3");
-			attr(div2, "class", "fg-emg-sub svelte-vomya3");
-			attr(div3, "class", "fg-emg-label svelte-vomya3");
-			attr(div4, "class", "fg-emg-section svelte-vomya3");
-			attr(div5, "class", "fg-emg-label svelte-vomya3");
-			attr(div6, "class", "fg-emg-section svelte-vomya3");
-			attr(div7, "class", "fg-emergency-card svelte-vomya3");
-			attr(div8, "class", "fg-card-header svelte-vomya3");
-			attr(div9, "class", "fg-card svelte-vomya3");
-			set_style(div9, "border-color", "#d97706");
+			attr(div0, "class", "fg-section-title svelte-11fx3n2");
+			attr(div1, "class", "fg-emg-jump svelte-11fx3n2");
+			attr(div2, "class", "fg-card-header svelte-11fx3n2");
+			attr(div3, "class", "fg-card svelte-11fx3n2");
+			set_style(div3, "border-color", "#d97706");
 		},
 		m(target, anchor) {
 			insert(target, div0, anchor);
 			insert(target, t1, anchor);
-			insert(target, div7, anchor);
-			append(div7, div1);
-			append(div7, t3);
-			append(div7, div2);
-			append(div7, t5);
-			append(div7, div4);
-			append(div4, div3);
-			append(div4, t7);
+			insert(target, div1, anchor);
 
 			for (let i = 0; i < each_blocks_1.length; i += 1) {
 				if (each_blocks_1[i]) {
-					each_blocks_1[i].m(div4, null);
+					each_blocks_1[i].m(div1, null);
 				}
 			}
 
-			append(div7, t8);
-			append(div7, div6);
-			append(div6, div5);
-			append(div6, t10);
+			insert(target, t2, anchor);
 
 			for (let i = 0; i < each_blocks.length; i += 1) {
 				if (each_blocks[i]) {
-					each_blocks[i].m(div6, null);
+					each_blocks[i].m(target, anchor);
 				}
 			}
 
-			insert(target, t11, anchor);
-			insert(target, div9, anchor);
-			append(div9, div8);
-			append(div8, t12);
-			if (if_block0) if_block0.m(div8, null);
-			append(div9, t13);
-			if_block1.m(div9, null);
+			insert(target, t3, anchor);
+			insert(target, div3, anchor);
+			append(div3, div2);
+			append(div2, t4);
+			if (if_block0) if_block0.m(div2, null);
+			append(div3, t5);
+			if_block1.m(div3, null);
 		},
 		p(ctx, dirty) {
-			if (/*alertLog*/ ctx[29].length > 0) {
+			if (dirty[0] & /*emgHazard*/ 4194304 | dirty[1] & /*currentHazardStatus*/ 33554432) {
+				each_value_11 = ensure_array_like(HAZARD_EMERGENCIES);
+				let i;
+
+				for (i = 0; i < each_value_11.length; i += 1) {
+					const child_ctx = get_each_context_11(ctx, each_value_11, i);
+
+					if (each_blocks_1[i]) {
+						each_blocks_1[i].p(child_ctx, dirty);
+					} else {
+						each_blocks_1[i] = create_each_block_11(child_ctx);
+						each_blocks_1[i].c();
+						each_blocks_1[i].m(div1, null);
+					}
+				}
+
+				for (; i < each_blocks_1.length; i += 1) {
+					each_blocks_1[i].d(1);
+				}
+
+				each_blocks_1.length = each_value_11.length;
+			}
+
+			if (dirty[0] & /*emgHazard*/ 4194304 | dirty[1] & /*currentHazardStatus*/ 33554432) {
+				each_value_8 = ensure_array_like(HAZARD_EMERGENCIES);
+				let i;
+
+				for (i = 0; i < each_value_8.length; i += 1) {
+					const child_ctx = get_each_context_8(ctx, each_value_8, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_8(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(t3.parentNode, t3);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_8.length;
+			}
+
+			if (/*alertLog*/ ctx[33].length > 0) {
 				if (if_block0) {
 					if_block0.p(ctx, dirty);
 				} else {
-					if_block0 = create_if_block_32(ctx);
+					if_block0 = create_if_block_35(ctx);
 					if_block0.c();
-					if_block0.m(div8, null);
+					if_block0.m(div2, null);
 				}
 			} else if (if_block0) {
 				if_block0.d(1);
 				if_block0 = null;
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_12(ctx)) && if_block1) {
+			if (current_block_type === (current_block_type = select_block_type_13(ctx)) && if_block1) {
 				if_block1.p(ctx, dirty);
 			} else {
 				if_block1.d(1);
@@ -6410,7 +6803,7 @@ function create_else_block_7(ctx) {
 
 				if (if_block1) {
 					if_block1.c();
-					if_block1.m(div9, null);
+					if_block1.m(div3, null);
 				}
 			}
 		},
@@ -6418,9 +6811,10 @@ function create_else_block_7(ctx) {
 			if (detaching) {
 				detach(div0);
 				detach(t1);
-				detach(div7);
-				detach(t11);
-				detach(div9);
+				detach(div1);
+				detach(t2);
+				detach(t3);
+				detach(div3);
 			}
 
 			destroy_each(each_blocks_1, detaching);
@@ -6431,8 +6825,8 @@ function create_else_block_7(ctx) {
 	};
 }
 
-// (396:4) {#if !isPro}
-function create_if_block_30(ctx) {
+// (417:4) {#if !isPro}
+function create_if_block_33(ctx) {
 	let div2;
 	let div0;
 	let t1;
@@ -6453,10 +6847,10 @@ function create_if_block_30(ctx) {
 			t3 = space();
 			button = element("button");
 			button.textContent = "Upgrade";
-			attr(div0, "class", "pf-ic svelte-vomya3");
-			attr(div1, "class", "pf-t svelte-vomya3");
-			attr(button, "class", "pf-btn svelte-vomya3");
-			attr(div2, "class", "fg-pro-feature svelte-vomya3");
+			attr(div0, "class", "pf-ic svelte-11fx3n2");
+			attr(div1, "class", "pf-t svelte-11fx3n2");
+			attr(button, "class", "pf-btn svelte-11fx3n2");
+			attr(div2, "class", "fg-pro-feature svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div2, anchor);
@@ -6467,7 +6861,7 @@ function create_if_block_30(ctx) {
 			append(div2, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_13*/ ctx[92]);
+				dispose = listen(button, "click", /*click_handler_13*/ ctx[99]);
 				mounted = true;
 			}
 		},
@@ -6483,15 +6877,260 @@ function create_if_block_30(ctx) {
 	};
 }
 
-// (411:8) {#each HEAT_STRESS_SYMPTOMS as s}
-function create_each_block_8(ctx) {
+// (432:10) {#if st}
+function create_if_block_38(ctx) {
+	let span;
+	let t_1_value = /*st*/ ctx[187].label + "";
+	let t_1;
+
+	return {
+		c() {
+			span = element("span");
+			t_1 = text(t_1_value);
+			attr(span, "class", "fg-emg-chip-st svelte-11fx3n2");
+			set_style(span, "color", /*st*/ ctx[187].color);
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+			append(span, t_1);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (428:6) {#each HAZARD_EMERGENCIES as hz}
+function create_each_block_11(ctx) {
+	let button;
+	let span;
+	let t1;
+	let t2;
+	let button_class_value;
+	let mounted;
+	let dispose;
+	let if_block = /*st*/ ctx[187] && create_if_block_38(ctx);
+
+	function click_handler_14() {
+		return /*click_handler_14*/ ctx[100](/*hz*/ ctx[184]);
+	}
+
+	return {
+		c() {
+			button = element("button");
+			span = element("span");
+			span.textContent = `${/*hz*/ ctx[184].icon}`;
+			t1 = space();
+			if (if_block) if_block.c();
+			t2 = space();
+
+			attr(button, "class", button_class_value = "fg-emg-chip " + (/*emgHazard*/ ctx[22] === /*hz*/ ctx[184].key
+			? 'sel'
+			: '') + " svelte-11fx3n2");
+
+			attr(button, "style", /*st*/ ctx[187]
+			? `border-color:${/*st*/ ctx[187].color}`
+			: '');
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+			append(button, span);
+			append(button, t1);
+			if (if_block) if_block.m(button, null);
+			append(button, t2);
+
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_14);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+			if (/*st*/ ctx[187]) if_block.p(ctx, dirty);
+
+			if (dirty[0] & /*emgHazard*/ 4194304 && button_class_value !== (button_class_value = "fg-emg-chip " + (/*emgHazard*/ ctx[22] === /*hz*/ ctx[184].key
+			? 'sel'
+			: '') + " svelte-11fx3n2")) {
+				attr(button, "class", button_class_value);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			if (if_block) if_block.d();
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (438:6) {#if emgHazard === hz.key}
+function create_if_block_36(ctx) {
+	let div6;
+	let div0;
+	let t0_value = /*hz*/ ctx[184].icon + "";
+	let t0;
+	let t1;
+	let t2_value = /*hz*/ ctx[184].title + "";
+	let t2;
+	let t3;
+	let t4;
+	let div1;
+	let t6;
+	let div3;
+	let div2;
+	let t9;
+	let t10;
+	let div5;
+	let div4;
+	let t12;
+	let if_block = /*st*/ ctx[187] && create_if_block_37(ctx);
+	let each_value_10 = ensure_array_like(/*hz*/ ctx[184].signs);
+	let each_blocks_1 = [];
+
+	for (let i = 0; i < each_value_10.length; i += 1) {
+		each_blocks_1[i] = create_each_block_10(get_each_context_10(ctx, each_value_10, i));
+	}
+
+	let each_value_9 = ensure_array_like(/*hz*/ ctx[184].response);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_9.length; i += 1) {
+		each_blocks[i] = create_each_block_9(get_each_context_9(ctx, each_value_9, i));
+	}
+
+	return {
+		c() {
+			div6 = element("div");
+			div0 = element("div");
+			t0 = text(t0_value);
+			t1 = space();
+			t2 = text(t2_value);
+			t3 = text(" Is Life-Threatening\n            ");
+			if (if_block) if_block.c();
+			t4 = space();
+			div1 = element("div");
+			div1.textContent = `${/*hz*/ ctx[184].danger}`;
+			t6 = space();
+			div3 = element("div");
+			div2 = element("div");
+			div2.textContent = `🔴 ${/*hz*/ ctx[184].signsLabel}`;
+			t9 = space();
+
+			for (let i = 0; i < each_blocks_1.length; i += 1) {
+				each_blocks_1[i].c();
+			}
+
+			t10 = space();
+			div5 = element("div");
+			div4 = element("div");
+			div4.textContent = "🚑 IMMEDIATE RESPONSE STEPS";
+			t12 = space();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(div0, "class", "fg-emg-title svelte-11fx3n2");
+			attr(div1, "class", "fg-emg-sub svelte-11fx3n2");
+			attr(div2, "class", "fg-emg-label svelte-11fx3n2");
+			attr(div3, "class", "fg-emg-section svelte-11fx3n2");
+			attr(div4, "class", "fg-emg-label svelte-11fx3n2");
+			attr(div5, "class", "fg-emg-section svelte-11fx3n2");
+			attr(div6, "class", "fg-emergency-card svelte-11fx3n2");
+
+			attr(div6, "style", /*st*/ ctx[187]
+			? `border-color:${/*st*/ ctx[187].color}`
+			: '');
+		},
+		m(target, anchor) {
+			insert(target, div6, anchor);
+			append(div6, div0);
+			append(div0, t0);
+			append(div0, t1);
+			append(div0, t2);
+			append(div0, t3);
+			if (if_block) if_block.m(div0, null);
+			append(div6, t4);
+			append(div6, div1);
+			append(div6, t6);
+			append(div6, div3);
+			append(div3, div2);
+			append(div3, t9);
+
+			for (let i = 0; i < each_blocks_1.length; i += 1) {
+				if (each_blocks_1[i]) {
+					each_blocks_1[i].m(div3, null);
+				}
+			}
+
+			append(div6, t10);
+			append(div6, div5);
+			append(div5, div4);
+			append(div5, t12);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div5, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (/*st*/ ctx[187]) if_block.p(ctx, dirty);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div6);
+			}
+
+			if (if_block) if_block.d();
+			destroy_each(each_blocks_1, detaching);
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (443:12) {#if st}
+function create_if_block_37(ctx) {
+	let span;
+	let t_1_value = /*st*/ ctx[187].label + "";
+	let t_1;
+
+	return {
+		c() {
+			span = element("span");
+			t_1 = text(t_1_value);
+			attr(span, "class", "fg-badge svelte-11fx3n2");
+			set_style(span, "background", /*st*/ ctx[187].color);
+			set_style(span, "margin-left", "auto");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+			append(span, t_1);
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (449:12) {#each hz.signs as s}
+function create_each_block_10(ctx) {
 	let div;
 
 	return {
 		c() {
 			div = element("div");
-			div.textContent = `● ${/*s*/ ctx[161]}`;
-			attr(div, "class", "fg-emg-item svelte-vomya3");
+			div.textContent = `● ${/*s*/ ctx[178]}`;
+			attr(div, "class", "fg-emg-item svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -6505,34 +7144,31 @@ function create_each_block_8(ctx) {
 	};
 }
 
-// (418:8) {#each EMERGENCY_RESPONSE as step, i}
-function create_each_block_7(ctx) {
+// (456:12) {#each hz.response as step, i}
+function create_each_block_9(ctx) {
 	let div;
 	let span;
 	let t1;
 	let t2;
-	let t3;
 
 	return {
 		c() {
 			div = element("div");
 			span = element("span");
-			span.textContent = `${/*i*/ ctx[169] + 1}`;
+			span.textContent = `${/*i*/ ctx[190] + 1}`;
 			t1 = space();
-			t2 = text(/*step*/ ctx[167]);
-			t3 = space();
-			attr(span, "class", "fg-emg-num svelte-vomya3");
+			t2 = text(/*step*/ ctx[188]);
+			attr(span, "class", "fg-emg-num svelte-11fx3n2");
 
-			attr(div, "class", "fg-emg-step " + (/*step*/ ctx[167].includes('SEVERE')
+			attr(div, "class", "fg-emg-step " + ((/SEVERE|IMMEDIATE MEDICAL|EMERGENCY MEDICAL/).test(/*step*/ ctx[188])
 			? 'fg-emg-critical'
-			: '') + " svelte-vomya3");
+			: '') + " svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, span);
 			append(div, t1);
 			append(div, t2);
-			append(div, t3);
 		},
 		p: noop,
 		d(detaching) {
@@ -6543,8 +7179,46 @@ function create_each_block_7(ctx) {
 	};
 }
 
-// (428:8) {#if alertLog.length > 0}
-function create_if_block_32(ctx) {
+// (437:4) {#each HAZARD_EMERGENCIES as hz}
+function create_each_block_8(ctx) {
+	let if_block_anchor;
+	let if_block = /*emgHazard*/ ctx[22] === /*hz*/ ctx[184].key && create_if_block_36(get_if_ctx(ctx));
+
+	return {
+		c() {
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+		},
+		m(target, anchor) {
+			if (if_block) if_block.m(target, anchor);
+			insert(target, if_block_anchor, anchor);
+		},
+		p(ctx, dirty) {
+			if (/*emgHazard*/ ctx[22] === /*hz*/ ctx[184].key) {
+				if (if_block) {
+					if_block.p(get_if_ctx(ctx), dirty);
+				} else {
+					if_block = create_if_block_36(get_if_ctx(ctx));
+					if_block.c();
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(if_block_anchor);
+			}
+
+			if (if_block) if_block.d(detaching);
+		}
+	};
+}
+
+// (468:8) {#if alertLog.length > 0}
+function create_if_block_35(ctx) {
 	let button;
 	let mounted;
 	let dispose;
@@ -6553,14 +7227,14 @@ function create_if_block_32(ctx) {
 		c() {
 			button = element("button");
 			button.textContent = "CSV";
-			attr(button, "class", "fg-mini-btn svelte-vomya3");
+			attr(button, "class", "fg-mini-btn svelte-11fx3n2");
 			set_style(button, "margin-left", "auto");
 		},
 		m(target, anchor) {
 			insert(target, button, anchor);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*downloadCSV*/ ctx[69]);
+				dispose = listen(button, "click", /*downloadCSV*/ ctx[76]);
 				mounted = true;
 			}
 		},
@@ -6576,14 +7250,14 @@ function create_if_block_32(ctx) {
 	};
 }
 
-// (432:6) {:else}
-function create_else_block_8(ctx) {
+// (472:6) {:else}
+function create_else_block_9(ctx) {
 	let each_1_anchor;
-	let each_value_6 = ensure_array_like([.../*alertLog*/ ctx[29]].reverse().slice(0, 15));
+	let each_value_7 = ensure_array_like([.../*alertLog*/ ctx[33]].reverse().slice(0, 15));
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_6.length; i += 1) {
-		each_blocks[i] = create_each_block_6(get_each_context_6(ctx, each_value_6, i));
+	for (let i = 0; i < each_value_7.length; i += 1) {
+		each_blocks[i] = create_each_block_7(get_each_context_7(ctx, each_value_7, i));
 	}
 
 	return {
@@ -6604,17 +7278,17 @@ function create_else_block_8(ctx) {
 			insert(target, each_1_anchor, anchor);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*alertLog*/ 536870912) {
-				each_value_6 = ensure_array_like([.../*alertLog*/ ctx[29]].reverse().slice(0, 15));
+			if (dirty[1] & /*alertLog*/ 4) {
+				each_value_7 = ensure_array_like([.../*alertLog*/ ctx[33]].reverse().slice(0, 15));
 				let i;
 
-				for (i = 0; i < each_value_6.length; i += 1) {
-					const child_ctx = get_each_context_6(ctx, each_value_6, i);
+				for (i = 0; i < each_value_7.length; i += 1) {
+					const child_ctx = get_each_context_7(ctx, each_value_7, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_6(child_ctx);
+						each_blocks[i] = create_each_block_7(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(each_1_anchor.parentNode, each_1_anchor);
 					}
@@ -6624,7 +7298,7 @@ function create_else_block_8(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_6.length;
+				each_blocks.length = each_value_7.length;
 			}
 		},
 		d(detaching) {
@@ -6637,15 +7311,15 @@ function create_else_block_8(ctx) {
 	};
 }
 
-// (430:6) {#if alertLog.length === 0}
-function create_if_block_31(ctx) {
+// (470:6) {#if alertLog.length === 0}
+function create_if_block_34(ctx) {
 	let div;
 
 	return {
 		c() {
 			div = element("div");
 			div.textContent = "No alerts triggered yet.";
-			attr(div, "class", "fg-empty svelte-vomya3");
+			attr(div, "class", "fg-empty svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -6659,19 +7333,19 @@ function create_if_block_31(ctx) {
 	};
 }
 
-// (433:8) {#each [...alertLog].reverse().slice(0, 15) as alert}
-function create_each_block_6(ctx) {
+// (473:8) {#each [...alertLog].reverse().slice(0, 15) as alert}
+function create_each_block_7(ctx) {
 	let div3;
 	let div0;
-	let t0_value = /*alert*/ ctx[164].time + "";
+	let t0_value = /*alert*/ ctx[181].time + "";
 	let t0;
 	let t1;
 	let div1;
-	let t2_value = /*alert*/ ctx[164].type + "";
+	let t2_value = /*alert*/ ctx[181].type + "";
 	let t2;
 	let t3;
 	let div2;
-	let t4_value = /*alert*/ ctx[164].message + "";
+	let t4_value = /*alert*/ ctx[181].message + "";
 	let t4;
 	let t5;
 
@@ -6687,11 +7361,11 @@ function create_each_block_6(ctx) {
 			div2 = element("div");
 			t4 = text(t4_value);
 			t5 = space();
-			attr(div0, "class", "fg-alert-time svelte-vomya3");
-			attr(div1, "class", "fg-alert-type svelte-vomya3");
-			attr(div2, "class", "fg-alert-msg svelte-vomya3");
-			attr(div3, "class", "fg-alert-item svelte-vomya3");
-			set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[164].color);
+			attr(div0, "class", "fg-alert-time svelte-11fx3n2");
+			attr(div1, "class", "fg-alert-type svelte-11fx3n2");
+			attr(div2, "class", "fg-alert-msg svelte-11fx3n2");
+			attr(div3, "class", "fg-alert-item svelte-11fx3n2");
+			set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[181].color);
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -6706,12 +7380,12 @@ function create_each_block_6(ctx) {
 			append(div3, t5);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*alertLog*/ 536870912 && t0_value !== (t0_value = /*alert*/ ctx[164].time + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*alertLog*/ 536870912 && t2_value !== (t2_value = /*alert*/ ctx[164].type + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*alertLog*/ 536870912 && t4_value !== (t4_value = /*alert*/ ctx[164].message + "")) set_data(t4, t4_value);
+			if (dirty[1] & /*alertLog*/ 4 && t0_value !== (t0_value = /*alert*/ ctx[181].time + "")) set_data(t0, t0_value);
+			if (dirty[1] & /*alertLog*/ 4 && t2_value !== (t2_value = /*alert*/ ctx[181].type + "")) set_data(t2, t2_value);
+			if (dirty[1] & /*alertLog*/ 4 && t4_value !== (t4_value = /*alert*/ ctx[181].message + "")) set_data(t4, t4_value);
 
-			if (dirty[0] & /*alertLog*/ 536870912) {
-				set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[164].color);
+			if (dirty[1] & /*alertLog*/ 4) {
+				set_style(div3, "border-left", "3px solid " + /*alert*/ ctx[181].color);
 			}
 		},
 		d(detaching) {
@@ -6723,10 +7397,10 @@ function create_each_block_6(ctx) {
 }
 
 // (43:8) {:else}
-function create_else_block_6(ctx) {
+function create_else_block_7(ctx) {
 	let button;
 	let span0;
-	let t0_value = /*s*/ ctx[161].name + "";
+	let t0_value = /*s*/ ctx[178].name + "";
 	let t0;
 	let span1;
 	let button_class_value;
@@ -6734,15 +7408,15 @@ function create_else_block_6(ctx) {
 	let dispose;
 
 	function click_handler_3() {
-		return /*click_handler_3*/ ctx[76](/*s*/ ctx[161]);
+		return /*click_handler_3*/ ctx[83](/*s*/ ctx[178]);
 	}
 
 	function click_handler_4() {
-		return /*click_handler_4*/ ctx[77](/*s*/ ctx[161]);
+		return /*click_handler_4*/ ctx[84](/*s*/ ctx[178]);
 	}
 
 	function dblclick_handler() {
-		return /*dblclick_handler*/ ctx[78](/*s*/ ctx[161]);
+		return /*dblclick_handler*/ ctx[85](/*s*/ ctx[178]);
 	}
 
 	return {
@@ -6752,14 +7426,14 @@ function create_else_block_6(ctx) {
 			t0 = text(t0_value);
 			span1 = element("span");
 			span1.textContent = "×";
-			attr(span0, "class", "fg-site-dot svelte-vomya3");
-			set_style(span0, "background", /*bgStatus*/ ctx[43][/*s*/ ctx[161].id]?.color || '#475569');
-			attr(span1, "class", "fg-site-x svelte-vomya3");
+			attr(span0, "class", "fg-site-dot svelte-11fx3n2");
+			set_style(span0, "background", /*bgStatus*/ ctx[47][/*s*/ ctx[178].id]?.color || '#475569');
+			attr(span1, "class", "fg-site-x svelte-11fx3n2");
 			attr(span1, "title", "Remove");
 
-			attr(button, "class", button_class_value = "fg-site-chip " + (/*s*/ ctx[161].id === /*activeSiteId*/ ctx[36]
+			attr(button, "class", button_class_value = "fg-site-chip " + (/*s*/ ctx[178].id === /*activeSiteId*/ ctx[40]
 			? 'active'
-			: '') + " svelte-vomya3");
+			: '') + " svelte-11fx3n2");
 
 			attr(button, "title", "Click to view · double-click to rename");
 		},
@@ -6782,15 +7456,15 @@ function create_else_block_6(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (dirty[1] & /*bgStatus, savedSites*/ 4112) {
-				set_style(span0, "background", /*bgStatus*/ ctx[43][/*s*/ ctx[161].id]?.color || '#475569');
+			if (dirty[1] & /*bgStatus, savedSites*/ 65792) {
+				set_style(span0, "background", /*bgStatus*/ ctx[47][/*s*/ ctx[178].id]?.color || '#475569');
 			}
 
-			if (dirty[1] & /*savedSites*/ 16 && t0_value !== (t0_value = /*s*/ ctx[161].name + "")) set_data(t0, t0_value);
+			if (dirty[1] & /*savedSites*/ 256 && t0_value !== (t0_value = /*s*/ ctx[178].name + "")) set_data(t0, t0_value);
 
-			if (dirty[1] & /*savedSites, activeSiteId*/ 48 && button_class_value !== (button_class_value = "fg-site-chip " + (/*s*/ ctx[161].id === /*activeSiteId*/ ctx[36]
+			if (dirty[1] & /*savedSites, activeSiteId*/ 768 && button_class_value !== (button_class_value = "fg-site-chip " + (/*s*/ ctx[178].id === /*activeSiteId*/ ctx[40]
 			? 'active'
-			: '') + " svelte-vomya3")) {
+			: '') + " svelte-11fx3n2")) {
 				attr(button, "class", button_class_value);
 			}
 		},
@@ -6806,7 +7480,7 @@ function create_else_block_6(ctx) {
 }
 
 // (39:8) {#if editingSiteId === s.id}
-function create_if_block_28(ctx) {
+function create_if_block_31(ctx) {
 	let input;
 	let mounted;
 	let dispose;
@@ -6814,26 +7488,26 @@ function create_if_block_28(ctx) {
 	return {
 		c() {
 			input = element("input");
-			attr(input, "class", "fg-site-name svelte-vomya3");
+			attr(input, "class", "fg-site-name svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, input, anchor);
-			set_input_value(input, /*editName*/ ctx[40]);
+			set_input_value(input, /*editName*/ ctx[44]);
 
 			if (!mounted) {
 				dispose = [
-					listen(input, "input", /*input_input_handler*/ ctx[74]),
+					listen(input, "input", /*input_input_handler*/ ctx[81]),
 					action_destroyer(focusInput.call(null, input)),
-					listen(input, "keydown", /*keydown_handler*/ ctx[75]),
-					listen(input, "blur", /*commitRename*/ ctx[66])
+					listen(input, "keydown", /*keydown_handler*/ ctx[82]),
+					listen(input, "blur", /*commitRename*/ ctx[73])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*editName*/ 512 && input.value !== /*editName*/ ctx[40]) {
-				set_input_value(input, /*editName*/ ctx[40]);
+			if (dirty[1] & /*editName*/ 8192 && input.value !== /*editName*/ ctx[44]) {
+				set_input_value(input, /*editName*/ ctx[44]);
 			}
 		},
 		d(detaching) {
@@ -6848,12 +7522,12 @@ function create_if_block_28(ctx) {
 }
 
 // (38:6) {#each savedSites as s}
-function create_each_block_5(ctx) {
+function create_each_block_6(ctx) {
 	let if_block_anchor;
 
 	function select_block_type_1(ctx, dirty) {
-		if (/*editingSiteId*/ ctx[39] === /*s*/ ctx[161].id) return create_if_block_28;
-		return create_else_block_6;
+		if (/*editingSiteId*/ ctx[43] === /*s*/ ctx[178].id) return create_if_block_31;
+		return create_else_block_7;
 	}
 
 	let current_block_type = select_block_type_1(ctx);
@@ -6892,14 +7566,14 @@ function create_each_block_5(ctx) {
 }
 
 // (56:6) {:else}
-function create_else_block_5(ctx) {
+function create_else_block_6(ctx) {
 	let a;
 
 	return {
 		c() {
 			a = element("a");
 			a.textContent = "＋ Save more sites — Pro";
-			attr(a, "class", "fg-site-locked svelte-vomya3");
+			attr(a, "class", "fg-site-locked svelte-11fx3n2");
 			attr(a, "href", "https://fieldguard-hse.com");
 			attr(a, "target", "_blank");
 		},
@@ -6916,14 +7590,14 @@ function create_else_block_5(ctx) {
 }
 
 // (54:22) 
-function create_if_block_27(ctx) {
+function create_if_block_30(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
-			span.textContent = `Max ${/*maxSites*/ ctx[46]()} sites on this licence`;
-			attr(span, "class", "fg-site-max svelte-vomya3");
+			span.textContent = `Max ${/*maxSites*/ ctx[51]()} sites on this licence`;
+			attr(span, "class", "fg-site-max svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
@@ -6938,7 +7612,7 @@ function create_if_block_27(ctx) {
 }
 
 // (49:6) {#if canAddSite()}
-function create_if_block_26(ctx) {
+function create_if_block_29(ctx) {
 	let input0;
 	let t0;
 	let button0;
@@ -6960,45 +7634,45 @@ function create_if_block_26(ctx) {
 			t3 = space();
 			button1 = element("button");
 			button1.textContent = "＋ Coords";
-			attr(input0, "class", "fg-site-name svelte-vomya3");
+			attr(input0, "class", "fg-site-name svelte-11fx3n2");
 			attr(input0, "placeholder", "Name…");
-			attr(button0, "class", "fg-site-add svelte-vomya3");
+			attr(button0, "class", "fg-site-add svelte-11fx3n2");
 			attr(button0, "title", "Save current pin as a site");
-			attr(input1, "class", "fg-site-name svelte-vomya3");
+			attr(input1, "class", "fg-site-name svelte-11fx3n2");
 			attr(input1, "placeholder", "lat, lon");
-			attr(button1, "class", "fg-site-add svelte-vomya3");
+			attr(button1, "class", "fg-site-add svelte-11fx3n2");
 			attr(button1, "title", "Add a site by exact coordinates");
 		},
 		m(target, anchor) {
 			insert(target, input0, anchor);
-			set_input_value(input0, /*newSiteName*/ ctx[37]);
+			set_input_value(input0, /*newSiteName*/ ctx[41]);
 			insert(target, t0, anchor);
 			insert(target, button0, anchor);
 			insert(target, t2, anchor);
 			insert(target, input1, anchor);
-			set_input_value(input1, /*coordInput*/ ctx[38]);
+			set_input_value(input1, /*coordInput*/ ctx[42]);
 			insert(target, t3, anchor);
 			insert(target, button1, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(input0, "input", /*input0_input_handler*/ ctx[79]),
-					listen(button0, "click", /*addCurrentSite*/ ctx[63]),
-					listen(input1, "input", /*input1_input_handler*/ ctx[80]),
-					listen(input1, "keydown", /*keydown_handler_1*/ ctx[81]),
-					listen(button1, "click", /*addSiteByCoords*/ ctx[64])
+					listen(input0, "input", /*input0_input_handler*/ ctx[86]),
+					listen(button0, "click", /*addCurrentSite*/ ctx[70]),
+					listen(input1, "input", /*input1_input_handler*/ ctx[87]),
+					listen(input1, "keydown", /*keydown_handler_1*/ ctx[88]),
+					listen(button1, "click", /*addSiteByCoords*/ ctx[71])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*newSiteName*/ 64 && input0.value !== /*newSiteName*/ ctx[37]) {
-				set_input_value(input0, /*newSiteName*/ ctx[37]);
+			if (dirty[1] & /*newSiteName*/ 1024 && input0.value !== /*newSiteName*/ ctx[41]) {
+				set_input_value(input0, /*newSiteName*/ ctx[41]);
 			}
 
-			if (dirty[1] & /*coordInput*/ 128 && input1.value !== /*coordInput*/ ctx[38]) {
-				set_input_value(input1, /*coordInput*/ ctx[38]);
+			if (dirty[1] & /*coordInput*/ 2048 && input1.value !== /*coordInput*/ ctx[42]) {
+				set_input_value(input1, /*coordInput*/ ctx[42]);
 			}
 		},
 		d(detaching) {
@@ -7019,7 +7693,7 @@ function create_if_block_26(ctx) {
 }
 
 // (61:4) {#if isStale}
-function create_if_block_25(ctx) {
+function create_if_block_28(ctx) {
 	let div;
 	let t0;
 	let t1;
@@ -7028,8 +7702,8 @@ function create_if_block_25(ctx) {
 		c() {
 			div = element("div");
 			t0 = text("⚠ Offline — showing last saved reading from ");
-			t1 = text(/*staleTime*/ ctx[42]);
-			attr(div, "class", "fg-stale svelte-vomya3");
+			t1 = text(/*staleTime*/ ctx[46]);
+			attr(div, "class", "fg-stale svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -7037,7 +7711,7 @@ function create_if_block_25(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*staleTime*/ 2048) set_data(t1, /*staleTime*/ ctx[42]);
+			if (dirty[1] & /*staleTime*/ 32768) set_data(t1, /*staleTime*/ ctx[46]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -7048,16 +7722,16 @@ function create_if_block_25(ctx) {
 }
 
 // (68:8) {#each MODELS as m}
-function create_each_block_4(ctx) {
+function create_each_block_5(ctx) {
 	let option;
-	let t_1_value = /*m*/ ctx[158].label + "";
+	let t_1_value = /*m*/ ctx[175].label + "";
 	let t_1;
 
 	return {
 		c() {
 			option = element("option");
 			t_1 = text(t_1_value);
-			option.__value = /*m*/ ctx[158].key;
+			option.__value = /*m*/ ctx[175].key;
 			set_input_value(option, option.__value);
 		},
 		m(target, anchor) {
@@ -7074,14 +7748,14 @@ function create_each_block_4(ctx) {
 }
 
 // (72:20) {#if !isPro}
-function create_if_block_24(ctx) {
+function create_if_block_27(ctx) {
 	let span;
 
 	return {
 		c() {
 			span = element("span");
 			span.textContent = "PRO";
-			attr(span, "class", "fg-pro-tag svelte-vomya3");
+			attr(span, "class", "fg-pro-tag svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
@@ -7102,7 +7776,7 @@ function create_if_block_3(ctx) {
 	let div0;
 	let t2;
 	let div1;
-	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45], false) + "";
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50], false) + "";
 	let t3;
 	let span0;
 	let t5;
@@ -7115,10 +7789,10 @@ function create_if_block_3(ctx) {
 	let div3;
 	let t9;
 	let div4;
-	let t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45], false) + "";
+	let t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50], false) + "";
 	let t10;
 	let span1;
-	let t11_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "";
+	let t11_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "";
 	let t11;
 	let t12;
 	let div5;
@@ -7130,10 +7804,10 @@ function create_if_block_3(ctx) {
 	let div6;
 	let t16;
 	let div7;
-	let t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45], false) + "";
+	let t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50], false) + "";
 	let t17;
 	let span2;
-	let t18_value = (/*units*/ ctx[45] === 'imperial' ? 'in' : 'mm') + "";
+	let t18_value = (/*units*/ ctx[50] === 'imperial' ? 'in' : 'mm') + "";
 	let t18;
 	let t19;
 	let div8;
@@ -7155,33 +7829,35 @@ function create_if_block_3(ctx) {
 	let button3_class_value;
 	let t28;
 	let t29;
-	let show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[50](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
 	let t30;
+	let show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[57](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
 	let t31;
-	let if_block4_anchor;
+	let t32;
+	let if_block5_anchor;
 	let mounted;
 	let dispose;
 
 	function select_block_type_4(ctx, dirty) {
-		if (/*heat*/ ctx[16].isBanPeriod && /*activeBan*/ ctx[14]) return create_if_block_22;
-		if (/*activeBan*/ ctx[14]) return create_if_block_23;
+		if (/*heat*/ ctx[16].isBanPeriod && /*activeBan*/ ctx[14]) return create_if_block_25;
+		if (/*activeBan*/ ctx[14]) return create_if_block_26;
 	}
 
 	let current_block_type = select_block_type_4(ctx);
 	let if_block0 = current_block_type && current_block_type(ctx);
+	let if_block1 = /*isSite*/ ctx[49] && /*settings*/ ctx[2].forecastAlerts && create_if_block_22(ctx);
 
-	function select_block_type_5(ctx, dirty) {
+	function select_block_type_6(ctx, dirty) {
 		if (/*selectedHazard*/ ctx[21] === 'heat') return create_if_block_8;
 		if (/*selectedHazard*/ ctx[21] === 'wind') return create_if_block_16;
 		if (/*selectedHazard*/ ctx[21] === 'rain') return create_if_block_18;
 		if (/*selectedHazard*/ ctx[21] === 'solar') return create_if_block_20;
 	}
 
-	let current_block_type_1 = select_block_type_5(ctx);
-	let if_block1 = current_block_type_1 && current_block_type_1(ctx);
-	let if_block2 = show_if && create_if_block_7(ctx);
-	let if_block3 = /*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20] && create_if_block_5(ctx);
-	let if_block4 = /*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[22].length > 1 && create_if_block_4(ctx);
+	let current_block_type_1 = select_block_type_6(ctx);
+	let if_block2 = current_block_type_1 && current_block_type_1(ctx);
+	let if_block3 = show_if && create_if_block_7(ctx);
+	let if_block4 = /*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20] && create_if_block_5(ctx);
+	let if_block5 = /*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[23].length > 1 && create_if_block_4(ctx);
 
 	return {
 		c() {
@@ -7243,36 +7919,38 @@ function create_if_block_3(ctx) {
 			if (if_block3) if_block3.c();
 			t31 = space();
 			if (if_block4) if_block4.c();
-			if_block4_anchor = empty();
-			attr(div0, "class", "fg-hz-ic svelte-vomya3");
-			attr(span0, "class", "fg-hz-u svelte-vomya3");
-			attr(div1, "class", "fg-hz-val svelte-vomya3");
-			attr(div2, "class", "fg-hz-st svelte-vomya3");
+			t32 = space();
+			if (if_block5) if_block5.c();
+			if_block5_anchor = empty();
+			attr(div0, "class", "fg-hz-ic svelte-11fx3n2");
+			attr(span0, "class", "fg-hz-u svelte-11fx3n2");
+			attr(div1, "class", "fg-hz-val svelte-11fx3n2");
+			attr(div2, "class", "fg-hz-st svelte-11fx3n2");
 			set_style(div2, "color", /*heat*/ ctx[16].zoneInfo.color);
-			attr(button0, "class", button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-vomya3");
+			attr(button0, "class", button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-11fx3n2");
 			set_style(button0, "border-color", /*heat*/ ctx[16].zoneInfo.color);
-			attr(div3, "class", "fg-hz-ic svelte-vomya3");
-			attr(span1, "class", "fg-hz-u svelte-vomya3");
-			attr(div4, "class", "fg-hz-val svelte-vomya3");
-			attr(div5, "class", "fg-hz-st svelte-vomya3");
+			attr(div3, "class", "fg-hz-ic svelte-11fx3n2");
+			attr(span1, "class", "fg-hz-u svelte-11fx3n2");
+			attr(div4, "class", "fg-hz-val svelte-11fx3n2");
+			attr(div5, "class", "fg-hz-st svelte-11fx3n2");
 			set_style(div5, "color", /*windResult*/ ctx[17]?.riskColor);
-			attr(button1, "class", button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-vomya3");
+			attr(button1, "class", button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-11fx3n2");
 			set_style(button1, "border-color", /*windResult*/ ctx[17]?.riskColor);
-			attr(div6, "class", "fg-hz-ic svelte-vomya3");
-			attr(span2, "class", "fg-hz-u svelte-vomya3");
-			attr(div7, "class", "fg-hz-val svelte-vomya3");
-			attr(div8, "class", "fg-hz-st svelte-vomya3");
+			attr(div6, "class", "fg-hz-ic svelte-11fx3n2");
+			attr(span2, "class", "fg-hz-u svelte-11fx3n2");
+			attr(div7, "class", "fg-hz-val svelte-11fx3n2");
+			attr(div8, "class", "fg-hz-st svelte-11fx3n2");
 			set_style(div8, "color", /*rainResult*/ ctx[18]?.riskColor);
-			attr(button2, "class", button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-vomya3");
+			attr(button2, "class", button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-11fx3n2");
 			set_style(button2, "border-color", /*rainResult*/ ctx[18]?.riskColor);
-			attr(div9, "class", "fg-hz-ic svelte-vomya3");
-			attr(span3, "class", "fg-hz-u svelte-vomya3");
-			attr(div10, "class", "fg-hz-val svelte-vomya3");
-			attr(div11, "class", "fg-hz-st svelte-vomya3");
+			attr(div9, "class", "fg-hz-ic svelte-11fx3n2");
+			attr(span3, "class", "fg-hz-u svelte-11fx3n2");
+			attr(div10, "class", "fg-hz-val svelte-11fx3n2");
+			attr(div11, "class", "fg-hz-st svelte-11fx3n2");
 			set_style(div11, "color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
-			attr(button3, "class", button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-vomya3");
+			attr(button3, "class", button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-11fx3n2");
 			set_style(button3, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
-			attr(div12, "class", "fg-hazard-strip svelte-vomya3");
+			attr(div12, "class", "fg-hazard-strip svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			if (if_block0) if_block0.m(target, anchor);
@@ -7327,14 +8005,16 @@ function create_if_block_3(ctx) {
 			if (if_block3) if_block3.m(target, anchor);
 			insert(target, t31, anchor);
 			if (if_block4) if_block4.m(target, anchor);
-			insert(target, if_block4_anchor, anchor);
+			insert(target, t32, anchor);
+			if (if_block5) if_block5.m(target, anchor);
+			insert(target, if_block5_anchor, anchor);
 
 			if (!mounted) {
 				dispose = [
-					listen(button0, "click", /*click_handler_5*/ ctx[84]),
-					listen(button1, "click", /*click_handler_6*/ ctx[85]),
-					listen(button2, "click", /*click_handler_7*/ ctx[86]),
-					listen(button3, "click", /*click_handler_8*/ ctx[87])
+					listen(button0, "click", /*click_handler_5*/ ctx[91]),
+					listen(button1, "click", /*click_handler_6*/ ctx[92]),
+					listen(button2, "click", /*click_handler_7*/ ctx[93]),
+					listen(button3, "click", /*click_handler_8*/ ctx[94])
 				];
 
 				mounted = true;
@@ -7353,14 +8033,14 @@ function create_if_block_3(ctx) {
 				}
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45], false) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50], false) + "")) set_data(t3, t3_value);
 			if (dirty[0] & /*heat*/ 65536 && t6_value !== (t6_value = /*heat*/ ctx[16].zoneInfo.riskLabel + "")) set_data(t6, t6_value);
 
 			if (dirty[0] & /*heat*/ 65536) {
 				set_style(div2, "color", /*heat*/ ctx[16].zoneInfo.color);
 			}
 
-			if (dirty[0] & /*selectedHazard*/ 2097152 && button0_class_value !== (button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button0_class_value !== (button0_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'heat' ? 'sel' : '') + " svelte-11fx3n2")) {
 				attr(button0, "class", button0_class_value);
 			}
 
@@ -7368,15 +8048,15 @@ function create_if_block_3(ctx) {
 				set_style(button0, "border-color", /*heat*/ ctx[16].zoneInfo.color);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t10_value !== (t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45], false) + "")) set_data(t10, t10_value);
-			if (dirty[1] & /*units*/ 16384 && t11_value !== (t11_value = (/*units*/ ctx[45] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t10_value !== (t10_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50], false) + "")) set_data(t10, t10_value);
+			if (dirty[1] & /*units*/ 524288 && t11_value !== (t11_value = (/*units*/ ctx[50] === 'imperial' ? 'mph' : 'm/s') + "")) set_data(t11, t11_value);
 			if (dirty[0] & /*windResult*/ 131072 && t13_value !== (t13_value = /*windResult*/ ctx[17]?.riskLabel + "")) set_data(t13, t13_value);
 
 			if (dirty[0] & /*windResult*/ 131072) {
 				set_style(div5, "color", /*windResult*/ ctx[17]?.riskColor);
 			}
 
-			if (dirty[0] & /*selectedHazard*/ 2097152 && button1_class_value !== (button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button1_class_value !== (button1_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'wind' ? 'sel' : '') + " svelte-11fx3n2")) {
 				attr(button1, "class", button1_class_value);
 			}
 
@@ -7384,15 +8064,15 @@ function create_if_block_3(ctx) {
 				set_style(button1, "border-color", /*windResult*/ ctx[17]?.riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t17_value !== (t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45], false) + "")) set_data(t17, t17_value);
-			if (dirty[1] & /*units*/ 16384 && t18_value !== (t18_value = (/*units*/ ctx[45] === 'imperial' ? 'in' : 'mm') + "")) set_data(t18, t18_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t17_value !== (t17_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50], false) + "")) set_data(t17, t17_value);
+			if (dirty[1] & /*units*/ 524288 && t18_value !== (t18_value = (/*units*/ ctx[50] === 'imperial' ? 'in' : 'mm') + "")) set_data(t18, t18_value);
 			if (dirty[0] & /*rainResult*/ 262144 && t20_value !== (t20_value = /*rainResult*/ ctx[18]?.riskLabel + "")) set_data(t20, t20_value);
 
 			if (dirty[0] & /*rainResult*/ 262144) {
 				set_style(div8, "color", /*rainResult*/ ctx[18]?.riskColor);
 			}
 
-			if (dirty[0] & /*selectedHazard*/ 2097152 && button2_class_value !== (button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button2_class_value !== (button2_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'rain' ? 'sel' : '') + " svelte-11fx3n2")) {
 				attr(button2, "class", button2_class_value);
 			}
 
@@ -7407,7 +8087,7 @@ function create_if_block_3(ctx) {
 				set_style(div11, "color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
 			}
 
-			if (dirty[0] & /*selectedHazard*/ 2097152 && button3_class_value !== (button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-vomya3")) {
+			if (dirty[0] & /*selectedHazard*/ 2097152 && button3_class_value !== (button3_class_value = "fg-hz " + (/*selectedHazard*/ ctx[21] === 'solar' ? 'sel' : '') + " svelte-11fx3n2")) {
 				attr(button3, "class", button3_class_value);
 			}
 
@@ -7415,38 +8095,38 @@ function create_if_block_3(ctx) {
 				set_style(button3, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
 			}
 
-			if (current_block_type_1 === (current_block_type_1 = select_block_type_5(ctx)) && if_block1) {
-				if_block1.p(ctx, dirty);
-			} else {
-				if (if_block1) if_block1.d(1);
-				if_block1 = current_block_type_1 && current_block_type_1(ctx);
-
+			if (/*isSite*/ ctx[49] && /*settings*/ ctx[2].forecastAlerts) {
 				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block_22(ctx);
 					if_block1.c();
 					if_block1.m(t29.parentNode, t29);
 				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
 			}
 
-			if (dirty[0] & /*selectedHazard, coldResult*/ 2621440) show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[50](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+			if (current_block_type_1 === (current_block_type_1 = select_block_type_6(ctx)) && if_block2) {
+				if_block2.p(ctx, dirty);
+			} else {
+				if (if_block2) if_block2.d(1);
+				if_block2 = current_block_type_1 && current_block_type_1(ctx);
 
-			if (show_if) {
 				if (if_block2) {
-					if_block2.p(ctx, dirty);
-				} else {
-					if_block2 = create_if_block_7(ctx);
 					if_block2.c();
 					if_block2.m(t30.parentNode, t30);
 				}
-			} else if (if_block2) {
-				if_block2.d(1);
-				if_block2 = null;
 			}
 
-			if (/*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20]) {
+			if (dirty[0] & /*selectedHazard, coldResult*/ 2621440) show_if = /*selectedHazard*/ ctx[21] === 'heat' && /*showColdCard*/ ctx[57](/*coldResult*/ ctx[19]) && /*coldResult*/ ctx[19];
+
+			if (show_if) {
 				if (if_block3) {
 					if_block3.p(ctx, dirty);
 				} else {
-					if_block3 = create_if_block_5(ctx);
+					if_block3 = create_if_block_7(ctx);
 					if_block3.c();
 					if_block3.m(t31.parentNode, t31);
 				}
@@ -7455,17 +8135,30 @@ function create_if_block_3(ctx) {
 				if_block3 = null;
 			}
 
-			if (/*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[22].length > 1) {
+			if (/*selectedHazard*/ ctx[21] === 'rain' && /*isPro*/ ctx[3] && /*thunderResult*/ ctx[20]) {
 				if (if_block4) {
 					if_block4.p(ctx, dirty);
 				} else {
-					if_block4 = create_if_block_4(ctx);
+					if_block4 = create_if_block_5(ctx);
 					if_block4.c();
-					if_block4.m(if_block4_anchor.parentNode, if_block4_anchor);
+					if_block4.m(t32.parentNode, t32);
 				}
 			} else if (if_block4) {
 				if_block4.d(1);
 				if_block4 = null;
+			}
+
+			if (/*worstCaseMode*/ ctx[1] && /*modelResults*/ ctx[23].length > 1) {
+				if (if_block5) {
+					if_block5.p(ctx, dirty);
+				} else {
+					if_block5 = create_if_block_4(ctx);
+					if_block5.c();
+					if_block5.m(if_block5_anchor.parentNode, if_block5_anchor);
+				}
+			} else if (if_block5) {
+				if_block5.d(1);
+				if_block5 = null;
 			}
 		},
 		d(detaching) {
@@ -7476,20 +8169,23 @@ function create_if_block_3(ctx) {
 				detach(t29);
 				detach(t30);
 				detach(t31);
-				detach(if_block4_anchor);
+				detach(t32);
+				detach(if_block5_anchor);
 			}
 
 			if (if_block0) {
 				if_block0.d(detaching);
 			}
 
-			if (if_block1) {
-				if_block1.d(detaching);
+			if (if_block1) if_block1.d(detaching);
+
+			if (if_block2) {
+				if_block2.d(detaching);
 			}
 
-			if (if_block2) if_block2.d(detaching);
 			if (if_block3) if_block3.d(detaching);
 			if (if_block4) if_block4.d(detaching);
+			if (if_block5) if_block5.d(detaching);
 			mounted = false;
 			run_all(dispose);
 		}
@@ -7507,7 +8203,7 @@ function create_if_block_2(ctx) {
 			div = element("div");
 			t0 = text("⚠ ");
 			t1 = text(/*error*/ ctx[9]);
-			attr(div, "class", "fg-error svelte-vomya3");
+			attr(div, "class", "fg-error svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -7532,7 +8228,7 @@ function create_if_block_1(ctx) {
 
 	let t1_value = (/*worstCaseMode*/ ctx[1]
 	? 'all models'
-	: /*selectedModel*/ ctx[28]) + "";
+	: /*selectedModel*/ ctx[32]) + "";
 
 	let t1;
 	let t2;
@@ -7543,7 +8239,7 @@ function create_if_block_1(ctx) {
 			t0 = text("⏳ Fetching ");
 			t1 = text(t1_value);
 			t2 = text("…");
-			attr(div, "class", "fg-loading svelte-vomya3");
+			attr(div, "class", "fg-loading svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -7552,9 +8248,9 @@ function create_if_block_1(ctx) {
 			append(div, t2);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*worstCaseMode, selectedModel*/ 268435458 && t1_value !== (t1_value = (/*worstCaseMode*/ ctx[1]
+			if (dirty[0] & /*worstCaseMode*/ 2 | dirty[1] & /*selectedModel*/ 2 && t1_value !== (t1_value = (/*worstCaseMode*/ ctx[1]
 			? 'all models'
-			: /*selectedModel*/ ctx[28]) + "")) set_data(t1, t1_value);
+			: /*selectedModel*/ ctx[32]) + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -7565,7 +8261,7 @@ function create_if_block_1(ctx) {
 }
 
 // (88:26) 
-function create_if_block_23(ctx) {
+function create_if_block_26(ctx) {
 	let div;
 	let t0;
 	let t1_value = /*activeBan*/ ctx[14].country + "";
@@ -7581,7 +8277,7 @@ function create_if_block_23(ctx) {
 			t1 = text(t1_value);
 			t2 = text(" statutory midday work ban: ");
 			t3 = text(t3_value);
-			attr(div, "class", "fg-ban-info svelte-vomya3");
+			attr(div, "class", "fg-ban-info svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -7603,7 +8299,7 @@ function create_if_block_23(ctx) {
 }
 
 // (83:6) {#if heat.isBanPeriod && activeBan}
-function create_if_block_22(ctx) {
+function create_if_block_25(ctx) {
 	let div;
 	let t0;
 	let t1_value = /*activeBan*/ ctx[14].country + "";
@@ -7626,8 +8322,8 @@ function create_if_block_22(ctx) {
 			t4 = space();
 			small = element("small");
 			small.textContent = "Outdoor work prohibited now — workers must be in a shaded / A/C environment";
-			attr(small, "class", "svelte-vomya3");
-			attr(div, "class", "fg-ban-alert svelte-vomya3");
+			attr(small, "class", "svelte-11fx3n2");
+			attr(div, "class", "fg-ban-alert svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -7651,7 +8347,294 @@ function create_if_block_22(ctx) {
 	};
 }
 
-// (277:43) 
+// (117:6) {#if isSite && settings.forecastAlerts}
+function create_if_block_22(ctx) {
+	let div1;
+	let div0;
+	let t0;
+	let t1_value = /*horizonLabel*/ ctx[55]() + "";
+	let t1;
+	let t2;
+	let t3;
+	let if_block0 = /*forecastBusy*/ ctx[25] && create_if_block_24();
+
+	function select_block_type_5(ctx, dirty) {
+		if (/*forecastList*/ ctx[24].length === 0) return create_if_block_23;
+		return create_else_block_5;
+	}
+
+	let current_block_type = select_block_type_5(ctx);
+	let if_block1 = current_block_type(ctx);
+
+	return {
+		c() {
+			div1 = element("div");
+			div0 = element("div");
+			t0 = text("⏱ Forecast Watch — next ");
+			t1 = text(t1_value);
+			t2 = space();
+			if (if_block0) if_block0.c();
+			t3 = space();
+			if_block1.c();
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-card fg-forecast svelte-11fx3n2");
+			set_style(div1, "border-color", /*forecastList*/ ctx[24][0]?.peakColor || '#334155');
+		},
+		m(target, anchor) {
+			insert(target, div1, anchor);
+			append(div1, div0);
+			append(div0, t0);
+			append(div0, t1);
+			append(div0, t2);
+			if (if_block0) if_block0.m(div0, null);
+			append(div1, t3);
+			if_block1.m(div1, null);
+		},
+		p(ctx, dirty) {
+			if (/*forecastBusy*/ ctx[25]) {
+				if (if_block0) ; else {
+					if_block0 = create_if_block_24();
+					if_block0.c();
+					if_block0.m(div0, null);
+				}
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (current_block_type === (current_block_type = select_block_type_5(ctx)) && if_block1) {
+				if_block1.p(ctx, dirty);
+			} else {
+				if_block1.d(1);
+				if_block1 = current_block_type(ctx);
+
+				if (if_block1) {
+					if_block1.c();
+					if_block1.m(div1, null);
+				}
+			}
+
+			if (dirty[0] & /*forecastList*/ 16777216) {
+				set_style(div1, "border-color", /*forecastList*/ ctx[24][0]?.peakColor || '#334155');
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div1);
+			}
+
+			if (if_block0) if_block0.d();
+			if_block1.d();
+		}
+	};
+}
+
+// (120:12) {#if forecastBusy}
+function create_if_block_24(ctx) {
+	let span;
+
+	return {
+		c() {
+			span = element("span");
+			span.textContent = "scanning…";
+			attr(span, "class", "fg-fc-busy svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (124:10) {:else}
+function create_else_block_5(ctx) {
+	let each_1_anchor;
+	let each_value_4 = ensure_array_like(/*forecastList*/ ctx[24]);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_4.length; i += 1) {
+		each_blocks[i] = create_each_block_4(get_each_context_4(ctx, each_value_4, i));
+	}
+
+	return {
+		c() {
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			each_1_anchor = empty();
+		},
+		m(target, anchor) {
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(target, anchor);
+				}
+			}
+
+			insert(target, each_1_anchor, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*forecastList*/ 16777216) {
+				each_value_4 = ensure_array_like(/*forecastList*/ ctx[24]);
+				let i;
+
+				for (i = 0; i < each_value_4.length; i += 1) {
+					const child_ctx = get_each_context_4(ctx, each_value_4, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_4(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(each_1_anchor.parentNode, each_1_anchor);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_4.length;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(each_1_anchor);
+			}
+
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (122:10) {#if forecastList.length === 0}
+function create_if_block_23(ctx) {
+	let div;
+	let t_1_value = (/*forecastNote*/ ctx[26] || '✓ No threshold crossings forecast.') + "";
+	let t_1;
+
+	return {
+		c() {
+			div = element("div");
+			t_1 = text(t_1_value);
+			attr(div, "class", "fg-empty svelte-11fx3n2");
+			set_style(div, "padding", "8px 12px");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, t_1);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*forecastNote*/ 67108864 && t_1_value !== (t_1_value = (/*forecastNote*/ ctx[26] || '✓ No threshold crossings forecast.') + "")) set_data(t_1, t_1_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (125:12) {#each forecastList as f}
+function create_each_block_4(ctx) {
+	let div;
+	let span0;
+	let t0_value = /*f*/ ctx[172].icon + "";
+	let t0;
+	let t1;
+	let span1;
+	let t2_value = /*f*/ ctx[172].label + "";
+	let t2;
+	let t3;
+	let span2;
+	let t4_value = /*f*/ ctx[172].peakLabel + "";
+	let t4;
+	let t5;
+	let span3;
+
+	let t6_value = (/*f*/ ctx[172].hoursAway === 0
+	? 'within 1 h'
+	: `in ~${/*f*/ ctx[172].hoursAway} h`) + "";
+
+	let t6;
+	let br;
+	let small;
+	let t7_value = /*f*/ ctx[172].firstLocal + "";
+	let t7;
+	let t8;
+
+	return {
+		c() {
+			div = element("div");
+			span0 = element("span");
+			t0 = text(t0_value);
+			t1 = space();
+			span1 = element("span");
+			t2 = text(t2_value);
+			t3 = space();
+			span2 = element("span");
+			t4 = text(t4_value);
+			t5 = space();
+			span3 = element("span");
+			t6 = text(t6_value);
+			br = element("br");
+			small = element("small");
+			t7 = text(t7_value);
+			t8 = space();
+			attr(span0, "class", "fg-fc-ic svelte-11fx3n2");
+			attr(span1, "class", "fg-fc-name svelte-11fx3n2");
+			attr(span2, "class", "fg-fc-badge svelte-11fx3n2");
+			set_style(span2, "background", /*f*/ ctx[172].peakColor);
+			attr(small, "class", "svelte-11fx3n2");
+			attr(span3, "class", "fg-fc-when svelte-11fx3n2");
+			attr(div, "class", "fg-fc-row svelte-11fx3n2");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, span0);
+			append(span0, t0);
+			append(div, t1);
+			append(div, span1);
+			append(span1, t2);
+			append(div, t3);
+			append(div, span2);
+			append(span2, t4);
+			append(div, t5);
+			append(div, span3);
+			append(span3, t6);
+			append(span3, br);
+			append(span3, small);
+			append(small, t7);
+			append(div, t8);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*forecastList*/ 16777216 && t0_value !== (t0_value = /*f*/ ctx[172].icon + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*forecastList*/ 16777216 && t2_value !== (t2_value = /*f*/ ctx[172].label + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*forecastList*/ 16777216 && t4_value !== (t4_value = /*f*/ ctx[172].peakLabel + "")) set_data(t4, t4_value);
+
+			if (dirty[0] & /*forecastList*/ 16777216) {
+				set_style(span2, "background", /*f*/ ctx[172].peakColor);
+			}
+
+			if (dirty[0] & /*forecastList*/ 16777216 && t6_value !== (t6_value = (/*f*/ ctx[172].hoursAway === 0
+			? 'within 1 h'
+			: `in ~${/*f*/ ctx[172].hoursAway} h`) + "")) set_data(t6, t6_value);
+
+			if (dirty[0] & /*forecastList*/ 16777216 && t7_value !== (t7_value = /*f*/ ctx[172].firstLocal + "")) set_data(t7, t7_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+		}
+	};
+}
+
+// (298:43) 
 function create_if_block_20(ctx) {
 	let div1;
 	let div0;
@@ -7661,12 +8644,12 @@ function create_if_block_20(ctx) {
 	let t1;
 	let t2;
 
-	function select_block_type_9(ctx, dirty) {
+	function select_block_type_10(ctx, dirty) {
 		if (/*isPro*/ ctx[3]) return create_if_block_21;
 		return create_else_block_4;
 	}
 
-	let current_block_type = select_block_type_9(ctx);
+	let current_block_type = select_block_type_10(ctx);
 	let if_block = current_block_type(ctx);
 
 	return {
@@ -7678,10 +8661,10 @@ function create_if_block_20(ctx) {
 			t1 = text(t1_value);
 			t2 = space();
 			if_block.c();
-			attr(span, "class", "fg-badge svelte-vomya3");
+			attr(span, "class", "fg-badge svelte-11fx3n2");
 			set_style(span, "background", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-card svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-card svelte-11fx3n2");
 			set_style(div1, "border-color", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
 		},
 		m(target, anchor) {
@@ -7700,7 +8683,7 @@ function create_if_block_20(ctx) {
 				set_style(span, "background", solarBand(/*rawData*/ ctx[15]?.solarWm2 ?? 0, /*isDay*/ ctx[12]).color);
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_9(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_10(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -7726,7 +8709,7 @@ function create_if_block_20(ctx) {
 	};
 }
 
-// (245:42) 
+// (266:42) 
 function create_if_block_18(ctx) {
 	let div1;
 	let div0;
@@ -7736,12 +8719,12 @@ function create_if_block_18(ctx) {
 	let t1;
 	let t2;
 
-	function select_block_type_8(ctx, dirty) {
+	function select_block_type_9(ctx, dirty) {
 		if (/*isPro*/ ctx[3]) return create_if_block_19;
 		return create_else_block_3;
 	}
 
-	let current_block_type = select_block_type_8(ctx);
+	let current_block_type = select_block_type_9(ctx);
 	let if_block = current_block_type(ctx);
 
 	return {
@@ -7753,10 +8736,10 @@ function create_if_block_18(ctx) {
 			t1 = text(t1_value);
 			t2 = space();
 			if_block.c();
-			attr(span, "class", "fg-badge svelte-vomya3");
+			attr(span, "class", "fg-badge svelte-11fx3n2");
 			set_style(span, "background", /*rainResult*/ ctx[18]?.riskColor);
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-card svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-card svelte-11fx3n2");
 			set_style(div1, "border-color", /*rainResult*/ ctx[18]?.riskColor);
 		},
 		m(target, anchor) {
@@ -7775,7 +8758,7 @@ function create_if_block_18(ctx) {
 				set_style(span, "background", /*rainResult*/ ctx[18]?.riskColor);
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_8(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_9(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -7801,7 +8784,7 @@ function create_if_block_18(ctx) {
 	};
 }
 
-// (209:42) 
+// (230:42) 
 function create_if_block_16(ctx) {
 	let div1;
 	let div0;
@@ -7811,12 +8794,12 @@ function create_if_block_16(ctx) {
 	let t1;
 	let t2;
 
-	function select_block_type_7(ctx, dirty) {
+	function select_block_type_8(ctx, dirty) {
 		if (/*isPro*/ ctx[3]) return create_if_block_17;
 		return create_else_block_2;
 	}
 
-	let current_block_type = select_block_type_7(ctx);
+	let current_block_type = select_block_type_8(ctx);
 	let if_block = current_block_type(ctx);
 
 	return {
@@ -7828,10 +8811,10 @@ function create_if_block_16(ctx) {
 			t1 = text(t1_value);
 			t2 = space();
 			if_block.c();
-			attr(span, "class", "fg-badge svelte-vomya3");
+			attr(span, "class", "fg-badge svelte-11fx3n2");
 			set_style(span, "background", /*windResult*/ ctx[17]?.riskColor);
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-card svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-card svelte-11fx3n2");
 			set_style(div1, "border-color", /*windResult*/ ctx[17]?.riskColor);
 		},
 		m(target, anchor) {
@@ -7850,7 +8833,7 @@ function create_if_block_16(ctx) {
 				set_style(span, "background", /*windResult*/ ctx[17]?.riskColor);
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_7(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_8(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -7876,7 +8859,7 @@ function create_if_block_16(ctx) {
 	};
 }
 
-// (116:6) {#if selectedHazard === 'heat'}
+// (137:6) {#if selectedHazard === 'heat'}
 function create_if_block_8(ctx) {
 	let div6;
 	let div0;
@@ -7892,7 +8875,7 @@ function create_if_block_8(ctx) {
 	let t4;
 	let div3;
 	let t5;
-	let t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[45]) + "";
+	let t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[50]) + "";
 	let t6;
 	let t7;
 	let div5;
@@ -7939,12 +8922,12 @@ function create_if_block_8(ctx) {
 	let if_block2 = /*isPro*/ ctx[3] && create_if_block_13(ctx);
 	let if_block3 = /*isPro*/ ctx[3] && create_if_block_12(ctx);
 
-	function select_block_type_6(ctx, dirty) {
+	function select_block_type_7(ctx, dirty) {
 		if (/*isPro*/ ctx[3]) return create_if_block_10;
 		return create_else_block_1;
 	}
 
-	let current_block_type = select_block_type_6(ctx);
+	let current_block_type = select_block_type_7(ctx);
 	let if_block4 = current_block_type(ctx);
 	let if_block5 = /*isPro*/ ctx[3] && create_if_block_9(ctx);
 
@@ -8012,32 +8995,32 @@ function create_if_block_8(ctx) {
 			t32 = space();
 			if (if_block5) if_block5.c();
 			if_block5_anchor = empty();
-			attr(div0, "class", "fg-zone-dot svelte-vomya3");
+			attr(div0, "class", "fg-zone-dot svelte-11fx3n2");
 			set_style(div0, "background", /*heat*/ ctx[16].zoneInfo.color);
-			attr(div1, "class", "fg-zone-name svelte-vomya3");
+			attr(div1, "class", "fg-zone-name svelte-11fx3n2");
 			set_style(div1, "color", /*heat*/ ctx[16].zoneInfo.color);
-			attr(div2, "class", "fg-zone-label svelte-vomya3");
-			attr(div3, "class", "fg-zone-sub svelte-vomya3");
-			attr(div4, "class", "fg-zone-main svelte-vomya3");
-			attr(div5, "class", "fg-zone-time svelte-vomya3");
-			attr(div6, "class", "fg-zone-banner svelte-vomya3");
+			attr(div2, "class", "fg-zone-label svelte-11fx3n2");
+			attr(div3, "class", "fg-zone-sub svelte-11fx3n2");
+			attr(div4, "class", "fg-zone-main svelte-11fx3n2");
+			attr(div5, "class", "fg-zone-time svelte-11fx3n2");
+			attr(div6, "class", "fg-zone-banner svelte-11fx3n2");
 			set_style(div6, "background", /*heat*/ ctx[16].zoneInfo.bgColor);
 			set_style(div6, "border-color", /*heat*/ ctx[16].zoneInfo.color);
-			attr(div7, "class", "fg-card-header svelte-vomya3");
-			attr(span0, "class", "fg-ws-icon svelte-vomya3");
-			attr(span1, "class", "fg-ws-label svelte-vomya3");
-			attr(span2, "class", "fg-ws-val svelte-vomya3");
-			attr(div8, "class", "fg-ws-row svelte-vomya3");
-			attr(span3, "class", "fg-ws-icon svelte-vomya3");
-			attr(span4, "class", "fg-ws-label svelte-vomya3");
-			attr(span5, "class", "fg-ws-val svelte-vomya3");
-			attr(div9, "class", "fg-ws-row svelte-vomya3");
-			attr(span6, "class", "fg-ws-icon svelte-vomya3");
-			attr(span7, "class", "fg-ws-label svelte-vomya3");
-			attr(span8, "class", "fg-ws-val svelte-vomya3");
-			attr(div10, "class", "fg-ws-row svelte-vomya3");
-			attr(div11, "class", "fg-work-schedule svelte-vomya3");
-			attr(div12, "class", "fg-card svelte-vomya3");
+			attr(div7, "class", "fg-card-header svelte-11fx3n2");
+			attr(span0, "class", "fg-ws-icon svelte-11fx3n2");
+			attr(span1, "class", "fg-ws-label svelte-11fx3n2");
+			attr(span2, "class", "fg-ws-val svelte-11fx3n2");
+			attr(div8, "class", "fg-ws-row svelte-11fx3n2");
+			attr(span3, "class", "fg-ws-icon svelte-11fx3n2");
+			attr(span4, "class", "fg-ws-label svelte-11fx3n2");
+			attr(span5, "class", "fg-ws-val svelte-11fx3n2");
+			attr(div9, "class", "fg-ws-row svelte-11fx3n2");
+			attr(span6, "class", "fg-ws-icon svelte-11fx3n2");
+			attr(span7, "class", "fg-ws-label svelte-11fx3n2");
+			attr(span8, "class", "fg-ws-val svelte-11fx3n2");
+			attr(div10, "class", "fg-ws-row svelte-11fx3n2");
+			attr(div11, "class", "fg-work-schedule svelte-11fx3n2");
+			attr(div12, "class", "fg-card svelte-11fx3n2");
 			set_style(div12, "border-color", /*heat*/ ctx[16].zoneInfo.color);
 		},
 		m(target, anchor) {
@@ -8110,7 +9093,7 @@ function create_if_block_8(ctx) {
 			}
 
 			if (dirty[0] & /*heat*/ 65536 && t3_value !== (t3_value = /*heat*/ ctx[16].zoneInfo.label + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t6_value !== (t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[45]) + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t6_value !== (t6_value = fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[50]) + "")) set_data(t6, t6_value);
 
 			if (/*isPro*/ ctx[3]) {
 				if (if_block0) {
@@ -8176,7 +9159,7 @@ function create_if_block_8(ctx) {
 				if_block3 = null;
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_6(ctx)) && if_block4) {
+			if (current_block_type === (current_block_type = select_block_type_7(ctx)) && if_block4) {
 				if_block4.p(ctx, dirty);
 			} else {
 				if_block4.d(1);
@@ -8224,7 +9207,7 @@ function create_if_block_8(ctx) {
 	};
 }
 
-// (300:8) {:else}
+// (321:8) {:else}
 function create_else_block_4(ctx) {
 	let div3;
 	let div2;
@@ -8258,12 +9241,12 @@ function create_else_block_4(ctx) {
 			button = element("button");
 			button.textContent = "Upgrade to Pro →";
 			set_style(span, "font-size", "9px");
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metrics-grid svelte-vomya3");
-			attr(button, "class", "fg-lock-btn svelte-vomya3");
-			attr(div4, "class", "fg-lock svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(button, "class", "fg-lock-btn svelte-11fx3n2");
+			attr(div4, "class", "fg-lock svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -8279,7 +9262,7 @@ function create_else_block_4(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_12*/ ctx[91]);
+				dispose = listen(button, "click", /*click_handler_12*/ ctx[98]);
 				mounted = true;
 			}
 		},
@@ -8299,7 +9282,7 @@ function create_else_block_4(ctx) {
 	};
 }
 
-// (284:8) {#if isPro}
+// (305:8) {#if isPro}
 function create_if_block_21(ctx) {
 	let div9;
 	let div2;
@@ -8356,17 +9339,17 @@ function create_if_block_21(ctx) {
 			div10 = element("div");
 			div10.textContent = "Adds to WBGT globe temperature — peak solar load drives heat stress.";
 			set_style(span, "font-size", "9px");
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metric-val svelte-vomya3");
-			attr(div4, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div5, "class", "fg-metric svelte-vomya3");
-			attr(div6, "class", "fg-metric-val svelte-vomya3");
-			attr(div7, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div8, "class", "fg-metric svelte-vomya3");
-			attr(div9, "class", "fg-metrics-grid svelte-vomya3");
-			attr(div10, "class", "fg-threshold-row svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div4, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div5, "class", "fg-metric svelte-11fx3n2");
+			attr(div6, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div7, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div8, "class", "fg-metric svelte-11fx3n2");
+			attr(div9, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(div10, "class", "fg-threshold-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div9, anchor);
@@ -8407,12 +9390,12 @@ function create_if_block_21(ctx) {
 	};
 }
 
-// (264:8) {:else}
+// (285:8) {:else}
 function create_else_block_3(ctx) {
 	let div3;
 	let div2;
 	let div0;
-	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45]) + "";
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8437,12 +9420,12 @@ function create_else_block_3(ctx) {
 			t4 = text("🔒 Intensity scale & custom thresholds\n          ");
 			button = element("button");
 			button.textContent = "Upgrade to Pro →";
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metrics-grid svelte-vomya3");
-			attr(button, "class", "fg-lock-btn svelte-vomya3");
-			attr(div4, "class", "fg-lock svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(button, "class", "fg-lock-btn svelte-11fx3n2");
+			attr(div4, "class", "fg-lock svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -8457,12 +9440,12 @@ function create_else_block_3(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_11*/ ctx[90]);
+				dispose = listen(button, "click", /*click_handler_11*/ ctx[97]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50]) + "")) set_data(t0, t0_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8477,12 +9460,12 @@ function create_else_block_3(ctx) {
 	};
 }
 
-// (252:8) {#if isPro}
+// (273:8) {#if isPro}
 function create_if_block_19(ctx) {
 	let div6;
 	let div2;
 	let div0;
-	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45]) + "";
+	let t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8496,10 +9479,10 @@ function create_if_block_19(ctx) {
 	let t7;
 	let div7;
 	let t8;
-	let t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[45]) + "";
+	let t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[50]) + "";
 	let t9;
 	let t10;
-	let t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[45]) + "";
+	let t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[50]) + "";
 	let t11;
 
 	return {
@@ -8524,14 +9507,14 @@ function create_if_block_19(ctx) {
 			t9 = text(t9_value);
 			t10 = text("  |  🛑 Danger: ");
 			t11 = text(t11_value);
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metric-val svelte-vomya3");
-			attr(div4, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div5, "class", "fg-metric svelte-vomya3");
-			attr(div6, "class", "fg-metrics-grid svelte-vomya3");
-			attr(div7, "class", "fg-threshold-row svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div4, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div5, "class", "fg-metric svelte-11fx3n2");
+			attr(div6, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(div7, "class", "fg-threshold-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div6, anchor);
@@ -8554,10 +9537,10 @@ function create_if_block_19(ctx) {
 			append(div7, t11);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[45]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t0_value !== (t0_value = fmtRain(/*rawData*/ ctx[15]?.rainMmH ?? 0, /*units*/ ctx[50]) + "")) set_data(t0, t0_value);
 			if (dirty[0] & /*rainResult*/ 262144 && t4_value !== (t4_value = /*rainResult*/ ctx[18]?.intensityLabel + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t9_value !== (t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[45]) + "")) set_data(t9, t9_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t11_value !== (t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[45]) + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t9_value !== (t9_value = fmtRain(/*settings*/ ctx[2].rainWarnMmh, /*units*/ ctx[50]) + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t11_value !== (t11_value = fmtRain(/*settings*/ ctx[2].rainDangerMmh, /*units*/ ctx[50]) + "")) set_data(t11, t11_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8569,12 +9552,12 @@ function create_if_block_19(ctx) {
 	};
 }
 
-// (232:8) {:else}
+// (253:8) {:else}
 function create_else_block_2(ctx) {
 	let div3;
 	let div2;
 	let div0;
-	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "";
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8599,12 +9582,12 @@ function create_else_block_2(ctx) {
 			t4 = text("🔒 Beaufort scale, km/h & custom thresholds\n          ");
 			button = element("button");
 			button.textContent = "Upgrade to Pro →";
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metrics-grid svelte-vomya3");
-			attr(button, "class", "fg-lock-btn svelte-vomya3");
-			attr(div4, "class", "fg-lock svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(button, "class", "fg-lock-btn svelte-11fx3n2");
+			attr(div4, "class", "fg-lock svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div3, anchor);
@@ -8619,12 +9602,12 @@ function create_else_block_2(ctx) {
 			append(div4, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_10*/ ctx[89]);
+				dispose = listen(button, "click", /*click_handler_10*/ ctx[96]);
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "")) set_data(t0, t0_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8639,23 +9622,23 @@ function create_else_block_2(ctx) {
 	};
 }
 
-// (216:8) {#if isPro}
+// (237:8) {#if isPro}
 function create_if_block_17(ctx) {
 	let div9;
 	let div2;
 	let div0;
-	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "";
+	let t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "";
 	let t0;
 	let t1;
 	let div1;
 	let t3;
 	let div5;
 	let div3;
-	let t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]).val + "";
+	let t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]).val + "";
 	let t4;
 	let t5;
 	let div4;
-	let t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]).lbl + "";
+	let t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]).lbl + "";
 	let t6;
 	let t7;
 	let div8;
@@ -8670,10 +9653,10 @@ function create_if_block_17(ctx) {
 	let t12;
 	let div10;
 	let t13;
-	let t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[45]) + "";
+	let t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[50]) + "";
 	let t14;
 	let t15;
-	let t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[45]) + "";
+	let t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[50]) + "";
 	let t16;
 
 	return {
@@ -8706,17 +9689,17 @@ function create_if_block_17(ctx) {
 			t14 = text(t14_value);
 			t15 = text("  |  🛑 Danger: ");
 			t16 = text(t16_value);
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metric-val svelte-vomya3");
-			attr(div4, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div5, "class", "fg-metric svelte-vomya3");
-			attr(div6, "class", "fg-metric-val svelte-vomya3");
-			attr(div7, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div8, "class", "fg-metric svelte-vomya3");
-			attr(div9, "class", "fg-metrics-grid svelte-vomya3");
-			attr(div10, "class", "fg-threshold-row svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div4, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div5, "class", "fg-metric svelte-11fx3n2");
+			attr(div6, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div7, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div8, "class", "fg-metric svelte-11fx3n2");
+			attr(div9, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(div10, "class", "fg-threshold-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div9, anchor);
@@ -8748,13 +9731,13 @@ function create_if_block_17(ctx) {
 			append(div10, t16);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t4_value !== (t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]).val + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t6_value !== (t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]).lbl + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t0_value !== (t0_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t4_value !== (t4_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]).val + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t6_value !== (t6_value = fmtWindSecondary(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]).lbl + "")) set_data(t6, t6_value);
 			if (dirty[0] & /*windResult*/ 131072 && t9_value !== (t9_value = /*windResult*/ ctx[17]?.beaufort + "")) set_data(t9, t9_value);
 			if (dirty[0] & /*windResult*/ 131072 && t11_value !== (t11_value = /*windResult*/ ctx[17]?.beaufortDesc + "")) set_data(t11, t11_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t14_value !== (t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[45]) + "")) set_data(t14, t14_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t16_value !== (t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[45]) + "")) set_data(t16, t16_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t14_value !== (t14_value = fmtWind(/*settings*/ ctx[2].windWarnMs, /*units*/ ctx[50]) + "")) set_data(t14, t14_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t16_value !== (t16_value = fmtWind(/*settings*/ ctx[2].windDangerMs, /*units*/ ctx[50]) + "")) set_data(t16, t16_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8766,10 +9749,10 @@ function create_if_block_17(ctx) {
 	};
 }
 
-// (123:90) {#if isPro}
+// (144:90) {#if isPro}
 function create_if_block_15(ctx) {
 	let t0;
-	let t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[45]) + "";
+	let t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[50]) + "";
 	let t1;
 
 	return {
@@ -8782,7 +9765,7 @@ function create_if_block_15(ctx) {
 			insert(target, t1, anchor);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t1_value !== (t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[45]) + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t1_value !== (t1_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[50]) + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -8793,7 +9776,7 @@ function create_if_block_15(ctx) {
 	};
 }
 
-// (130:50) {#if isPro}
+// (151:50) {#if isPro}
 function create_if_block_14(ctx) {
 	let t_1;
 
@@ -8812,12 +9795,12 @@ function create_if_block_14(ctx) {
 	};
 }
 
-// (131:8) {#if isPro}
+// (152:8) {#if isPro}
 function create_if_block_13(ctx) {
 	let div18;
 	let div2;
 	let div0;
-	let t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45]) + "";
+	let t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50]) + "";
 	let t0;
 	let t1;
 	let div1;
@@ -8832,7 +9815,7 @@ function create_if_block_13(ctx) {
 	let t8;
 	let div8;
 	let div6;
-	let t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[45]) + "";
+	let t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[50]) + "";
 	let t9;
 	let t10;
 	let div7;
@@ -8842,7 +9825,7 @@ function create_if_block_13(ctx) {
 
 	let t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
 	? 'NW'
-	: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[45])) + "";
+	: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[50])) + "";
 
 	let t13;
 	let t14;
@@ -8850,14 +9833,14 @@ function create_if_block_13(ctx) {
 	let t16;
 	let div14;
 	let div12;
-	let t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[45]) + "";
+	let t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[50]) + "";
 	let t17;
 	let t18;
 	let div13;
 	let t20;
 	let div17;
 	let div15;
-	let t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[45]) + "";
+	let t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[50]) + "";
 	let t21;
 	let t22;
 	let div16;
@@ -8907,23 +9890,23 @@ function create_if_block_13(ctx) {
 			t22 = space();
 			div16 = element("div");
 			div16.textContent = "WBGT+PPE";
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metric-val svelte-vomya3");
-			attr(div4, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div5, "class", "fg-metric svelte-vomya3");
-			attr(div6, "class", "fg-metric-val svelte-vomya3");
-			attr(div7, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div8, "class", "fg-metric svelte-vomya3");
-			attr(div9, "class", "fg-metric-val svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div4, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div5, "class", "fg-metric svelte-11fx3n2");
+			attr(div6, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div7, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div8, "class", "fg-metric svelte-11fx3n2");
+			attr(div9, "class", "fg-metric-val svelte-11fx3n2");
 			set_style(div9, "color", /*heat*/ ctx[16].zoneInfo.color);
-			attr(div10, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div11, "class", "fg-metric svelte-vomya3");
-			attr(div12, "class", "fg-metric-val svelte-vomya3");
-			attr(div13, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div14, "class", "fg-metric svelte-vomya3");
-			attr(div15, "class", "fg-metric-val svelte-vomya3");
+			attr(div10, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div11, "class", "fg-metric svelte-11fx3n2");
+			attr(div12, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div13, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div14, "class", "fg-metric svelte-11fx3n2");
+			attr(div15, "class", "fg-metric-val svelte-11fx3n2");
 
 			set_style(div15, "color", /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtDangerC
 			? '#dc2626'
@@ -8931,9 +9914,9 @@ function create_if_block_13(ctx) {
 				? '#f97316'
 				: '#94a3b8');
 
-			attr(div16, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div17, "class", "fg-metric svelte-vomya3");
-			attr(div18, "class", "fg-metrics-grid svelte-vomya3");
+			attr(div16, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div17, "class", "fg-metric svelte-11fx3n2");
+			attr(div18, "class", "fg-metrics-grid svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div18, anchor);
@@ -8975,20 +9958,20 @@ function create_if_block_13(ctx) {
 			append(div17, div16);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t0_value !== (t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45]) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t0_value !== (t0_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50]) + "")) set_data(t0, t0_value);
 			if (dirty[0] & /*rawData*/ 32768 && t4_value !== (t4_value = /*rawData*/ ctx[15]?.humidity + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t9_value !== (t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[45]) + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t9_value !== (t9_value = fmtTemp(/*heat*/ ctx[16].apparentTemp1, /*units*/ ctx[50]) + "")) set_data(t9, t9_value);
 
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t13_value !== (t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t13_value !== (t13_value = (/*heat*/ ctx[16].apparentTempFinal === 999
 			? 'NW'
-			: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[45])) + "")) set_data(t13, t13_value);
+			: fmtTemp(/*heat*/ ctx[16].apparentTempFinal, /*units*/ ctx[50])) + "")) set_data(t13, t13_value);
 
 			if (dirty[0] & /*heat*/ 65536) {
 				set_style(div9, "color", /*heat*/ ctx[16].zoneInfo.color);
 			}
 
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t17_value !== (t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[45]) + "")) set_data(t17, t17_value);
-			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 16384 && t21_value !== (t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[45]) + "")) set_data(t21, t21_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t17_value !== (t17_value = fmtTemp(/*heat*/ ctx[16].wbgtBase, /*units*/ ctx[50]) + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*heat*/ 65536 | dirty[1] & /*units*/ 524288 && t21_value !== (t21_value = fmtTemp(/*heat*/ ctx[16].wbgtAdjusted, /*units*/ ctx[50]) + "")) set_data(t21, t21_value);
 
 			if (dirty[0] & /*heat, settings*/ 65540) {
 				set_style(div15, "color", /*heat*/ ctx[16].wbgtAdjusted >= /*settings*/ ctx[2].wbgtDangerC
@@ -9006,7 +9989,7 @@ function create_if_block_13(ctx) {
 	};
 }
 
-// (179:10) {#if isPro}
+// (200:10) {#if isPro}
 function create_if_block_12(ctx) {
 	let div;
 	let span0;
@@ -9028,11 +10011,11 @@ function create_if_block_12(ctx) {
 			t3 = space();
 			span2 = element("span");
 			t4 = text(t4_value);
-			attr(span0, "class", "fg-ws-icon svelte-vomya3");
-			attr(span1, "class", "fg-ws-label svelte-vomya3");
-			attr(span2, "class", "fg-ws-val svelte-vomya3");
+			attr(span0, "class", "fg-ws-icon svelte-11fx3n2");
+			attr(span1, "class", "fg-ws-label svelte-11fx3n2");
+			attr(span2, "class", "fg-ws-val svelte-11fx3n2");
 			set_style(span2, "font-size", "9px");
-			attr(div, "class", "fg-ws-row svelte-vomya3");
+			attr(div, "class", "fg-ws-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9054,7 +10037,7 @@ function create_if_block_12(ctx) {
 	};
 }
 
-// (192:8) {:else}
+// (213:8) {:else}
 function create_else_block_1(ctx) {
 	let div;
 	let t0;
@@ -9068,8 +10051,8 @@ function create_else_block_1(ctx) {
 			t0 = text("🔒 WBGT, Apparent Temp A/B, mandatory controls & monitoring schedule\n            ");
 			button = element("button");
 			button.textContent = "Upgrade to Pro →";
-			attr(button, "class", "fg-lock-btn svelte-vomya3");
-			attr(div, "class", "fg-lock svelte-vomya3");
+			attr(button, "class", "fg-lock-btn svelte-11fx3n2");
+			attr(div, "class", "fg-lock svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9077,7 +10060,7 @@ function create_else_block_1(ctx) {
 			append(div, button);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler_9*/ ctx[88]);
+				dispose = listen(button, "click", /*click_handler_9*/ ctx[95]);
 				mounted = true;
 			}
 		},
@@ -9093,7 +10076,7 @@ function create_else_block_1(ctx) {
 	};
 }
 
-// (187:8) {#if isPro}
+// (208:8) {#if isPro}
 function create_if_block_10(ctx) {
 	let div;
 	let t0;
@@ -9105,7 +10088,7 @@ function create_if_block_10(ctx) {
 	let t4;
 	let t5;
 	let if_block_anchor;
-	let if_block = /*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[27] && create_if_block_11(ctx);
+	let if_block = /*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[31] && create_if_block_11(ctx);
 
 	return {
 		c() {
@@ -9118,7 +10101,7 @@ function create_if_block_10(ctx) {
 			t5 = space();
 			if (if_block) if_block.c();
 			if_block_anchor = empty();
-			attr(div, "class", "fg-ppe-row svelte-vomya3");
+			attr(div, "class", "fg-ppe-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9135,7 +10118,7 @@ function create_if_block_10(ctx) {
 			if (dirty[0] & /*settings*/ 4 && t1_value !== (t1_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].label + "")) set_data(t1, t1_value);
 			if (dirty[0] & /*settings*/ 4 && t3_value !== (t3_value = PPE_PROFILES[/*settings*/ ctx[2].ppeProfile].adjustment + "")) set_data(t3, t3_value);
 
-			if (/*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[27]) {
+			if (/*worstCaseMode*/ ctx[1] && /*worstModelLabel*/ ctx[31]) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
@@ -9160,7 +10143,7 @@ function create_if_block_10(ctx) {
 	};
 }
 
-// (189:10) {#if worstCaseMode && worstModelLabel}
+// (210:10) {#if worstCaseMode && worstModelLabel}
 function create_if_block_11(ctx) {
 	let div;
 	let t0;
@@ -9170,8 +10153,8 @@ function create_if_block_11(ctx) {
 		c() {
 			div = element("div");
 			t0 = text("⚡ Worst case: ");
-			t1 = text(/*worstModelLabel*/ ctx[27]);
-			attr(div, "class", "fg-ppe-row svelte-vomya3");
+			t1 = text(/*worstModelLabel*/ ctx[31]);
+			attr(div, "class", "fg-ppe-row svelte-11fx3n2");
 			set_style(div, "color", "#38bdf8");
 		},
 		m(target, anchor) {
@@ -9180,7 +10163,7 @@ function create_if_block_11(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*worstModelLabel*/ 134217728) set_data(t1, /*worstModelLabel*/ ctx[27]);
+			if (dirty[1] & /*worstModelLabel*/ 1) set_data(t1, /*worstModelLabel*/ ctx[31]);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9190,7 +10173,7 @@ function create_if_block_11(ctx) {
 	};
 }
 
-// (200:6) {#if isPro}
+// (221:6) {#if isPro}
 function create_if_block_9(ctx) {
 	let div1;
 	let div0;
@@ -9219,8 +10202,8 @@ function create_if_block_9(ctx) {
 				each_blocks[i].c();
 			}
 
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-card svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-card svelte-11fx3n2");
 			set_style(div1, "border-color", /*heat*/ ctx[16].zoneInfo.color);
 		},
 		m(target, anchor) {
@@ -9277,11 +10260,11 @@ function create_if_block_9(ctx) {
 	};
 }
 
-// (203:8) {#each heat.zoneInfo.mandatoryControls as ctrl}
+// (224:8) {#each heat.zoneInfo.mandatoryControls as ctrl}
 function create_each_block_3(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*ctrl*/ ctx[153] + "";
+	let t1_value = /*ctrl*/ ctx[167] + "";
 	let t1;
 
 	return {
@@ -9289,7 +10272,7 @@ function create_each_block_3(ctx) {
 			div = element("div");
 			t0 = text("▸ ");
 			t1 = text(t1_value);
-			attr(div, "class", "fg-control-item svelte-vomya3");
+			attr(div, "class", "fg-control-item svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9297,7 +10280,7 @@ function create_each_block_3(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*ctrl*/ ctx[153] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*heat*/ 65536 && t1_value !== (t1_value = /*ctrl*/ ctx[167] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9307,7 +10290,7 @@ function create_each_block_3(ctx) {
 	};
 }
 
-// (315:6) {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
+// (336:6) {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
 function create_if_block_7(ctx) {
 	let div12;
 	let div0;
@@ -9319,21 +10302,21 @@ function create_if_block_7(ctx) {
 	let div10;
 	let div3;
 	let div1;
-	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45]) + "";
+	let t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50]) + "";
 	let t3;
 	let t4;
 	let div2;
 	let t6;
 	let div6;
 	let div4;
-	let t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[45]) + "";
+	let t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[50]) + "";
 	let t7;
 	let t8;
 	let div5;
 	let t10;
 	let div9;
 	let div7;
-	let t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "";
+	let t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "";
 	let t11;
 	let t12;
 	let div8;
@@ -9389,22 +10372,22 @@ function create_if_block_7(ctx) {
 				each_blocks[i].c();
 			}
 
-			attr(span, "class", "fg-badge svelte-vomya3");
+			attr(span, "class", "fg-badge svelte-11fx3n2");
 			set_style(span, "background", /*coldResult*/ ctx[19].riskColor);
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-metric-val svelte-vomya3");
-			attr(div2, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div3, "class", "fg-metric svelte-vomya3");
-			attr(div4, "class", "fg-metric-val svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div2, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div3, "class", "fg-metric svelte-11fx3n2");
+			attr(div4, "class", "fg-metric-val svelte-11fx3n2");
 			set_style(div4, "color", /*coldResult*/ ctx[19].riskColor);
-			attr(div5, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div6, "class", "fg-metric svelte-vomya3");
-			attr(div7, "class", "fg-metric-val svelte-vomya3");
-			attr(div8, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div9, "class", "fg-metric svelte-vomya3");
-			attr(div10, "class", "fg-metrics-grid svelte-vomya3");
-			attr(div11, "class", "fg-threshold-row svelte-vomya3");
-			attr(div12, "class", "fg-card svelte-vomya3");
+			attr(div5, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div6, "class", "fg-metric svelte-11fx3n2");
+			attr(div7, "class", "fg-metric-val svelte-11fx3n2");
+			attr(div8, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div9, "class", "fg-metric svelte-11fx3n2");
+			attr(div10, "class", "fg-metrics-grid svelte-11fx3n2");
+			attr(div11, "class", "fg-threshold-row svelte-11fx3n2");
+			attr(div12, "class", "fg-card svelte-11fx3n2");
 			set_style(div12, "border-color", /*coldResult*/ ctx[19].riskColor);
 		},
 		m(target, anchor) {
@@ -9451,14 +10434,14 @@ function create_if_block_7(ctx) {
 				set_style(span, "background", /*coldResult*/ ctx[19].riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[45]) + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*coldResult*/ 524288 | dirty[1] & /*units*/ 16384 && t7_value !== (t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[45]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t3_value !== (t3_value = fmtTemp(/*rawData*/ ctx[15]?.tempC ?? 0, /*units*/ ctx[50]) + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*coldResult*/ 524288 | dirty[1] & /*units*/ 524288 && t7_value !== (t7_value = fmtTemp(/*coldResult*/ ctx[19].windChillC, /*units*/ ctx[50]) + "")) set_data(t7, t7_value);
 
 			if (dirty[0] & /*coldResult*/ 524288) {
 				set_style(div4, "color", /*coldResult*/ ctx[19].riskColor);
 			}
 
-			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 16384 && t11_value !== (t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[45]) + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*rawData*/ 32768 | dirty[1] & /*units*/ 524288 && t11_value !== (t11_value = fmtWind(/*rawData*/ ctx[15]?.windMs ?? 0, /*units*/ ctx[50]) + "")) set_data(t11, t11_value);
 			if (dirty[0] & /*coldResult*/ 524288 && t16_value !== (t16_value = /*coldResult*/ ctx[19].frostbite + "")) set_data(t16, t16_value);
 
 			if (dirty[0] & /*coldResult*/ 524288) {
@@ -9498,11 +10481,11 @@ function create_if_block_7(ctx) {
 	};
 }
 
-// (336:10) {#each coldResult.controls as ctrl}
+// (357:10) {#each coldResult.controls as ctrl}
 function create_each_block_2(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*ctrl*/ ctx[153] + "";
+	let t1_value = /*ctrl*/ ctx[167] + "";
 	let t1;
 
 	return {
@@ -9510,7 +10493,7 @@ function create_each_block_2(ctx) {
 			div = element("div");
 			t0 = text("▸ ");
 			t1 = text(t1_value);
-			attr(div, "class", "fg-control-item svelte-vomya3");
+			attr(div, "class", "fg-control-item svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9518,7 +10501,7 @@ function create_each_block_2(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*ctrl*/ ctx[153] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*coldResult*/ 524288 && t1_value !== (t1_value = /*ctrl*/ ctx[167] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9528,7 +10511,7 @@ function create_each_block_2(ctx) {
 	};
 }
 
-// (343:6) {#if selectedHazard === 'rain' && isPro && thunderResult}
+// (364:6) {#if selectedHazard === 'rain' && isPro && thunderResult}
 function create_if_block_5(ctx) {
 	let div2;
 	let div0;
@@ -9540,20 +10523,20 @@ function create_if_block_5(ctx) {
 	let t3;
 	let div1;
 	let t4;
-	let t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[45]) + "";
+	let t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[50]) + "";
 	let t5;
 	let t6;
-	let t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[45]) + "";
+	let t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[50]) + "";
 	let t7;
 	let t8;
 	let t9;
 
-	function select_block_type_10(ctx, dirty) {
+	function select_block_type_11(ctx, dirty) {
 		if (/*thunderResult*/ ctx[20].available) return create_if_block_6;
 		return create_else_block;
 	}
 
-	let current_block_type = select_block_type_10(ctx);
+	let current_block_type = select_block_type_11(ctx);
 	let if_block = current_block_type(ctx);
 	let each_value_1 = ensure_array_like(/*thunderResult*/ ctx[20].guidance);
 	let each_blocks = [];
@@ -9584,11 +10567,11 @@ function create_if_block_5(ctx) {
 				each_blocks[i].c();
 			}
 
-			attr(span, "class", "fg-badge svelte-vomya3");
+			attr(span, "class", "fg-badge svelte-11fx3n2");
 			set_style(span, "background", /*thunderResult*/ ctx[20].riskColor);
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(div1, "class", "fg-threshold-row svelte-vomya3");
-			attr(div2, "class", "fg-card svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(div1, "class", "fg-threshold-row svelte-11fx3n2");
+			attr(div2, "class", "fg-card svelte-11fx3n2");
 			set_style(div2, "border-color", /*thunderResult*/ ctx[20].riskColor);
 		},
 		m(target, anchor) {
@@ -9621,7 +10604,7 @@ function create_if_block_5(ctx) {
 				set_style(span, "background", /*thunderResult*/ ctx[20].riskColor);
 			}
 
-			if (current_block_type === (current_block_type = select_block_type_10(ctx)) && if_block) {
+			if (current_block_type === (current_block_type = select_block_type_11(ctx)) && if_block) {
 				if_block.p(ctx, dirty);
 			} else {
 				if_block.d(1);
@@ -9633,8 +10616,8 @@ function create_if_block_5(ctx) {
 				}
 			}
 
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t5_value !== (t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[45]) + "")) set_data(t5, t5_value);
-			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 16384 && t7_value !== (t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[45]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t5_value !== (t5_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm * 2, /*units*/ ctx[50]) + "")) set_data(t5, t5_value);
+			if (dirty[0] & /*settings*/ 4 | dirty[1] & /*units*/ 524288 && t7_value !== (t7_value = fmtDistance(/*settings*/ ctx[2].lightningRadiusKm, /*units*/ ctx[50]) + "")) set_data(t7, t7_value);
 
 			if (dirty[0] & /*thunderResult*/ 1048576) {
 				each_value_1 = ensure_array_like(/*thunderResult*/ ctx[20].guidance);
@@ -9674,7 +10657,7 @@ function create_if_block_5(ctx) {
 	};
 }
 
-// (360:10) {:else}
+// (381:10) {:else}
 function create_else_block(ctx) {
 	let div;
 	let t_1_value = /*thunderResult*/ ctx[20].instability + "";
@@ -9684,7 +10667,7 @@ function create_else_block(ctx) {
 		c() {
 			div = element("div");
 			t_1 = text(t_1_value);
-			attr(div, "class", "fg-threshold-row svelte-vomya3");
+			attr(div, "class", "fg-threshold-row svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9701,7 +10684,7 @@ function create_else_block(ctx) {
 	};
 }
 
-// (349:10) {#if thunderResult.available}
+// (370:10) {#if thunderResult.available}
 function create_if_block_6(ctx) {
 	let div6;
 	let div2;
@@ -9734,16 +10717,16 @@ function create_if_block_6(ctx) {
 			t5 = space();
 			div4 = element("div");
 			div4.textContent = "Instability";
-			attr(div0, "class", "fg-metric-val svelte-vomya3");
+			attr(div0, "class", "fg-metric-val svelte-11fx3n2");
 			set_style(div0, "color", /*thunderResult*/ ctx[20].riskColor);
-			attr(div1, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div2, "class", "fg-metric svelte-vomya3");
-			attr(div3, "class", "fg-metric-val svelte-vomya3");
+			attr(div1, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div2, "class", "fg-metric svelte-11fx3n2");
+			attr(div3, "class", "fg-metric-val svelte-11fx3n2");
 			set_style(div3, "font-size", "11px");
-			attr(div4, "class", "fg-metric-lbl svelte-vomya3");
-			attr(div5, "class", "fg-metric svelte-vomya3");
+			attr(div4, "class", "fg-metric-lbl svelte-11fx3n2");
+			attr(div5, "class", "fg-metric svelte-11fx3n2");
 			set_style(div5, "grid-column", "span 2");
-			attr(div6, "class", "fg-metrics-grid svelte-vomya3");
+			attr(div6, "class", "fg-metrics-grid svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div6, anchor);
@@ -9776,11 +10759,11 @@ function create_if_block_6(ctx) {
 	};
 }
 
-// (364:10) {#each thunderResult.guidance as g}
+// (385:10) {#each thunderResult.guidance as g}
 function create_each_block_1(ctx) {
 	let div;
 	let t0;
-	let t1_value = /*g*/ ctx[150] + "";
+	let t1_value = /*g*/ ctx[164] + "";
 	let t1;
 
 	return {
@@ -9788,7 +10771,7 @@ function create_each_block_1(ctx) {
 			div = element("div");
 			t0 = text("▸ ");
 			t1 = text(t1_value);
-			attr(div, "class", "fg-control-item svelte-vomya3");
+			attr(div, "class", "fg-control-item svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9796,7 +10779,7 @@ function create_each_block_1(ctx) {
 			append(div, t1);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*g*/ ctx[150] + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*thunderResult*/ 1048576 && t1_value !== (t1_value = /*g*/ ctx[164] + "")) set_data(t1, t1_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -9806,7 +10789,7 @@ function create_each_block_1(ctx) {
 	};
 }
 
-// (371:6) {#if worstCaseMode && modelResults.length > 1}
+// (392:6) {#if worstCaseMode && modelResults.length > 1}
 function create_if_block_4(ctx) {
 	let div1;
 	let div0;
@@ -9815,7 +10798,7 @@ function create_if_block_4(ctx) {
 	let thead;
 	let t6;
 	let tbody;
-	let each_value = ensure_array_like(/*modelResults*/ ctx[22]);
+	let each_value = ensure_array_like(/*modelResults*/ ctx[23]);
 	let each_blocks = [];
 
 	for (let i = 0; i < each_value.length; i += 1) {
@@ -9830,7 +10813,7 @@ function create_if_block_4(ctx) {
 			t1 = space();
 			table = element("table");
 			thead = element("thead");
-			thead.innerHTML = `<tr><th class="svelte-vomya3">Model</th><th class="svelte-vomya3">Zone</th><th class="svelte-vomya3">App.T</th><th class="svelte-vomya3">Wind</th></tr>`;
+			thead.innerHTML = `<tr><th class="svelte-11fx3n2">Model</th><th class="svelte-11fx3n2">Zone</th><th class="svelte-11fx3n2">App.T</th><th class="svelte-11fx3n2">Wind</th></tr>`;
 			t6 = space();
 			tbody = element("tbody");
 
@@ -9838,9 +10821,9 @@ function create_if_block_4(ctx) {
 				each_blocks[i].c();
 			}
 
-			attr(div0, "class", "fg-card-header svelte-vomya3");
-			attr(table, "class", "fg-table svelte-vomya3");
-			attr(div1, "class", "fg-card fg-card-flat svelte-vomya3");
+			attr(div0, "class", "fg-card-header svelte-11fx3n2");
+			attr(table, "class", "fg-table svelte-11fx3n2");
+			attr(div1, "class", "fg-card fg-card-flat svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, div1, anchor);
@@ -9858,8 +10841,8 @@ function create_if_block_4(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 16384) {
-				each_value = ensure_array_like(/*modelResults*/ ctx[22]);
+			if (dirty[0] & /*modelResults*/ 8388608 | dirty[1] & /*units*/ 524288) {
+				each_value = ensure_array_like(/*modelResults*/ ctx[23]);
 				let i;
 
 				for (i = 0; i < each_value.length; i += 1) {
@@ -9891,29 +10874,29 @@ function create_if_block_4(ctx) {
 	};
 }
 
-// (377:14) {#each modelResults as mr}
+// (398:14) {#each modelResults as mr}
 function create_each_block(ctx) {
 	let tr;
 	let td0;
-	let t0_value = /*mr*/ ctx[147].modelLabel + "";
+	let t0_value = /*mr*/ ctx[161].modelLabel + "";
 	let t0;
-	let t1_value = (/*mr*/ ctx[147].isWorst ? ' ⚡' : '') + "";
+	let t1_value = (/*mr*/ ctx[161].isWorst ? ' ⚡' : '') + "";
 	let t1;
 	let t2;
 	let td1;
-	let t3_value = /*mr*/ ctx[147].heat.zoneInfo.riskLabel + "";
+	let t3_value = /*mr*/ ctx[161].heat.zoneInfo.riskLabel + "";
 	let t3;
 	let t4;
 	let td2;
 
-	let t5_value = (/*mr*/ ctx[147].heat.apparentTempFinal === 999
+	let t5_value = (/*mr*/ ctx[161].heat.apparentTempFinal === 999
 	? 'NW'
-	: fmtTemp(/*mr*/ ctx[147].heat.apparentTempFinal, /*units*/ ctx[45])) + "";
+	: fmtTemp(/*mr*/ ctx[161].heat.apparentTempFinal, /*units*/ ctx[50])) + "";
 
 	let t5;
 	let t6;
 	let td3;
-	let t7_value = fmtWind(/*mr*/ ctx[147].raw.windMs, /*units*/ ctx[45]) + "";
+	let t7_value = fmtWind(/*mr*/ ctx[161].raw.windMs, /*units*/ ctx[50]) + "";
 	let t7;
 	let t8;
 	let tr_class_value;
@@ -9934,14 +10917,14 @@ function create_each_block(ctx) {
 			td3 = element("td");
 			t7 = text(t7_value);
 			t8 = space();
-			attr(td0, "class", "svelte-vomya3");
-			set_style(td1, "color", /*mr*/ ctx[147].heat.zoneInfo.color);
-			attr(td1, "class", "svelte-vomya3");
-			set_style(td2, "color", /*mr*/ ctx[147].heat.zoneInfo.color);
-			attr(td2, "class", "svelte-vomya3");
-			set_style(td3, "color", /*mr*/ ctx[147].wind.riskColor);
-			attr(td3, "class", "svelte-vomya3");
-			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[147].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"));
+			attr(td0, "class", "svelte-11fx3n2");
+			set_style(td1, "color", /*mr*/ ctx[161].heat.zoneInfo.color);
+			attr(td1, "class", "svelte-11fx3n2");
+			set_style(td2, "color", /*mr*/ ctx[161].heat.zoneInfo.color);
+			attr(td2, "class", "svelte-11fx3n2");
+			set_style(td3, "color", /*mr*/ ctx[161].wind.riskColor);
+			attr(td3, "class", "svelte-11fx3n2");
+			attr(tr, "class", tr_class_value = "" + (null_to_empty(/*mr*/ ctx[161].isWorst ? 'fg-worst-row' : '') + " svelte-11fx3n2"));
 		},
 		m(target, anchor) {
 			insert(target, tr, anchor);
@@ -9960,29 +10943,29 @@ function create_each_block(ctx) {
 			append(tr, t8);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*modelResults*/ 4194304 && t0_value !== (t0_value = /*mr*/ ctx[147].modelLabel + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*modelResults*/ 4194304 && t1_value !== (t1_value = (/*mr*/ ctx[147].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*modelResults*/ 4194304 && t3_value !== (t3_value = /*mr*/ ctx[147].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*modelResults*/ 8388608 && t0_value !== (t0_value = /*mr*/ ctx[161].modelLabel + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*modelResults*/ 8388608 && t1_value !== (t1_value = (/*mr*/ ctx[161].isWorst ? ' ⚡' : '') + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*modelResults*/ 8388608 && t3_value !== (t3_value = /*mr*/ ctx[161].heat.zoneInfo.riskLabel + "")) set_data(t3, t3_value);
 
-			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td1, "color", /*mr*/ ctx[147].heat.zoneInfo.color);
+			if (dirty[0] & /*modelResults*/ 8388608) {
+				set_style(td1, "color", /*mr*/ ctx[161].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 16384 && t5_value !== (t5_value = (/*mr*/ ctx[147].heat.apparentTempFinal === 999
+			if (dirty[0] & /*modelResults*/ 8388608 | dirty[1] & /*units*/ 524288 && t5_value !== (t5_value = (/*mr*/ ctx[161].heat.apparentTempFinal === 999
 			? 'NW'
-			: fmtTemp(/*mr*/ ctx[147].heat.apparentTempFinal, /*units*/ ctx[45])) + "")) set_data(t5, t5_value);
+			: fmtTemp(/*mr*/ ctx[161].heat.apparentTempFinal, /*units*/ ctx[50])) + "")) set_data(t5, t5_value);
 
-			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td2, "color", /*mr*/ ctx[147].heat.zoneInfo.color);
+			if (dirty[0] & /*modelResults*/ 8388608) {
+				set_style(td2, "color", /*mr*/ ctx[161].heat.zoneInfo.color);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 | dirty[1] & /*units*/ 16384 && t7_value !== (t7_value = fmtWind(/*mr*/ ctx[147].raw.windMs, /*units*/ ctx[45]) + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*modelResults*/ 8388608 | dirty[1] & /*units*/ 524288 && t7_value !== (t7_value = fmtWind(/*mr*/ ctx[161].raw.windMs, /*units*/ ctx[50]) + "")) set_data(t7, t7_value);
 
-			if (dirty[0] & /*modelResults*/ 4194304) {
-				set_style(td3, "color", /*mr*/ ctx[147].wind.riskColor);
+			if (dirty[0] & /*modelResults*/ 8388608) {
+				set_style(td3, "color", /*mr*/ ctx[161].wind.riskColor);
 			}
 
-			if (dirty[0] & /*modelResults*/ 4194304 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[147].isWorst ? 'fg-worst-row' : '') + " svelte-vomya3"))) {
+			if (dirty[0] & /*modelResults*/ 8388608 && tr_class_value !== (tr_class_value = "" + (null_to_empty(/*mr*/ ctx[161].isWorst ? 'fg-worst-row' : '') + " svelte-11fx3n2"))) {
 				attr(tr, "class", tr_class_value);
 			}
 		},
@@ -10018,18 +11001,18 @@ function create_fragment(ctx) {
 	let t10;
 	let mounted;
 	let dispose;
-	let each_value_11 = ensure_array_like(/*TABS*/ ctx[48]);
+	let each_value_14 = ensure_array_like(/*TABS*/ ctx[53]);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_11.length; i += 1) {
-		each_blocks[i] = create_each_block_11(get_each_context_11(ctx, each_value_11, i));
+	for (let i = 0; i < each_value_14.length; i += 1) {
+		each_blocks[i] = create_each_block_14(get_each_context_14(ctx, each_value_14, i));
 	}
 
 	function select_block_type(ctx, dirty) {
 		if (/*tab*/ ctx[4] === 'dashboard') return create_if_block;
-		if (/*tab*/ ctx[4] === 'emergency') return create_if_block_29;
-		if (/*tab*/ ctx[4] === 'report') return create_if_block_33;
-		if (/*tab*/ ctx[4] === 'settings') return create_if_block_36;
+		if (/*tab*/ ctx[4] === 'emergency') return create_if_block_32;
+		if (/*tab*/ ctx[4] === 'report') return create_if_block_39;
+		if (/*tab*/ ctx[4] === 'settings') return create_if_block_42;
 	}
 
 	let current_block_type = select_block_type(ctx);
@@ -10043,7 +11026,7 @@ function create_fragment(ctx) {
 			span0.textContent = "🛡️";
 			t1 = space();
 			div2 = element("div");
-			div2.innerHTML = `<div class="fg-title svelte-vomya3">FieldGuard</div> <div class="fg-subtitle svelte-vomya3">Heat · Cold · Wind · Rain · Storm</div>`;
+			div2.innerHTML = `<div class="fg-title svelte-11fx3n2">FieldGuard</div> <div class="fg-subtitle svelte-11fx3n2">Heat · Cold · Wind · Rain · Storm</div>`;
 			t5 = space();
 			span1 = element("span");
 			t6 = text(t6_value);
@@ -10059,13 +11042,13 @@ function create_fragment(ctx) {
 
 			t10 = space();
 			if (if_block) if_block.c();
-			attr(span0, "class", "fg-logo svelte-vomya3");
-			attr(div2, "class", "fg-titlewrap svelte-vomya3");
-			attr(span1, "class", span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-vomya3");
-			attr(button, "class", "fg-settings-btn svelte-vomya3");
-			attr(div3, "class", "fg-header svelte-vomya3");
-			attr(div4, "class", "fg-tabs svelte-vomya3");
-			attr(section, "class", "plugin__content fieldguard svelte-vomya3");
+			attr(span0, "class", "fg-logo svelte-11fx3n2");
+			attr(div2, "class", "fg-titlewrap svelte-11fx3n2");
+			attr(span1, "class", span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-11fx3n2");
+			attr(button, "class", "fg-settings-btn svelte-11fx3n2");
+			attr(div3, "class", "fg-header svelte-11fx3n2");
+			attr(div4, "class", "fg-tabs svelte-11fx3n2");
+			attr(section, "class", "plugin__content fieldguard svelte-11fx3n2");
 		},
 		m(target, anchor) {
 			insert(target, section, anchor);
@@ -10092,7 +11075,7 @@ function create_fragment(ctx) {
 			if (if_block) if_block.m(section, null);
 
 			if (!mounted) {
-				dispose = listen(button, "click", /*click_handler*/ ctx[71]);
+				dispose = listen(button, "click", /*click_handler*/ ctx[78]);
 				mounted = true;
 			}
 		},
@@ -10101,23 +11084,23 @@ function create_fragment(ctx) {
 			? /*licenseTier*/ ctx[0] === 'site' ? 'SITE' : 'PRO'
 			: 'FREE') + "")) set_data(t6, t6_value);
 
-			if (dirty[0] & /*isPro*/ 8 && span1_class_value !== (span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-vomya3")) {
+			if (dirty[0] & /*isPro*/ 8 && span1_class_value !== (span1_class_value = "fg-tier " + (/*isPro*/ ctx[3] ? 'pro' : 'free') + " svelte-11fx3n2")) {
 				attr(span1, "class", span1_class_value);
 			}
 
 			if (dirty[0] & /*tab*/ 16 && t8_value !== (t8_value = (/*tab*/ ctx[4] === 'settings' ? '← Back' : '⚙ Config') + "")) set_data(t8, t8_value);
 
-			if (dirty[0] & /*tab*/ 16 | dirty[1] & /*TABS*/ 131072) {
-				each_value_11 = ensure_array_like(/*TABS*/ ctx[48]);
+			if (dirty[0] & /*tab*/ 16 | dirty[1] & /*TABS*/ 4194304) {
+				each_value_14 = ensure_array_like(/*TABS*/ ctx[53]);
 				let i;
 
-				for (i = 0; i < each_value_11.length; i += 1) {
-					const child_ctx = get_each_context_11(ctx, each_value_11, i);
+				for (i = 0; i < each_value_14.length; i += 1) {
+					const child_ctx = get_each_context_14(ctx, each_value_14, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_11(child_ctx);
+						each_blocks[i] = create_each_block_14(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(div4, null);
 					}
@@ -10127,7 +11110,7 @@ function create_fragment(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_11.length;
+				each_blocks.length = each_value_14.length;
 			}
 
 			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
@@ -10187,6 +11170,7 @@ function focusInput(node) {
 
 function instance($$self, $$props, $$invalidate) {
 	let isPro;
+	let isSite;
 	let units;
 	let tab = 'dashboard';
 	let lat = 23.6, lon = 58.6;
@@ -10206,7 +11190,11 @@ function instance($$self, $$props, $$invalidate) {
 	let coldResult = null;
 	let thunderResult = null;
 	let selectedHazard = 'heat';
+	let emgHazard = 'heat';
 	let modelResults = [];
+	let forecastList = [];
+	let forecastBusy = false;
+	let forecastNote = '';
 	let licenseKey = '';
 	let licenseTier = '';
 	let licenseExpires = '';
@@ -10308,7 +11296,9 @@ function instance($$self, $$props, $$invalidate) {
 		autoRefresh: false,
 		units: 'metric',
 		winterMode: 'auto',
-		lightningRadiusKm: 10
+		lightningRadiusKm: 10,
+		forecastAlerts: false,
+		forecastDays: 1
 	};
 
 	let settings = { ...DEFAULT_SETTINGS };
@@ -10358,6 +11348,257 @@ function instance($$self, $$props, $$invalidate) {
 		}
 	}
 
+	async function fetchForecastSeries() {
+		try {
+			const om = MODELS.find(x => x.key === selectedModel)?.om ?? 'best_match';
+			const days = Math.min(3, Math.max(1, settings.forecastDays || 1));
+			const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` + `&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cape` + `&wind_speed_unit=ms&forecast_days=${days}&models=${om}`;
+			const res = await fetch(url);
+			if (!res.ok) return null;
+			const j = await res.json();
+			const h = j && j.hourly;
+			if (!h || !Array.isArray(h.time) || !h.time.length) return null;
+			const n = h.time.length;
+			const at = (arr, i, d = 0) => Array.isArray(arr) && arr[i] != null ? arr[i] : d;
+			const series = [];
+
+			for (let i = 0; i < n; i++) {
+				series.push({
+					tempC: at(h.temperature_2m, i),
+					humidity: Math.min(100, Math.max(0, at(h.relative_humidity_2m, i, 50))),
+					windMs: Math.max(0, at(h.wind_speed_10m, i)),
+					solarWm2: Math.max(0, at(h.shortwave_radiation, i)),
+					rainMmH: Math.max(0, at(h.precipitation, i)),
+					capeJkg: Array.isArray(h.cape) && h.cape[i] != null
+					? Math.max(0, Math.round(h.cape[i]))
+					: undefined
+				});
+			}
+
+			return { times: h.time, series };
+		} catch {
+			return null;
+		}
+	}
+
+	function scanForecast(times, series) {
+		const nowMs = Date.now();
+
+		const windSev = l => ({
+			SAFE: 0,
+			CAUTION: 1,
+			WARNING: 2,
+			DANGER: 3
+		})[l] ?? 0;
+
+		const rainSev = l => ({
+			CLEAR: 0,
+			CAUTION: 1,
+			WARNING: 2,
+			DANGER: 3
+		})[l] ?? 0;
+
+		const coldSev = l => ({
+			SAFE: 0,
+			'MILD COLD': 0,
+			COOL: 1,
+			COLD: 2,
+			'VERY COLD': 3,
+			EXTREME: 4,
+			DANGER: 5
+		})[l] ?? 0;
+
+		const thunSev = l => ({
+			'N/A': 0,
+			LOW: 0,
+			MODERATE: 1,
+			HIGH: 2,
+			SEVERE: 3
+		})[l] ?? 0;
+
+		const solarSev = l => ({
+			NIGHT: 0,
+			LOW: 0,
+			MODERATE: 1,
+			HIGH: 2,
+			EXTREME: 3
+		})[l] ?? 0;
+
+		const defs = [
+			{
+				key: 'heat',
+				icon: '🌡️',
+				label: 'Heat',
+				enabled: true,
+				exceeds: a => a.heat.zone !== 'green',
+				sev: a => zoneSeverity(a.heat.zone),
+				lbl: a => ({
+					label: a.heat.zoneInfo.riskLabel,
+					color: a.heat.zoneInfo.color
+				})
+			},
+			{
+				key: 'wind',
+				icon: '💨',
+				label: 'Wind',
+				enabled: true,
+				exceeds: a => a.wind.exceedsThreshold,
+				sev: a => windSev(a.wind.riskLabel),
+				lbl: a => ({
+					label: a.wind.riskLabel,
+					color: a.wind.riskColor
+				})
+			},
+			{
+				key: 'rain',
+				icon: '🌧️',
+				label: 'Rain',
+				enabled: true,
+				exceeds: a => a.rain.exceedsThreshold,
+				sev: a => rainSev(a.rain.riskLabel),
+				lbl: a => ({
+					label: a.rain.riskLabel,
+					color: a.rain.riskColor
+				})
+			},
+			{
+				key: 'thunder',
+				icon: '⛈️',
+				label: 'Thunderstorm',
+				enabled: true,
+				exceeds: a => a.thunder.exceedsThreshold,
+				sev: a => thunSev(a.thunder.riskLabel),
+				lbl: a => ({
+					label: a.thunder.riskLabel,
+					color: a.thunder.riskColor
+				})
+			},
+			{
+				key: 'cold',
+				icon: '❄️',
+				label: 'Cold',
+				enabled: settings.winterMode !== 'off',
+				exceeds: a => a.cold.exceedsThreshold,
+				sev: a => coldSev(a.cold.riskLabel),
+				lbl: a => ({
+					label: a.cold.riskLabel,
+					color: a.cold.riskColor
+				})
+			},
+			{
+				key: 'solar',
+				icon: '☀️',
+				label: 'Solar',
+				enabled: true,
+				exceeds: (_a, inp, day) => solarSev(solarBand(inp.solarWm2, day).label) >= 2,
+				sev: (_a, inp, day) => solarSev(solarBand(inp.solarWm2, day).label),
+				lbl: (_a, inp, day) => solarBand(inp.solarWm2, day)
+			}
+		];
+
+		const out = [];
+
+		for (const d of defs) {
+			if (!d.enabled) continue;
+			let firstISO = null, firstLocal = null, hoursAway = null;
+			let peakSev = -1, peakLabel = '', peakColor = '';
+
+			for (let i = 0; i < times.length; i++) {
+				const t = new Date(times[i]);
+				const tMs = t.getTime();
+				if (tMs < nowMs - 30 * 60 * 1000) continue;
+				const day = isDaytime(lat, lon, t);
+				const a = assessAt(series[i], t);
+				if (!d.exceeds(a, series[i], day)) continue;
+
+				if (firstISO === null) {
+					firstISO = times[i];
+
+					firstLocal = t.toLocaleString([], {
+						weekday: 'short',
+						hour: '2-digit',
+						minute: '2-digit'
+					});
+
+					hoursAway = Math.max(0, Math.round((tMs - nowMs) / 3600000));
+				}
+
+				const s = d.sev(a, series[i], day);
+
+				if (s > peakSev) {
+					peakSev = s;
+					const info = d.lbl(a, series[i], day);
+					peakLabel = info.label;
+					peakColor = info.color;
+				}
+			}
+
+			if (firstISO !== null) {
+				out.push({
+					hazard: d.key,
+					icon: d.icon,
+					label: d.label,
+					willExceed: true,
+					firstISO,
+					firstLocal,
+					hoursAway,
+					peakLabel,
+					peakColor
+				});
+			}
+		}
+
+		out.sort((a, b) => (a.hoursAway ?? 0) - (b.hoursAway ?? 0));
+		return out;
+	}
+
+	async function runForecast() {
+		if (!isSite || !settings.forecastAlerts) {
+			$$invalidate(24, forecastList = []);
+			$$invalidate(26, forecastNote = '');
+			return;
+		}
+
+		$$invalidate(25, forecastBusy = true);
+		$$invalidate(26, forecastNote = '');
+
+		try {
+			const data = await fetchForecastSeries();
+
+			if (!data) {
+				$$invalidate(24, forecastList = []);
+				$$invalidate(26, forecastNote = 'Forecast unavailable for this model — try another.');
+				$$invalidate(25, forecastBusy = false);
+				return;
+			}
+
+			$$invalidate(24, forecastList = scanForecast(data.times, data.series));
+			const horizon = horizonLabel();
+
+			$$invalidate(26, forecastNote = forecastList.length
+			? `Next ${horizon}: ${forecastList.length} hazard${forecastList.length > 1 ? 's' : ''} forecast to cross thresholds.`
+			: `No threshold crossings forecast in the next ${horizon}.`);
+
+			const urgent = forecastList.find(f => (/DANGER|RED|PURPLE|BLACK|SEVERE|EXTREME|VERY COLD/).test(f.peakLabel));
+
+			if (settings.soundAlerts && urgent) {
+				triggerNotification(`⏱ Forecast: ${urgent.label} ${urgent.peakLabel}`, `Expected ${urgent.hoursAway === 0
+				? 'within the hour'
+				: `in ~${urgent.hoursAway} h`} (${urgent.firstLocal})`);
+			}
+		} catch {
+			$$invalidate(24, forecastList = []);
+			$$invalidate(26, forecastNote = 'Forecast scan failed.');
+		}
+
+		$$invalidate(25, forecastBusy = false);
+	}
+
+	function horizonLabel() {
+		const d = Math.min(3, Math.max(1, settings.forecastDays || 1));
+		return d === 1 ? '24 h' : `${d * 24} h`;
+	}
+
 	async function resolveCountry() {
 		const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
 		if (key === geocodedFor) return;
@@ -10377,12 +11618,9 @@ function instance($$self, $$props, $$invalidate) {
 		}
 	}
 
-	function processInputs(inputs) {
-		const now = new Date();
-		const localHour = now.getUTCHours() + lon / 15;
-		const month = now.getMonth() + 1;
-		$$invalidate(12, isDay = isDaytime(lat, lon, now));
-		$$invalidate(13, sunElevation = solarElevationDeg(lat, lon, now));
+	function assessAt(inputs, when) {
+		const localHour = when.getUTCHours() + lon / 15;
+		const month = when.getMonth() + 1;
 
 		return {
 			heat: assessHeatStress(inputs, settings.ppeProfile, localHour, month, activeBan),
@@ -10391,6 +11629,61 @@ function instance($$self, $$props, $$invalidate) {
 			cold: assessColdStress(inputs.tempC, inputs.windMs),
 			thunder: assessThunderstorm(inputs.capeJkg)
 		};
+	}
+
+	function processInputs(inputs) {
+		const now = new Date();
+		$$invalidate(12, isDay = isDaytime(lat, lon, now));
+		$$invalidate(13, sunElevation = solarElevationDeg(lat, lon, now));
+		return assessAt(inputs, now);
+	}
+
+	function currentHazardStatus(key) {
+		switch (key) {
+			case 'heat':
+				return heat
+				? {
+						label: heat.zoneInfo.riskLabel,
+						color: heat.zoneInfo.color
+					}
+				: null;
+			case 'wind':
+				return windResult
+				? {
+						label: windResult.riskLabel,
+						color: windResult.riskColor
+					}
+				: null;
+			case 'rain':
+				return rainResult
+				? {
+						label: rainResult.riskLabel,
+						color: rainResult.riskColor
+					}
+				: null;
+			case 'cold':
+				return coldResult && coldResult.active
+				? {
+						label: coldResult.riskLabel,
+						color: coldResult.riskColor
+					}
+				: null;
+			case 'thunder':
+				return thunderResult && thunderResult.available
+				? {
+						label: thunderResult.riskLabel,
+						color: thunderResult.riskColor
+					}
+				: null;
+			case 'solar':
+				if (!rawData) return null;
+				{
+					const b = solarBand(rawData.solarWm2, isDay);
+					return { label: b.label, color: b.color };
+				}
+			default:
+				return null;
+		}
 	}
 
 	function showColdCard(c) {
@@ -10447,7 +11740,7 @@ function instance($$self, $$props, $$invalidate) {
 				});
 			}
 
-			$$invalidate(22, modelResults = results);
+			$$invalidate(23, modelResults = results);
 
 			if (results.length === 1) {
 				results[0].isWorst = true;
@@ -10457,7 +11750,7 @@ function instance($$self, $$props, $$invalidate) {
 				$$invalidate(18, rainResult = results[0].rain);
 				$$invalidate(19, coldResult = results[0].cold);
 				$$invalidate(20, thunderResult = results[0].thunder);
-				$$invalidate(27, worstModelLabel = results[0].modelLabel);
+				$$invalidate(31, worstModelLabel = results[0].modelLabel);
 			} else {
 				const worstBy = (sel, better) => results.reduce((best, r) => better(sel(r), sel(best)) ? r : best, results[0]);
 
@@ -10484,7 +11777,7 @@ function instance($$self, $$props, $$invalidate) {
 				$$invalidate(18, rainResult = rainW.rain);
 				$$invalidate(19, coldResult = coldW.cold);
 				$$invalidate(20, thunderResult = capeW.thunder);
-				$$invalidate(27, worstModelLabel = heatW.modelLabel);
+				$$invalidate(31, worstModelLabel = heatW.modelLabel);
 
 				$$invalidate(15, rawData = {
 					tempC: heatW.raw.tempC,
@@ -10496,10 +11789,10 @@ function instance($$self, $$props, $$invalidate) {
 				});
 			}
 
-			$$invalidate(41, isStale = false);
+			$$invalidate(45, isStale = false);
 			if (rawData) cacheReading(rawData);
 
-			if (activeSiteId && heat) $$invalidate(43, bgStatus = {
+			if (activeSiteId && heat) $$invalidate(47, bgStatus = {
 				...bgStatus,
 				[activeSiteId]: {
 					color: heat.zoneInfo.color,
@@ -10509,6 +11802,7 @@ function instance($$self, $$props, $$invalidate) {
 			});
 
 			checkAlerts();
+			runForecast();
 		} catch(e) {
 			const cached = loadCachedReading();
 
@@ -10521,7 +11815,7 @@ function instance($$self, $$props, $$invalidate) {
 				$$invalidate(19, coldResult = cd);
 				$$invalidate(20, thunderResult = th);
 
-				$$invalidate(22, modelResults = [
+				$$invalidate(23, modelResults = [
 					{
 						modelKey: selectedModel,
 						modelLabel: 'cached',
@@ -10535,9 +11829,9 @@ function instance($$self, $$props, $$invalidate) {
 					}
 				]);
 
-				$$invalidate(27, worstModelLabel = 'cached');
-				$$invalidate(41, isStale = true);
-				$$invalidate(42, staleTime = cached.time);
+				$$invalidate(31, worstModelLabel = 'cached');
+				$$invalidate(45, isStale = true);
+				$$invalidate(46, staleTime = cached.time);
 				$$invalidate(9, error = '');
 			} else {
 				$$invalidate(9, error = 'Failed to fetch data. Check network or try a different model.');
@@ -10561,7 +11855,7 @@ function instance($$self, $$props, $$invalidate) {
 				: heat.apparentTempFinal + '°C'} | ${heat.zoneInfo.label}`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 
 			if (settings.soundAlerts && (heat.zone === 'red' || heat.zone === 'purple' || heat.zone === 'black')) {
 				triggerNotification(entry.type, entry.message);
@@ -10576,7 +11870,7 @@ function instance($$self, $$props, $$invalidate) {
 				message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
 		}
 
@@ -10588,7 +11882,7 @@ function instance($$self, $$props, $$invalidate) {
 				message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
 		}
 
@@ -10600,7 +11894,7 @@ function instance($$self, $$props, $$invalidate) {
 				message: `Wind chill ${fmtTemp(coldResult.windChillC, units)} — ${coldResult.frostbite}`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
 		}
 
@@ -10612,7 +11906,7 @@ function instance($$self, $$props, $$invalidate) {
 				message: `CAPE ${thunderResult.capeJkg} J/kg — ${thunderResult.instability}`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
 		}
 
@@ -10626,12 +11920,12 @@ function instance($$self, $$props, $$invalidate) {
 				message: `${rawData?.solarWm2 ?? 0} W/m² — high solar heat load`
 			};
 
-			$$invalidate(29, alertLog = [...alertLog, entry]);
+			$$invalidate(33, alertLog = [...alertLog, entry]);
 			if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
 		}
 
 		if (heat.isBanPeriod) {
-			$$invalidate(29, alertLog = [
+			$$invalidate(33, alertLog = [
 				...alertLog,
 				{
 					time,
@@ -10674,9 +11968,9 @@ function instance($$self, $$props, $$invalidate) {
 			const o = JSON.parse(s);
 
 			if (o && o.tier && o.expires && new Date(o.expires) > new Date()) {
-				$$invalidate(23, licenseKey = o.key || '');
+				$$invalidate(27, licenseKey = o.key || '');
 				$$invalidate(0, licenseTier = o.tier);
-				$$invalidate(24, licenseExpires = o.expires);
+				$$invalidate(28, licenseExpires = o.expires);
 			} else {
 				localStorage.removeItem('fieldguard_license');
 			}
@@ -10687,15 +11981,15 @@ function instance($$self, $$props, $$invalidate) {
 
 	async function activateLicense() {
 		const key = (licenseKey || '').trim().toUpperCase();
-		$$invalidate(23, licenseKey = key);
+		$$invalidate(27, licenseKey = key);
 
 		if (!(/^FGS?-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/).test(key)) {
-			$$invalidate(25, licenseMsg = 'Invalid key format — expected FG-XXXX-XXXX-XXXX');
+			$$invalidate(29, licenseMsg = 'Invalid key format — expected FG-XXXX-XXXX-XXXX');
 			return;
 		}
 
-		$$invalidate(26, licenseChecking = true);
-		$$invalidate(25, licenseMsg = 'Checking…');
+		$$invalidate(30, licenseChecking = true);
+		$$invalidate(29, licenseMsg = 'Checking…');
 
 		try {
 			const res = await fetch(LICENSE_API, {
@@ -10707,8 +12001,8 @@ function instance($$self, $$props, $$invalidate) {
 			const j = await res.json();
 
 			if (j && j.valid) {
-				$$invalidate(0, licenseTier = j.tier || 'pro');
-				$$invalidate(24, licenseExpires = j.expires || '');
+				$$invalidate(0, licenseTier = j.tier || 'individual');
+				$$invalidate(28, licenseExpires = j.expires || '');
 
 				try {
 					localStorage.setItem('fieldguard_license', JSON.stringify({
@@ -10720,29 +12014,29 @@ function instance($$self, $$props, $$invalidate) {
 					
 				}
 
-				$$invalidate(25, licenseMsg = '✓ Activated — Pro features unlocked');
+				$$invalidate(29, licenseMsg = '✓ Activated — Pro features unlocked');
 				refreshData();
 				listMonitors();
 			} else {
 				$$invalidate(0, licenseTier = '');
-				$$invalidate(24, licenseExpires = '');
+				$$invalidate(28, licenseExpires = '');
 
-				$$invalidate(25, licenseMsg = j && j.reason === 'expired'
+				$$invalidate(29, licenseMsg = j && j.reason === 'expired'
 				? 'This key has expired — please renew.'
 				: 'Key not found or invalid.');
 			}
 		} catch {
-			$$invalidate(25, licenseMsg = 'Could not reach the license server. Check your connection.');
+			$$invalidate(29, licenseMsg = 'Could not reach the license server. Check your connection.');
 		}
 
-		$$invalidate(26, licenseChecking = false);
+		$$invalidate(30, licenseChecking = false);
 	}
 
 	function deactivateLicense() {
 		$$invalidate(0, licenseTier = '');
-		$$invalidate(24, licenseExpires = '');
-		$$invalidate(23, licenseKey = '');
-		$$invalidate(25, licenseMsg = '');
+		$$invalidate(28, licenseExpires = '');
+		$$invalidate(27, licenseKey = '');
+		$$invalidate(29, licenseMsg = '');
 
 		try {
 			localStorage.removeItem('fieldguard_license');
@@ -10750,7 +12044,7 @@ function instance($$self, $$props, $$invalidate) {
 			
 		}
 
-		$$invalidate(34, monitoredSites = []);
+		$$invalidate(38, monitoredSites = []);
 		refreshData();
 	}
 
@@ -10768,7 +12062,7 @@ function instance($$self, $$props, $$invalidate) {
 
 	function loadMonitorEmail() {
 		try {
-			$$invalidate(31, alertEmail = localStorage.getItem('fieldguard_alert_email') || '');
+			$$invalidate(35, alertEmail = localStorage.getItem('fieldguard_alert_email') || '');
 		} catch {
 			
 		}
@@ -10776,31 +12070,31 @@ function instance($$self, $$props, $$invalidate) {
 
 	async function listMonitors() {
 		if (!licenseKey) {
-			$$invalidate(34, monitoredSites = []);
+			$$invalidate(38, monitoredSites = []);
 			return;
 		}
 
 		try {
 			const r = await fetch(`${MONITOR_API}/monitors?key=${encodeURIComponent(licenseKey)}`);
 			const j = await r.json();
-			$$invalidate(34, monitoredSites = Array.isArray(j.monitors) ? j.monitors : []);
+			$$invalidate(38, monitoredSites = Array.isArray(j.monitors) ? j.monitors : []);
 		} catch {
 			
 		}
 	}
 
 	async function register24() {
-		$$invalidate(32, monitorMsg = '');
+		$$invalidate(36, monitorMsg = '');
 
 		if (!isPro) {
-			$$invalidate(32, monitorMsg = '24/7 email alerts require a Pro or Site license.');
+			$$invalidate(36, monitorMsg = '24/7 email alerts require a Pro or Site license.');
 			return;
 		}
 
 		const email = (alertEmail || '').trim();
 
 		if (!(/^[^@\s]+@[^@\s]+\.[^@\s]+$/).test(email)) {
-			$$invalidate(32, monitorMsg = 'Enter a valid email address.');
+			$$invalidate(36, monitorMsg = 'Enter a valid email address.');
 			return;
 		}
 
@@ -10810,7 +12104,7 @@ function instance($$self, $$props, $$invalidate) {
 			
 		}
 
-		$$invalidate(33, monitorBusy = true);
+		$$invalidate(37, monitorBusy = true);
 
 		try {
 			const r = await fetch(`${MONITOR_API}/monitor`, {
@@ -10831,16 +12125,16 @@ function instance($$self, $$props, $$invalidate) {
 			const j = await r.json();
 
 			if (r.ok && j.ok) {
-				$$invalidate(32, monitorMsg = `✓ Monitored 24/7 — alerts email to ${email}`);
+				$$invalidate(36, monitorMsg = `✓ Monitored 24/7 — alerts email to ${email}`);
 				await listMonitors();
 			} else {
-				$$invalidate(32, monitorMsg = j.error || 'Could not register this site.');
+				$$invalidate(36, monitorMsg = j.error || 'Could not register this site.');
 			}
 		} catch {
-			$$invalidate(32, monitorMsg = 'Could not reach the monitoring server.');
+			$$invalidate(36, monitorMsg = 'Could not reach the monitoring server.');
 		}
 
-		$$invalidate(33, monitorBusy = false);
+		$$invalidate(37, monitorBusy = false);
 	}
 
 	async function removeMonitor(id) {
@@ -10852,7 +12146,8 @@ function instance($$self, $$props, $$invalidate) {
 		}
 	}
 
-	function generateReport() {
+	async function generateReport() {
+		if (isSite && settings.forecastAlerts) await runForecast();
 		const today = new Date();
 		const weekAgo = new Date(today);
 		weekAgo.setDate(today.getDate() - 7);
@@ -10879,6 +12174,46 @@ function instance($$self, $$props, $$invalidate) {
 			action: heat?.zoneInfo.mandatoryControls[0] ?? ''
 		}));
 
+		const hazardSnapshot = windResult && rainResult
+		? {
+				wind: {
+					speed: fmtWind(rawData?.windMs ?? 0, units),
+					label: windResult.riskLabel,
+					beaufort: `Bft ${windResult.beaufort} (${windResult.beaufortDesc})`
+				},
+				rain: {
+					rate: fmtRain(rawData?.rainMmH ?? 0, units),
+					intensity: rainResult.intensityLabel,
+					label: rainResult.riskLabel
+				},
+				thunder: {
+					available: !!thunderResult?.available,
+					cape: `${thunderResult?.capeJkg ?? 0} J/kg`,
+					label: thunderResult?.riskLabel ?? 'N/A',
+					instability: thunderResult?.instability ?? ''
+				},
+				cold: {
+					active: !!coldResult?.active,
+					windChill: fmtTemp(coldResult?.windChillC ?? 0, units),
+					label: coldResult?.riskLabel ?? '',
+					frostbite: coldResult?.frostbite ?? ''
+				},
+				solar: {
+					irradiance: `${rawData?.solarWm2 ?? 0} W/m²`,
+					label: solarBand(rawData?.solarWm2 ?? 0, isDay).label,
+					period: isDay ? 'Daytime' : 'Night'
+				}
+			}
+		: undefined;
+
+		const forecastRows = forecastList.map(f => ({
+			icon: f.icon,
+			label: f.label,
+			peak: f.peakLabel,
+			hoursAway: f.hoursAway ?? 0,
+			when: f.firstLocal ?? ''
+		}));
+
 		const rd = {
 			...reportMeta,
 			siteAddress: locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
@@ -10896,10 +12231,14 @@ function instance($$self, $$props, $$invalidate) {
 			cumulativeSuspensionHours: wbgtLog.reduce((s, e) => s + e.durationH, 0),
 			forecastNarrative: `FieldGuard worst-case analysis at ${locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`} ` + `shows ${heat?.zoneInfo.riskLabel ?? 'N/A'} zone (Apparent Temp: ${heat?.apparentTempFinal === 999
 			? 'NO WORK'
-			: (heat?.apparentTempFinal ?? 'N/A') + '°C'}, ` + `WBGT+PPE: ${heat?.wbgtAdjusted ?? 'N/A'}°C). ${heat?.zoneInfo.mandatoryControls[0] ?? ''}`
+			: (heat?.apparentTempFinal ?? 'N/A') + '°C'}, ` + `WBGT+PPE: ${heat?.wbgtAdjusted ?? 'N/A'}°C). ${heat?.zoneInfo.mandatoryControls[0] ?? ''}`,
+			hazardSnapshot,
+			forecastEnabled: isSite && settings.forecastAlerts,
+			forecastHorizon: horizonLabel(),
+			forecastRows
 		};
 
-		$$invalidate(30, reportText = generateWeeklyReport(rd));
+		$$invalidate(34, reportText = generateWeeklyReport(rd));
 	}
 
 	function copyReport() {
@@ -10918,7 +12257,7 @@ function instance($$self, $$props, $$invalidate) {
 	function loadSites() {
 		try {
 			const s = localStorage.getItem('fieldguard_sites');
-			if (s) $$invalidate(35, savedSites = JSON.parse(s));
+			if (s) $$invalidate(39, savedSites = JSON.parse(s));
 		} catch {
 			
 		}
@@ -10940,9 +12279,9 @@ function instance($$self, $$props, $$invalidate) {
 		? locationName.split(',')[0]
 		: `Site ${savedSites.length + 1}`);
 
-		$$invalidate(35, savedSites = [...savedSites, { id, name, lat, lon }]);
-		$$invalidate(36, activeSiteId = id);
-		$$invalidate(37, newSiteName = '');
+		$$invalidate(39, savedSites = [...savedSites, { id, name, lat, lon }]);
+		$$invalidate(40, activeSiteId = id);
+		$$invalidate(41, newSiteName = '');
 		persistSites();
 	}
 
@@ -10964,10 +12303,10 @@ function instance($$self, $$props, $$invalidate) {
 
 		const id = `${Date.now()}`;
 		const name = (newSiteName || '').trim() || `${la.toFixed(3)}, ${lo.toFixed(3)}`;
-		$$invalidate(35, savedSites = [...savedSites, { id, name, lat: la, lon: lo }]);
-		$$invalidate(36, activeSiteId = id);
-		$$invalidate(37, newSiteName = '');
-		$$invalidate(38, coordInput = '');
+		$$invalidate(39, savedSites = [...savedSites, { id, name, lat: la, lon: lo }]);
+		$$invalidate(40, activeSiteId = id);
+		$$invalidate(41, newSiteName = '');
+		$$invalidate(42, coordInput = '');
 		$$invalidate(5, lat = la);
 		$$invalidate(6, lon = lo);
 		$$invalidate(7, locationName = name);
@@ -10978,8 +12317,8 @@ function instance($$self, $$props, $$invalidate) {
 	}
 
 	function startRename(s) {
-		$$invalidate(39, editingSiteId = s.id);
-		$$invalidate(40, editName = s.name);
+		$$invalidate(43, editingSiteId = s.id);
+		$$invalidate(44, editName = s.name);
 	}
 
 	function commitRename() {
@@ -10987,16 +12326,16 @@ function instance($$self, $$props, $$invalidate) {
 		const nm = (editName || '').trim();
 
 		if (nm) {
-			$$invalidate(35, savedSites = savedSites.map(x => x.id === editingSiteId ? { ...x, name: nm } : x));
+			$$invalidate(39, savedSites = savedSites.map(x => x.id === editingSiteId ? { ...x, name: nm } : x));
 			if (activeSiteId === editingSiteId) $$invalidate(7, locationName = nm);
 			persistSites();
 		}
 
-		$$invalidate(39, editingSiteId = '');
+		$$invalidate(43, editingSiteId = '');
 	}
 
 	function selectSite(s) {
-		$$invalidate(36, activeSiteId = s.id);
+		$$invalidate(40, activeSiteId = s.id);
 		$$invalidate(11, locked = true);
 		$$invalidate(5, lat = s.lat);
 		$$invalidate(6, lon = s.lon);
@@ -11006,8 +12345,8 @@ function instance($$self, $$props, $$invalidate) {
 	}
 
 	function removeSite(s) {
-		$$invalidate(35, savedSites = savedSites.filter(x => x.id !== s.id));
-		if (activeSiteId === s.id) $$invalidate(36, activeSiteId = '');
+		$$invalidate(39, savedSites = savedSites.filter(x => x.id !== s.id));
+		if (activeSiteId === s.id) $$invalidate(40, activeSiteId = '');
 		persistSites();
 	}
 
@@ -11087,7 +12426,7 @@ function instance($$self, $$props, $$invalidate) {
 				const now = new Date();
 				const h = assessHeatStress(inputs, settings.ppeProfile, now.getUTCHours() + s.lon / 15, now.getMonth() + 1, null);
 
-				$$invalidate(43, bgStatus = {
+				$$invalidate(47, bgStatus = {
 					...bgStatus,
 					[s.id]: {
 						color: h.zoneInfo.color,
@@ -11183,11 +12522,11 @@ function instance($$self, $$props, $$invalidate) {
 
 	function input_input_handler() {
 		editName = this.value;
-		$$invalidate(40, editName);
+		$$invalidate(44, editName);
 	}
 
 	const keydown_handler = e => {
-		if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') $$invalidate(39, editingSiteId = '');
+		if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') $$invalidate(43, editingSiteId = '');
 	};
 
 	const click_handler_3 = s => removeSite(s);
@@ -11196,20 +12535,20 @@ function instance($$self, $$props, $$invalidate) {
 
 	function input0_input_handler() {
 		newSiteName = this.value;
-		$$invalidate(37, newSiteName);
+		$$invalidate(41, newSiteName);
 	}
 
 	function input1_input_handler() {
 		coordInput = this.value;
-		$$invalidate(38, coordInput);
+		$$invalidate(42, coordInput);
 	}
 
 	const keydown_handler_1 = e => e.key === 'Enter' && addSiteByCoords();
 
 	function select_change_handler() {
 		selectedModel = select_value(this);
-		$$invalidate(28, selectedModel);
-		$$invalidate(49, MODELS);
+		$$invalidate(32, selectedModel);
+		$$invalidate(54, MODELS);
 	}
 
 	function input_change_handler() {
@@ -11226,70 +12565,71 @@ function instance($$self, $$props, $$invalidate) {
 	const click_handler_11 = () => $$invalidate(4, tab = 'settings');
 	const click_handler_12 = () => $$invalidate(4, tab = 'settings');
 	const click_handler_13 = () => $$invalidate(4, tab = 'settings');
+	const click_handler_14 = hz => $$invalidate(22, emgHazard = hz.key);
 
 	function input0_input_handler_1() {
 		reportMeta.projectName = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input1_input_handler_1() {
 		reportMeta.contractNumber = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input2_input_handler() {
 		reportMeta.country = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input3_input_handler() {
 		reportMeta.clientName = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input4_input_handler() {
 		reportMeta.contractorName = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input5_input_handler() {
 		reportMeta.hseManagerName = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input6_input_handler() {
 		reportMeta.regulatoryRef = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input7_input_handler() {
 		reportMeta.banStart = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input8_input_handler() {
 		reportMeta.banEnd = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input9_input_handler() {
 		reportMeta.banMonths = this.value;
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function select_change_handler_1() {
 		reportMeta.fidic = select_value(this);
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input10_input_handler() {
 		reportMeta.delayDays = to_number(this.value);
-		$$invalidate(44, reportMeta);
+		$$invalidate(48, reportMeta);
 	}
 
 	function input_input_handler_1() {
 		licenseKey = this.value;
-		$$invalidate(23, licenseKey);
+		$$invalidate(27, licenseKey);
 	}
 
 	const keydown_handler_2 = e => {
@@ -11371,20 +12711,34 @@ function instance($$self, $$props, $$invalidate) {
 		$$invalidate(2, settings);
 	}
 
-	function input_input_handler_2() {
-		alertEmail = this.value;
-		$$invalidate(31, alertEmail);
+	function input14_change_handler() {
+		settings.forecastAlerts = this.checked;
+		$$invalidate(2, settings);
 	}
 
-	const click_handler_14 = m => removeMonitor(m.id);
+	function select_change_handler_2() {
+		settings.forecastDays = select_value(this);
+		$$invalidate(2, settings);
+	}
+
+	function input_input_handler_2() {
+		alertEmail = this.value;
+		$$invalidate(35, alertEmail);
+	}
+
+	const click_handler_15 = m => removeMonitor(m.id);
 
 	$$self.$$.update = () => {
 		if ($$self.$$.dirty[0] & /*licenseTier*/ 1) {
-			$$invalidate(3, isPro = licenseTier === 'individual' || licenseTier === 'pro' || licenseTier === 'site');
+			$$invalidate(3, isPro = licenseTier === 'individual' || licenseTier === 'site');
+		}
+
+		if ($$self.$$.dirty[0] & /*licenseTier*/ 1) {
+			$$invalidate(49, isSite = licenseTier === 'site');
 		}
 
 		if ($$self.$$.dirty[0] & /*isPro, settings*/ 12) {
-			$$invalidate(45, units = isPro && settings.units === 'imperial'
+			$$invalidate(50, units = isPro && settings.units === 'imperial'
 			? 'imperial'
 			: 'metric');
 		}
@@ -11417,7 +12771,11 @@ function instance($$self, $$props, $$invalidate) {
 		coldResult,
 		thunderResult,
 		selectedHazard,
+		emgHazard,
 		modelResults,
+		forecastList,
+		forecastBusy,
+		forecastNote,
 		licenseKey,
 		licenseExpires,
 		licenseMsg,
@@ -11440,11 +12798,14 @@ function instance($$self, $$props, $$invalidate) {
 		staleTime,
 		bgStatus,
 		reportMeta,
+		isSite,
 		units,
 		maxSites,
 		canAddSite,
 		TABS,
 		MODELS,
+		horizonLabel,
+		currentHazardStatus,
 		showColdCard,
 		refreshData,
 		saveSettings,
@@ -11488,6 +12849,7 @@ function instance($$self, $$props, $$invalidate) {
 		click_handler_11,
 		click_handler_12,
 		click_handler_13,
+		click_handler_14,
 		input0_input_handler_1,
 		input1_input_handler_1,
 		input2_input_handler,
@@ -11518,19 +12880,21 @@ function instance($$self, $$props, $$invalidate) {
 		input11_change_input_handler,
 		input12_change_handler,
 		input13_change_handler,
+		input14_change_handler,
+		select_change_handler_2,
 		input_input_handler_2,
-		click_handler_14
+		click_handler_15
 	];
 }
 
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 70 }, add_css, [-1, -1, -1, -1, -1, -1]);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 77 }, add_css, [-1, -1, -1, -1, -1, -1, -1]);
 	}
 
 	get onopen() {
-		return this.$$.ctx[70];
+		return this.$$.ctx[77];
 	}
 }
 

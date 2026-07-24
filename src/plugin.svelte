@@ -113,6 +113,27 @@
         </button>
       </div>
 
+      <!-- FORECAST WATCH (Site tier) — next hour / day / days lookahead -->
+      {#if isSite && settings.forecastAlerts}
+        <div class="fg-card fg-forecast" style="border-color:{forecastList[0]?.peakColor || '#334155'}">
+          <div class="fg-card-header">⏱ Forecast Watch — next {horizonLabel()}
+            {#if forecastBusy}<span class="fg-fc-busy">scanning…</span>{/if}
+          </div>
+          {#if forecastList.length === 0}
+            <div class="fg-empty" style="padding:8px 12px">{forecastNote || '✓ No threshold crossings forecast.'}</div>
+          {:else}
+            {#each forecastList as f}
+              <div class="fg-fc-row">
+                <span class="fg-fc-ic">{f.icon}</span>
+                <span class="fg-fc-name">{f.label}</span>
+                <span class="fg-fc-badge" style="background:{f.peakColor}">{f.peakLabel}</span>
+                <span class="fg-fc-when">{f.hoursAway === 0 ? 'within 1 h' : `in ~${f.hoursAway} h`}<br/><small>{f.firstLocal}</small></span>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+
       {#if selectedHazard === 'heat'}
       <!-- MAIN ZONE BANNER -->
       <div class="fg-zone-banner" style="background:{heat.zoneInfo.bgColor};border-color:{heat.zoneInfo.color}">
@@ -400,28 +421,47 @@
         <button class="pf-btn" on:click={() => tab = 'settings'}>Upgrade</button>
       </div>
     {:else}
-    <div class="fg-section-title">🚨 Emergency Response</div>
+    <div class="fg-section-title">🚨 Emergency Response — All Hazards</div>
 
-    <div class="fg-emergency-card">
-      <div class="fg-emg-title">⚠ Heat Stress Is Life-Threatening</div>
-      <div class="fg-emg-sub">The body starts shutting down and cannot recover without help.</div>
-
-      <div class="fg-emg-section">
-        <div class="fg-emg-label">🔴 SYMPTOMS TO MONITOR (every 2 hours)</div>
-        {#each HEAT_STRESS_SYMPTOMS as s}
-          <div class="fg-emg-item">● {s}</div>
-        {/each}
-      </div>
-
-      <div class="fg-emg-section">
-        <div class="fg-emg-label">🚑 IMMEDIATE RESPONSE STEPS</div>
-        {#each EMERGENCY_RESPONSE as step, i}
-          <div class="fg-emg-step {step.includes('SEVERE') ? 'fg-emg-critical' : ''}">
-            <span class="fg-emg-num">{i+1}</span> {step}
-          </div>
-        {/each}
-      </div>
+    <!-- Jump strip: tap a hazard to scroll to its card -->
+    <div class="fg-emg-jump">
+      {#each HAZARD_EMERGENCIES as hz}
+        {@const st = currentHazardStatus(hz.key)}
+        <button class="fg-emg-chip {emgHazard === hz.key ? 'sel' : ''}" style={st ? `border-color:${st.color}` : ''} on:click={() => emgHazard = hz.key}>
+          <span>{hz.icon}</span>
+          {#if st}<span class="fg-emg-chip-st" style="color:{st.color}">{st.label}</span>{/if}
+        </button>
+      {/each}
     </div>
+
+    {#each HAZARD_EMERGENCIES as hz}
+      {#if emgHazard === hz.key}
+        {@const st = currentHazardStatus(hz.key)}
+        <div class="fg-emergency-card" style={st ? `border-color:${st.color}` : ''}>
+          <div class="fg-emg-title">
+            {hz.icon} {hz.title} Is Life-Threatening
+            {#if st}<span class="fg-badge" style="background:{st.color};margin-left:auto">{st.label}</span>{/if}
+          </div>
+          <div class="fg-emg-sub">{hz.danger}</div>
+
+          <div class="fg-emg-section">
+            <div class="fg-emg-label">🔴 {hz.signsLabel}</div>
+            {#each hz.signs as s}
+              <div class="fg-emg-item">● {s}</div>
+            {/each}
+          </div>
+
+          <div class="fg-emg-section">
+            <div class="fg-emg-label">🚑 IMMEDIATE RESPONSE STEPS</div>
+            {#each hz.response as step, i}
+              <div class="fg-emg-step {/SEVERE|IMMEDIATE MEDICAL|EMERGENCY MEDICAL/.test(step) ? 'fg-emg-critical' : ''}">
+                <span class="fg-emg-num">{i+1}</span> {step}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    {/each}
 
     <div class="fg-card" style="border-color:#d97706">
       <div class="fg-card-header">📋 Alerts Log (This Session)
@@ -618,6 +658,24 @@
         <input type="checkbox" bind:checked={settings.autoRefresh} on:change={setupAutoRefresh} disabled={!isPro} />
         Auto-refresh + background site monitor (every 15 min, tab open){#if !isPro} <span class="fg-pro-tag">PRO</span>{/if}
       </label>
+      <label class="fg-toggle-label">
+        <input type="checkbox" bind:checked={settings.forecastAlerts} on:change={saveSettings} disabled={!isSite} />
+        Forecast Watch — alert me before hazards hit (lookahead){#if !isSite} <span class="fg-pro-tag">SITE</span>{/if}
+      </label>
+      {#if isSite && settings.forecastAlerts}
+        <label>Lookahead horizon
+          <div class="fg-slider-row">
+            <select bind:value={settings.forecastDays} on:change={saveSettings} style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:3px 6px;border-radius:4px;font-size:11px">
+              <option value={1}>Next 24 hours (1 day)</option>
+              <option value={2}>Next 48 hours (2 days)</option>
+              <option value={3}>Next 72 hours (3 days)</option>
+            </select>
+          </div>
+        </label>
+        <div class="fg-note">Scans the hourly forecast for the current model and flags the first hour each hazard is predicted to cross your warning/danger thresholds.</div>
+      {:else if !isSite}
+        <div class="fg-note">Forecast Watch (hourly lookahead alerts) is available on the <b>Site</b> licence tier.</div>
+      {/if}
     </div>
 
     <div class="fg-settings-section">
@@ -658,11 +716,12 @@
   import {
     assessHeatStress, assessWind, assessRain, assessColdStress, assessThunderstorm,
     PPE_PROFILES, ZONES,
-    HEAT_STRESS_SYMPTOMS, EMERGENCY_RESPONSE,
+    HAZARD_EMERGENCIES,
     fmtTemp, fmtWind, fmtWindSecondary, fmtRain, fmtDistance,
     isDaytime, solarElevationDeg, solarBand, getMiddayBan,
     type WeatherInputs, type HeatAssessment, type WindResult, type RainResult,
     type ColdResult, type ThunderResult, type UnitSystem, type MiddayBan,
+    type HazardForecast, type HazardEmergency,
   } from './hse-calculations';
 
   import { generateWeeklyReport, type WeeklyReportData } from './report-generator';
@@ -686,18 +745,24 @@
   let coldResult: ColdResult | null = null;
   let thunderResult: ThunderResult | null = null;
   let selectedHazard = 'heat';   // which of the 4 hazard squares is expanded
+  let emgHazard: HazardEmergency['key'] = 'heat';   // which SOS hazard card is open
   let modelResults: any[] = [];
+  let forecastList: HazardForecast[] = [];   // upcoming threshold crossings (forecast lookahead)
+  let forecastBusy = false;
+  let forecastNote = '';                      // status line for the forecast card
 
   // ── License / tier ─────────────────────────────────────────
   // Pro features (imperial units, multi-model worst-case, cold-stress/winter,
   // lightning, custom thresholds, ISO 7933 report) unlock with a valid key,
   // validated at https://fieldguard-hse.com/api/validate.
   let licenseKey = '';
-  let licenseTier = '';            // '' (free) | 'pro' | 'site'
+  let licenseTier = '';            // '' (free) | 'individual' | 'site'
   let licenseExpires = '';
   let licenseMsg = '';
   let licenseChecking = false;
-  $: isPro = licenseTier === 'individual' || licenseTier === 'pro' || licenseTier === 'site';
+  $: isPro = licenseTier === 'individual' || licenseTier === 'site';
+  // Forecast Watch (hourly lookahead alerts) is a SITE-tier-only feature.
+  $: isSite = licenseTier === 'site';
   // Imperial display is a Pro feature — free tier is always metric.
   $: units = (isPro && settings.units === 'imperial' ? 'imperial' : 'metric') as UnitSystem;
   // Worst-case multi-model engine is Pro — free tier uses a single model.
@@ -767,6 +832,8 @@
     units: 'metric' as UnitSystem,   // 'metric' (°C, m/s) or 'imperial' (°F, mph) — Pro
     winterMode: 'auto',              // 'auto' (show cold card when ≤10°C) | 'on' | 'off' — Pro
     lightningRadiusKm: 10,           // lightning safety radius (10 km ≈ 30-30 rule) — Pro
+    forecastAlerts: false,           // scan the hourly forecast for upcoming threshold crossings — Pro
+    forecastDays: 1,                 // lookahead horizon: 1, 2 or 3 days — Pro
   };
   let settings = { ...DEFAULT_SETTINGS };
 
@@ -815,6 +882,140 @@
     }
   }
 
+  // ── Forecast lookahead ─────────────────────────────────────────────────────
+  // Pulls the FULL hourly series (not just "now") for the selected model and scans
+  // the next 1–3 days for the first hour each hazard is predicted to cross its
+  // warn/danger threshold. Powers the "Forecast Watch" card and the report outlook.
+  async function fetchForecastSeries(): Promise<{ times: string[]; series: WeatherInputs[] } | null> {
+    try {
+      const om = MODELS.find(x => x.key === selectedModel)?.om ?? 'best_match';
+      const days = Math.min(3, Math.max(1, settings.forecastDays || 1));
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cape` +
+        `&wind_speed_unit=ms&forecast_days=${days}&models=${om}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const j = await res.json();
+      const h = j && j.hourly;
+      if (!h || !Array.isArray(h.time) || !h.time.length) return null;
+      const n = h.time.length;
+      const at = (arr: any, i: number, d = 0) => (Array.isArray(arr) && arr[i] != null ? arr[i] : d);
+      const series: WeatherInputs[] = [];
+      for (let i = 0; i < n; i++) {
+        series.push({
+          tempC: at(h.temperature_2m, i),
+          humidity: Math.min(100, Math.max(0, at(h.relative_humidity_2m, i, 50))),
+          windMs: Math.max(0, at(h.wind_speed_10m, i)),
+          solarWm2: Math.max(0, at(h.shortwave_radiation, i)),
+          rainMmH: Math.max(0, at(h.precipitation, i)),
+          capeJkg: Array.isArray(h.cape) && h.cape[i] != null ? Math.max(0, Math.round(h.cape[i])) : undefined,
+        });
+      }
+      return { times: h.time as string[], series };
+    } catch {
+      return null;
+    }
+  }
+
+  // Scan the hourly window → first threshold crossing + peak severity per hazard.
+  function scanForecast(times: string[], series: WeatherInputs[]): HazardForecast[] {
+    const nowMs = Date.now();
+    const windSev = (l: string) => ({ SAFE: 0, CAUTION: 1, WARNING: 2, DANGER: 3 }[l] ?? 0);
+    const rainSev = (l: string) => ({ CLEAR: 0, CAUTION: 1, WARNING: 2, DANGER: 3 }[l] ?? 0);
+    const coldSev = (l: string) => ({ SAFE: 0, 'MILD COLD': 0, COOL: 1, COLD: 2, 'VERY COLD': 3, EXTREME: 4, DANGER: 5 }[l] ?? 0);
+    const thunSev = (l: string) => ({ 'N/A': 0, LOW: 0, MODERATE: 1, HIGH: 2, SEVERE: 3 }[l] ?? 0);
+    const solarSev = (l: string) => ({ NIGHT: 0, LOW: 0, MODERATE: 1, HIGH: 2, EXTREME: 3 }[l] ?? 0);
+
+    interface Def {
+      key: HazardForecast['hazard']; icon: string; label: string; enabled: boolean;
+      exceeds: (a: ReturnType<typeof assessAt>, inp: WeatherInputs, day: boolean) => boolean;
+      sev: (a: ReturnType<typeof assessAt>, inp: WeatherInputs, day: boolean) => number;
+      lbl: (a: ReturnType<typeof assessAt>, inp: WeatherInputs, day: boolean) => { label: string; color: string };
+    }
+    const defs: Def[] = [
+      { key: 'heat', icon: '🌡️', label: 'Heat', enabled: true,
+        exceeds: a => a.heat.zone !== 'green',
+        sev: a => zoneSeverity(a.heat.zone),
+        lbl: a => ({ label: a.heat.zoneInfo.riskLabel, color: a.heat.zoneInfo.color }) },
+      { key: 'wind', icon: '💨', label: 'Wind', enabled: true,
+        exceeds: a => a.wind.exceedsThreshold,
+        sev: a => windSev(a.wind.riskLabel),
+        lbl: a => ({ label: a.wind.riskLabel, color: a.wind.riskColor }) },
+      { key: 'rain', icon: '🌧️', label: 'Rain', enabled: true,
+        exceeds: a => a.rain.exceedsThreshold,
+        sev: a => rainSev(a.rain.riskLabel),
+        lbl: a => ({ label: a.rain.riskLabel, color: a.rain.riskColor }) },
+      { key: 'thunder', icon: '⛈️', label: 'Thunderstorm', enabled: true,
+        exceeds: a => a.thunder.exceedsThreshold,
+        sev: a => thunSev(a.thunder.riskLabel),
+        lbl: a => ({ label: a.thunder.riskLabel, color: a.thunder.riskColor }) },
+      { key: 'cold', icon: '❄️', label: 'Cold', enabled: settings.winterMode !== 'off',
+        exceeds: a => a.cold.exceedsThreshold,
+        sev: a => coldSev(a.cold.riskLabel),
+        lbl: a => ({ label: a.cold.riskLabel, color: a.cold.riskColor }) },
+      { key: 'solar', icon: '☀️', label: 'Solar', enabled: true,
+        exceeds: (_a, inp, day) => solarSev(solarBand(inp.solarWm2, day).label) >= 2,
+        sev: (_a, inp, day) => solarSev(solarBand(inp.solarWm2, day).label),
+        lbl: (_a, inp, day) => solarBand(inp.solarWm2, day) },
+    ];
+
+    const out: HazardForecast[] = [];
+    for (const d of defs) {
+      if (!d.enabled) continue;
+      let firstISO: string | null = null, firstLocal: string | null = null, hoursAway: number | null = null;
+      let peakSev = -1, peakLabel = '', peakColor = '';
+      for (let i = 0; i < times.length; i++) {
+        const t = new Date(times[i]);
+        const tMs = t.getTime();
+        if (tMs < nowMs - 30 * 60 * 1000) continue;   // skip hours already past
+        const day = isDaytime(lat, lon, t);
+        const a = assessAt(series[i], t);
+        if (!d.exceeds(a, series[i], day)) continue;
+        if (firstISO === null) {
+          firstISO = times[i];
+          firstLocal = t.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+          hoursAway = Math.max(0, Math.round((tMs - nowMs) / 3600000));
+        }
+        const s = d.sev(a, series[i], day);
+        if (s > peakSev) { peakSev = s; const info = d.lbl(a, series[i], day); peakLabel = info.label; peakColor = info.color; }
+      }
+      if (firstISO !== null) {
+        out.push({ hazard: d.key, icon: d.icon, label: d.label, willExceed: true, firstISO, firstLocal, hoursAway, peakLabel, peakColor });
+      }
+    }
+    // Soonest first, then most severe.
+    out.sort((a, b) => (a.hoursAway ?? 0) - (b.hoursAway ?? 0));
+    return out;
+  }
+
+  async function runForecast() {
+    if (!isSite || !settings.forecastAlerts) { forecastList = []; forecastNote = ''; return; }
+    forecastBusy = true; forecastNote = '';
+    try {
+      const data = await fetchForecastSeries();
+      if (!data) { forecastList = []; forecastNote = 'Forecast unavailable for this model — try another.'; forecastBusy = false; return; }
+      forecastList = scanForecast(data.times, data.series);
+      const horizon = horizonLabel();
+      forecastNote = forecastList.length
+        ? `Next ${horizon}: ${forecastList.length} hazard${forecastList.length > 1 ? 's' : ''} forecast to cross thresholds.`
+        : `No threshold crossings forecast in the next ${horizon}.`;
+      // Notify once for the soonest DANGER-grade forecast hazard.
+      const urgent = forecastList.find(f => /DANGER|RED|PURPLE|BLACK|SEVERE|EXTREME|VERY COLD/.test(f.peakLabel));
+      if (settings.soundAlerts && urgent) {
+        triggerNotification(`⏱ Forecast: ${urgent.label} ${urgent.peakLabel}`,
+          `Expected ${urgent.hoursAway === 0 ? 'within the hour' : `in ~${urgent.hoursAway} h`} (${urgent.firstLocal})`);
+      }
+    } catch {
+      forecastList = []; forecastNote = 'Forecast scan failed.';
+    }
+    forecastBusy = false;
+  }
+
+  function horizonLabel(): string {
+    const d = Math.min(3, Math.max(1, settings.forecastDays || 1));
+    return d === 1 ? '24 h' : `${d * 24} h`;
+  }
+
   // Reverse-geocode the pin → country (for the correct statutory work-ban rule).
   // Uses BigDataCloud's free client endpoint (no API key). Fails silently.
   async function resolveCountry() {
@@ -833,12 +1034,10 @@
     }
   }
 
-  function processInputs(inputs: WeatherInputs) {
-    const now = new Date();
-    const localHour = now.getUTCHours() + lon / 15;
-    const month = now.getMonth() + 1;
-    isDay = isDaytime(lat, lon, now);
-    sunElevation = solarElevationDeg(lat, lon, now);
+  // Assess every hazard for a given instant (used for both "now" and forecast hours).
+  function assessAt(inputs: WeatherInputs, when: Date) {
+    const localHour = when.getUTCHours() + lon / 15;
+    const month = when.getMonth() + 1;
     return {
       heat: assessHeatStress(inputs, settings.ppeProfile, localHour, month, activeBan),
       wind: assessWind(inputs.windMs, settings.windWarnMs, settings.windDangerMs),
@@ -846,6 +1045,27 @@
       cold: assessColdStress(inputs.tempC, inputs.windMs),
       thunder: assessThunderstorm(inputs.capeJkg),
     };
+  }
+
+  function processInputs(inputs: WeatherInputs) {
+    const now = new Date();
+    isDay = isDaytime(lat, lon, now);
+    sunElevation = solarElevationDeg(lat, lon, now);
+    return assessAt(inputs, now);
+  }
+
+  // Current risk (label + colour) for a hazard, for the SOS badges. Returns null
+  // when the hazard isn't currently in play (e.g. cold above 10°C, no CAPE).
+  function currentHazardStatus(key: string): { label: string; color: string } | null {
+    switch (key) {
+      case 'heat':    return heat ? { label: heat.zoneInfo.riskLabel, color: heat.zoneInfo.color } : null;
+      case 'wind':    return windResult ? { label: windResult.riskLabel, color: windResult.riskColor } : null;
+      case 'rain':    return rainResult ? { label: rainResult.riskLabel, color: rainResult.riskColor } : null;
+      case 'cold':    return coldResult && coldResult.active ? { label: coldResult.riskLabel, color: coldResult.riskColor } : null;
+      case 'thunder': return thunderResult && thunderResult.available ? { label: thunderResult.riskLabel, color: thunderResult.riskColor } : null;
+      case 'solar':   if (!rawData) return null; { const b = solarBand(rawData.solarWm2, isDay); return { label: b.label, color: b.color }; }
+      default:        return null;
+    }
   }
 
   // Show the cold-stress card when winterMode is 'on', or 'auto' and it's cold.
@@ -932,6 +1152,7 @@
       if (activeSiteId && heat) bgStatus = { ...bgStatus, [activeSiteId]: { color: heat.zoneInfo.color, label: heat.zoneInfo.riskLabel, time: new Date().toLocaleTimeString() } };
 
       checkAlerts();
+      runForecast();
     } catch (e) {
       const cached = loadCachedReading();
       if (cached) {
@@ -1041,7 +1262,7 @@
       });
       const j = await res.json();
       if (j && j.valid) {
-        licenseTier = j.tier || 'pro'; licenseExpires = j.expires || '';
+        licenseTier = j.tier || 'individual'; licenseExpires = j.expires || '';
         try { localStorage.setItem('fieldguard_license', JSON.stringify({ key, tier: licenseTier, expires: licenseExpires })); } catch {}
         licenseMsg = '✓ Activated — Pro features unlocked';
         refreshData();
@@ -1109,7 +1330,9 @@
     } catch {}
   }
 
-  function generateReport() {
+  async function generateReport() {
+    // Make sure the forecast outlook reflects the latest scan.
+    if (isSite && settings.forecastAlerts) await runForecast();
     const today = new Date();
     const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
     const fmt = (d: Date) => d.toISOString().split('T')[0];
@@ -1124,6 +1347,18 @@
       ppe: PPE_PROFILES[settings.ppeProfile].label,
       zone: heat?.zoneInfo.riskLabel ?? '', action: heat?.zoneInfo.mandatoryControls[0] ?? '',
     }));
+    // Current status of the five non-heat hazards (heat is analysed in Section D).
+    const hazardSnapshot = (windResult && rainResult) ? {
+      wind:    { speed: fmtWind(rawData?.windMs ?? 0, units), label: windResult.riskLabel, beaufort: `Bft ${windResult.beaufort} (${windResult.beaufortDesc})` },
+      rain:    { rate: fmtRain(rawData?.rainMmH ?? 0, units), intensity: rainResult.intensityLabel, label: rainResult.riskLabel },
+      thunder: { available: !!thunderResult?.available, cape: `${thunderResult?.capeJkg ?? 0} J/kg`, label: thunderResult?.riskLabel ?? 'N/A', instability: thunderResult?.instability ?? '' },
+      cold:    { active: !!coldResult?.active, windChill: fmtTemp(coldResult?.windChillC ?? 0, units), label: coldResult?.riskLabel ?? '', frostbite: coldResult?.frostbite ?? '' },
+      solar:   { irradiance: `${rawData?.solarWm2 ?? 0} W/m²`, label: solarBand(rawData?.solarWm2 ?? 0, isDay).label, period: isDay ? 'Daytime' : 'Night' },
+    } : undefined;
+    const forecastRows = forecastList.map(f => ({
+      icon: f.icon, label: f.label, peak: f.peakLabel, hoursAway: f.hoursAway ?? 0, when: f.firstLocal ?? '',
+    }));
+
     const rd: WeeklyReportData = {
       ...reportMeta,
       siteAddress: locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
@@ -1138,6 +1373,10 @@
       forecastNarrative: `FieldGuard worst-case analysis at ${locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`} ` +
         `shows ${heat?.zoneInfo.riskLabel ?? 'N/A'} zone (Apparent Temp: ${heat?.apparentTempFinal === 999 ? 'NO WORK' : (heat?.apparentTempFinal ?? 'N/A')+'°C'}, ` +
         `WBGT+PPE: ${heat?.wbgtAdjusted ?? 'N/A'}°C). ${heat?.zoneInfo.mandatoryControls[0] ?? ''}`,
+      hazardSnapshot,
+      forecastEnabled: isSite && settings.forecastAlerts,
+      forecastHorizon: horizonLabel(),
+      forecastRows,
     };
     reportText = generateWeeklyReport(rd);
   }
@@ -1409,8 +1648,20 @@
   .fg-alert-time { font-size:10px; color:#64748b; }
   .fg-alert-type { font-size:12px; font-weight:600; color:#f1f5f9; }
   .fg-alert-msg  { font-size:11px; color:#94a3b8; }
+  .fg-forecast .fg-card-header { display:flex; align-items:center; gap:6px; }
+  .fg-fc-busy { font-size:9px; color:#64748b; font-weight:400; margin-left:auto; }
+  .fg-fc-row { display:flex; align-items:center; gap:8px; margin:3px 12px; padding:6px 10px; background:#1e293b; border-radius:6px; }
+  .fg-fc-ic { font-size:15px; flex-shrink:0; }
+  .fg-fc-name { font-size:12px; font-weight:600; color:#f1f5f9; flex:1; }
+  .fg-fc-badge { font-size:9px; font-weight:800; color:#fff; padding:2px 6px; border-radius:4px; letter-spacing:0.3px; }
+  .fg-fc-when { font-size:10px; color:#cbd5e1; text-align:right; line-height:1.3; flex-shrink:0; }
+  .fg-fc-when small { color:#64748b; }
+  .fg-emg-jump { display:flex; flex-wrap:wrap; gap:5px; padding:4px 12px 2px; }
+  .fg-emg-chip { display:inline-flex; align-items:center; gap:4px; background:#1e293b; border:2px solid #334155; border-radius:14px; padding:4px 9px; cursor:pointer; font-size:14px; line-height:1; }
+  .fg-emg-chip.sel { outline:2px solid #f8fafc; outline-offset:-2px; }
+  .fg-emg-chip-st { font-size:8px; font-weight:800; letter-spacing:0.3px; }
   .fg-emergency-card { background:#1e293b; border-radius:8px; margin:6px 12px; padding:12px; border:1px solid #dc2626; }
-  .fg-emg-title { font-size:14px; font-weight:700; color:#f87171; margin-bottom:4px; }
+  .fg-emg-title { display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#f87171; margin-bottom:4px; }
   .fg-emg-sub { font-size:11px; color:#94a3b8; margin-bottom:10px; }
   .fg-emg-section { margin-bottom:12px; }
   .fg-emg-label { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
