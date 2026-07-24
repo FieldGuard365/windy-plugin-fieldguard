@@ -53,6 +53,7 @@ export interface WeeklyReportData {
     forecastNarrative: string;
     // Multi-hazard extensions (optional — older callers still work).
     hazardSnapshot?: HazardSnapshot;
+    monitoredHazards?: string[];   // hazard keys the user is monitoring; undefined = all
     forecastEnabled?: boolean;
     forecastHorizon?: string;      // e.g. "24 h"
     forecastRows?: ForecastRow[];
@@ -109,20 +110,25 @@ export function generateWeeklyReport(d: WeeklyReportData): string {
         return [sep, hdr, sep, rows, sep].join('\n');
     };
 
+    const mon = (key: string) => !d.monitoredHazards || d.monitoredHazards.includes(key);
+
     const hazardSection = () => {
         const h = d.hazardSnapshot;
         if (!h) return '  Multi-hazard snapshot not available for this report.';
         const line = (label: string, value: string, risk: string, note: string) =>
             `  ${pad(label, 16)} ${pad(value, 20)} ${pad(risk, 12)} ${note}`;
+        const rows: string[] = [];
+        if (mon('wind'))    rows.push(line('Wind', h.wind.speed, h.wind.label, h.wind.beaufort));
+        if (mon('rain'))    rows.push(line('Rain', h.rain.rate, h.rain.label, h.rain.intensity));
+        if (mon('thunder')) rows.push(line('Thunderstorm', h.thunder.available ? h.thunder.cape : 'N/A', h.thunder.label, h.thunder.instability));
+        if (mon('cold'))    rows.push(line('Cold stress', h.cold.active ? h.cold.windChill : 'Not active', h.cold.active ? h.cold.label : '—', h.cold.active ? h.cold.frostbite : 'Ambient above 10°C — cold stress not in play'));
+        if (mon('solar'))   rows.push(line('Solar radiation', h.solar.irradiance, h.solar.label, h.solar.period));
+        if (mon('heat'))    rows.push(line('Heat stress', 'see Section D', '', 'PPE-adjusted WBGT / Apparent Temperature zone'));
+        if (!rows.length)   rows.push('  No hazards selected for monitoring.');
         return [
             `  ${pad('HAZARD', 16)} ${pad('READING', 20)} ${pad('RISK', 12)} DETAIL`,
             '─'.repeat(88),
-            line('Wind', h.wind.speed, h.wind.label, h.wind.beaufort),
-            line('Rain', h.rain.rate, h.rain.label, h.rain.intensity),
-            line('Thunderstorm', h.thunder.available ? h.thunder.cape : 'N/A', h.thunder.label, h.thunder.instability),
-            line('Cold stress', h.cold.active ? h.cold.windChill : 'Not active', h.cold.active ? h.cold.label : '—', h.cold.active ? h.cold.frostbite : 'Ambient above 10°C — cold stress not in play'),
-            line('Solar radiation', h.solar.irradiance, h.solar.label, h.solar.period),
-            line('Heat stress', 'see Section D', '', 'PPE-adjusted WBGT / Apparent Temperature zone'),
+            ...rows,
             '─'.repeat(88),
         ].join('\n');
     };
@@ -174,7 +180,7 @@ Client / Employer:      ${d.clientName}
 Main Contractor:        ${d.contractorName}
 HSE Manager:            ${d.hseManagerName}
 Report ID:              ${reportId}
-FieldGuard Version:     v3.0.8
+FieldGuard Version:     v3.0.9
 Heat Stress Method:     2-Step Apparent Temperature (Charts A & B)
 
 
@@ -215,18 +221,22 @@ Weekly Max Wind:     ${Math.max(...d.dailyMet.map(m => m.maxWind))} m/s
 
 SECTION C2 — MULTI-HAZARD RISK SNAPSHOT (CURRENT)
 ──────────────────────────────────────────────────────────────────────────────
-FieldGuard tracks six field hazards. Heat stress is analysed in full in Section D;
-the current status of the other five hazards at the pin is summarised below.
+FieldGuard tracks six field hazards. This site is configured to monitor:
+${d.monitoredHazards ? '  ' + d.monitoredHazards.map(h => h.toUpperCase()).join(', ') : '  ALL HAZARDS'}
+Heat stress is analysed in full in Section D; the current status of the other
+monitored hazards at the pin is summarised below.
 
 ${hazardSection()}
 
 Hazard controls (apply when the corresponding risk is active):
-  ● Wind        — stop lifting/height work, secure loads & loose materials
-  ● Rain        — evacuate excavations, de-energise exposed electrics, stop earthworks
-  ● Thunderstorm— 30-30 rule; clear elevated/exposed areas; shelter in hard-roofed vehicle
-  ● Cold stress — cover exposed skin, scheduled warm-up breaks, buddy system
-  ● Solar/UV    — shade, SPF 30+, UV eye protection, extra hydration
-Full response steps for every hazard are on the FieldGuard SOS screen.
+${[
+    mon('wind')    ? '  ● Wind        — stop lifting/height work, secure loads & loose materials' : '',
+    mon('rain')    ? '  ● Rain        — evacuate excavations, de-energise exposed electrics, stop earthworks' : '',
+    mon('thunder') ? '  ● Thunderstorm— 30-30 rule; clear elevated/exposed areas; shelter in hard-roofed vehicle' : '',
+    mon('cold')    ? '  ● Cold stress — cover exposed skin, scheduled warm-up breaks, buddy system' : '',
+    mon('solar')   ? '  ● Solar/UV    — shade, SPF 30+, UV eye protection, extra hydration' : '',
+].filter(Boolean).join('\n')}
+Full response steps for every monitored hazard are on the FieldGuard SOS screen.
 
 
 SECTION D — HEAT STRESS ZONE ANALYSIS (ISO 7243 / ISO 7933)

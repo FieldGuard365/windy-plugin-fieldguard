@@ -423,9 +423,12 @@
     {:else}
     <div class="fg-section-title">🚨 Emergency Response — All Hazards</div>
 
+    {#if sosHazards.length === 0}
+      <div class="fg-empty" style="padding:16px 12px">No hazards selected to monitor. Enable hazards in <b>Config → Hazards to Monitor</b>.</div>
+    {:else}
     <!-- Jump strip: tap a hazard to scroll to its card -->
     <div class="fg-emg-jump">
-      {#each HAZARD_EMERGENCIES as hz}
+      {#each sosHazards as hz}
         {@const st = currentHazardStatus(hz.key)}
         <button class="fg-emg-chip {emgHazard === hz.key ? 'sel' : ''}" style={st ? `border-color:${st.color}` : ''} on:click={() => emgHazard = hz.key}>
           <span>{hz.icon}</span>
@@ -434,7 +437,7 @@
       {/each}
     </div>
 
-    {#each HAZARD_EMERGENCIES as hz}
+    {#each sosHazards as hz}
       {#if emgHazard === hz.key}
         {@const st = currentHazardStatus(hz.key)}
         <div class="fg-emergency-card" style={st ? `border-color:${st.color}` : ''}>
@@ -462,6 +465,7 @@
         </div>
       {/if}
     {/each}
+    {/if}
 
     <div class="fg-card" style="border-color:#d97706">
       <div class="fg-card-header">📋 Alerts Log (This Session)
@@ -649,6 +653,20 @@
     </div>
 
     <div class="fg-settings-section">
+      <div class="fg-settings-label">🎯 Hazards to Monitor</div>
+      <div class="fg-note">Choose which hazards FieldGuard actively monitors. This drives live alerts, the SOS page, the weekly report and the 24/7 email monitor.</div>
+      {#each HAZARD_EMERGENCIES as hz}
+        <label class="fg-toggle-label">
+          <input type="checkbox" bind:checked={settings.monitorHazards[hz.key]} on:change={saveSettings} />
+          {hz.icon} {hz.title}
+        </label>
+      {/each}
+      {#if !Object.values(settings.monitorHazards).some(Boolean)}
+        <div class="fg-license-msg">⚠ No hazards selected — nothing will be monitored or alerted.</div>
+      {/if}
+    </div>
+
+    <div class="fg-settings-section">
       <div class="fg-settings-label">🔔 Alerts</div>
       <label class="fg-toggle-label">
         <input type="checkbox" bind:checked={settings.soundAlerts} on:change={saveSettings} />
@@ -680,7 +698,7 @@
 
     <div class="fg-settings-section">
       <div class="fg-settings-label">📡 24/7 Monitoring — email me {#if !isPro}<span class="fg-pro-tag">PRO</span>{/if}</div>
-      <div class="fg-note">Our server checks this site's WBGT every 15 min and emails an alert when it enters a danger zone — <b>even with your browser closed</b>. {#if !isPro}Requires a Pro or Site license.{/if}</div>
+      <div class="fg-note">Our server checks this site every 15 min and emails an alert when any of your <b>monitored hazards</b> ({HAZARD_EMERGENCIES.filter(h => isMonitored(h.key)).map(h => h.icon).join(' ') || 'none selected'}) reaches a danger condition — <b>even with your browser closed</b>. Re-register a site to apply changes to which hazards it monitors. {#if !isPro}Requires a Pro or Site license.{/if}</div>
       {#if isPro}
         <div class="fg-license-row">
           <input class="fg-license-input" type="email" placeholder="you@company.com" spellcheck="false" bind:value={alertEmail} />
@@ -834,6 +852,9 @@
     lightningRadiusKm: 10,           // lightning safety radius (10 km ≈ 30-30 rule) — Pro
     forecastAlerts: false,           // scan the hourly forecast for upcoming threshold crossings — Pro
     forecastDays: 1,                 // lookahead horizon: 1, 2 or 3 days — Pro
+    // Which hazards to actively monitor. Drives live alerts, the SOS page, the
+    // weekly report and the 24/7 email monitor. All on by default.
+    monitorHazards: { heat: true, cold: true, wind: true, rain: true, thunder: true, solar: true } as Record<string, boolean>,
   };
   let settings = { ...DEFAULT_SETTINGS };
 
@@ -961,7 +982,7 @@
 
     const out: HazardForecast[] = [];
     for (const d of defs) {
-      if (!d.enabled) continue;
+      if (!d.enabled || !isMonitored(d.key)) continue;
       let firstISO: string | null = null, firstLocal: string | null = null, hoursAway: number | null = null;
       let peakSev = -1, peakLabel = '', peakColor = '';
       for (let i = 0; i < times.length; i++) {
@@ -1068,6 +1089,18 @@
     }
   }
 
+  // Is a hazard in the user's "monitor" set? Defaults to true if unset (older
+  // saved settings). Cold additionally respects the winter mode being off.
+  function isMonitored(key: string): boolean {
+    if (settings.monitorHazards?.[key] === false) return false;
+    if (key === 'cold' && settings.winterMode === 'off') return false;
+    return true;
+  }
+  // Hazards shown on the SOS page (respect the monitor set).
+  $: sosHazards = HAZARD_EMERGENCIES.filter(h => settings.monitorHazards?.[h.key] !== false);
+  // Keep the open SOS card valid when the selection changes.
+  $: if (sosHazards.length && !sosHazards.some(h => h.key === emgHazard)) emgHazard = sosHazards[0].key;
+
   // Show the cold-stress card when winterMode is 'on', or 'auto' and it's cold.
   function showColdCard(c: ColdResult | null): boolean {
     if (!isPro || !c) return false;
@@ -1171,7 +1204,7 @@
     if (!heat || !windResult || !rainResult) return;
     const time = new Date().toLocaleTimeString();
 
-    if (heat.zone !== 'green') {
+    if (isMonitored('heat') && heat.zone !== 'green') {
       const entry = {
         time, type: `🌡 HEAT — ${heat.zoneInfo.riskLabel}`,
         color: heat.zoneInfo.color,
@@ -1182,32 +1215,32 @@
         triggerNotification(entry.type, entry.message);
       }
     }
-    if (windResult.exceedsThreshold) {
+    if (isMonitored('wind') && windResult.exceedsThreshold) {
       const entry = { time, type: '💨 WIND ALERT', color: windResult.riskColor,
         message: `${rawData?.windMs.toFixed(1)} m/s — Bft ${windResult.beaufort} (${windResult.beaufortDesc})` };
       alertLog = [...alertLog, entry];
       if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
-    if (rainResult.exceedsThreshold) {
+    if (isMonitored('rain') && rainResult.exceedsThreshold) {
       const entry = { time, type: '🌧 RAIN ALERT', color: rainResult.riskColor,
         message: `${rawData?.rainMmH.toFixed(1)} mm/h — ${rainResult.intensityLabel}` };
       alertLog = [...alertLog, entry];
       if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
-    if (isPro && coldResult && coldResult.exceedsThreshold) {
+    if (isPro && isMonitored('cold') && coldResult && coldResult.exceedsThreshold) {
       const entry = { time, type: `❄ COLD — ${coldResult.riskLabel}`, color: coldResult.riskColor,
         message: `Wind chill ${fmtTemp(coldResult.windChillC, units)} — ${coldResult.frostbite}` };
       alertLog = [...alertLog, entry];
       if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
-    if (isPro && thunderResult && thunderResult.exceedsThreshold) {
+    if (isPro && isMonitored('thunder') && thunderResult && thunderResult.exceedsThreshold) {
       const entry = { time, type: `⛈ STORM — ${thunderResult.riskLabel}`, color: thunderResult.riskColor,
         message: `CAPE ${thunderResult.capeJkg} J/kg — ${thunderResult.instability}` };
       alertLog = [...alertLog, entry];
       if (settings.soundAlerts) triggerNotification(entry.type, entry.message);
     }
     const sBand = solarBand(rawData?.solarWm2 ?? 0, isDay);
-    if (sBand.label === 'HIGH' || sBand.label === 'EXTREME') {
+    if (isMonitored('solar') && (sBand.label === 'HIGH' || sBand.label === 'EXTREME')) {
       const entry = { time, type: `☀ SOLAR — ${sBand.label}`, color: sBand.color,
         message: `${rawData?.solarWm2 ?? 0} W/m² — high solar heat load` };
       alertLog = [...alertLog, entry];
@@ -1315,6 +1348,12 @@
           key: licenseKey, email,
           name: (savedSites.find(s => s.id === activeSiteId)?.name) || (locationName ? locationName.split(',')[0] : `${lat.toFixed(3)}, ${lon.toFixed(3)}`),
           lat, lon, ppe: settings.ppeProfile,
+          // Which hazards to alert on + the user's thresholds, so the server matches the plugin.
+          cfg: {
+            hazards: HAZARD_EMERGENCIES.map(h => h.key).filter(k => isMonitored(k)),
+            windWarnMs: settings.windWarnMs, windDangerMs: settings.windDangerMs,
+            rainWarnMmh: settings.rainWarnMmh, rainDangerMmh: settings.rainDangerMmh,
+          },
         }),
       });
       const j = await r.json();
@@ -1374,6 +1413,7 @@
         `shows ${heat?.zoneInfo.riskLabel ?? 'N/A'} zone (Apparent Temp: ${heat?.apparentTempFinal === 999 ? 'NO WORK' : (heat?.apparentTempFinal ?? 'N/A')+'°C'}, ` +
         `WBGT+PPE: ${heat?.wbgtAdjusted ?? 'N/A'}°C). ${heat?.zoneInfo.mandatoryControls[0] ?? ''}`,
       hazardSnapshot,
+      monitoredHazards: HAZARD_EMERGENCIES.map(h => h.key).filter(k => isMonitored(k)),
       forecastEnabled: isSite && settings.forecastAlerts,
       forecastHorizon: horizonLabel(),
       forecastRows,
@@ -1520,7 +1560,14 @@
   }
 
   onMount(() => {
-    try { const s = localStorage.getItem('fieldguard_settings'); if (s) settings = {...DEFAULT_SETTINGS, ...JSON.parse(s)}; } catch {}
+    try {
+      const s = localStorage.getItem('fieldguard_settings');
+      if (s) {
+        const saved = JSON.parse(s);
+        settings = { ...DEFAULT_SETTINGS, ...saved,
+          monitorHazards: { ...DEFAULT_SETTINGS.monitorHazards, ...(saved.monitorHazards || {}) } };
+      }
+    } catch {}
     loadLicense();
     loadSites();
     loadMonitorEmail();
