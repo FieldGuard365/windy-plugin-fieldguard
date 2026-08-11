@@ -666,6 +666,50 @@
       {/if}
     </div>
 
+    {#if isSite}
+    <div class="fg-settings-section">
+      <div class="fg-settings-label">⚡ Real-time lightning strikes <span class="fg-pro-tag">SITE</span></div>
+      <div class="fg-note">Live strike detection on the FieldGuard backend — separate from the storm-potential (CAPE) card. When on, the 24/7 monitor checks strikes <b>every 2 minutes</b> and emails a stop-work alert the moment lightning enters your stop-work ring, plus a 30-minute all-clear. Re-register the site to apply changes.</div>
+      <label class="fg-toggle-label">
+        <input type="checkbox" bind:checked={settings.monitorHazards.lightning} on:change={saveSettings} />
+        Enable real-time lightning stop-work alerts
+      </label>
+      {#if settings.monitorHazards.lightning}
+        <label>Stop-work ring — inner (RED) — strikes within
+          <div class="fg-slider-row">
+            <input type="range" min="2" max="10" step="1" bind:value={settings.lightningStopInnerMi} on:change={saveSettings} />
+            <span>{settings.lightningStopInnerMi} mi</span>
+          </div>
+        </label>
+        <label>Stop-work ring — outer (RED) — strikes within
+          <div class="fg-slider-row">
+            <input type="range" min="3" max="15" step="1" bind:value={settings.lightningStopMi} on:change={saveSettings} />
+            <span>{settings.lightningStopMi} mi</span>
+          </div>
+        </label>
+        <label>Warning ring — within
+          <div class="fg-slider-row">
+            <input type="range" min="5" max="25" step="1" bind:value={settings.lightningWarnMi} on:change={saveSettings} />
+            <span>{settings.lightningWarnMi} mi</span>
+          </div>
+        </label>
+        <label>Advisory ring — within
+          <div class="fg-slider-row">
+            <input type="range" min="10" max="30" step="1" bind:value={settings.lightningAdvisoryMi} on:change={saveSettings} />
+            <span>{settings.lightningAdvisoryMi} mi</span>
+          </div>
+        </label>
+        <label>All-clear wait (30-30 rule)
+          <div class="fg-slider-row">
+            <input type="range" min="10" max="60" step="5" bind:value={settings.lightningAllClearMin} on:change={saveSettings} />
+            <span>{settings.lightningAllClearMin} min</span>
+          </div>
+        </label>
+        <div class="fg-note">Rings: ≤{settings.lightningStopInnerMi} &amp; ≤{settings.lightningStopMi} mi = stop-work (RED) · ≤{settings.lightningWarnMi} mi = warning · ≤{settings.lightningAdvisoryMi} mi = advisory. Decision-support only — the stop-work call stays with your competent person.</div>
+      {/if}
+    </div>
+    {/if}
+
     <div class="fg-settings-section">
       <div class="fg-settings-label">🔔 Alerts</div>
       <label class="fg-toggle-label">
@@ -701,10 +745,10 @@
       <div class="fg-note">Our server checks this site every 15 min and emails an alert when any of your <b>monitored hazards</b> ({HAZARD_EMERGENCIES.filter(h => isMonitored(h.key)).map(h => h.icon).join(' ') || 'none selected'}) reaches a danger condition — <b>even with your browser closed</b>. Re-register a site to apply changes to which hazards it monitors. {#if !isPro}Requires a Pro or Site license.{/if}</div>
       {#if isPro}
         <div class="fg-license-row">
-          <input class="fg-license-input" type="email" placeholder="you@company.com" spellcheck="false" bind:value={alertEmail} />
+          <input class="fg-license-input" type="text" placeholder="you@company.com, super@company.com" spellcheck="false" bind:value={alertEmail} />
           <button class="fg-btn-inline" on:click={register24} disabled={monitorBusy}>{monitorBusy ? '…' : '🔔 Monitor'}</button>
         </div>
-        <div class="fg-note">Registers the current pin ({lat.toFixed(3)}, {lon.toFixed(3)}). Up to {maxSites()} site{maxSites() > 1 ? 's' : ''} on your license.</div>
+        <div class="fg-note">Registers the current pin ({lat.toFixed(3)}, {lon.toFixed(3)}). Up to {maxSites()} site{maxSites() > 1 ? 's' : ''} on your license. Add several recipients for this site, comma-separated — each site can have its own list. For a bigger team (10+), use one internal distribution address instead.</div>
         {#if monitoredSites.length > 0}
           <div class="fg-mon-list">
             {#each monitoredSites as m}
@@ -850,11 +894,19 @@
     units: 'metric' as UnitSystem,   // 'metric' (°C, m/s) or 'imperial' (°F, mph) — Pro
     winterMode: 'auto',              // 'auto' (show cold card when ≤10°C) | 'on' | 'off' — Pro
     lightningRadiusKm: 10,           // lightning safety radius (10 km ≈ 30-30 rule) — Pro
+    // Real-time lightning STRIKE rings (Site tier), in miles — distinct from the CAPE
+    // storm-potential above. Drives the live strike feed + the 2-min 24/7 alert loop.
+    lightningStopInnerMi: 6,         // innermost RED stop-work ring (Lee's 6 mi)
+    lightningStopMi: 8,              // outer RED stop-work ring (Lee's 8 mi)
+    lightningWarnMi: 10,             // warning ring (Lee's 10 mi)
+    lightningAdvisoryMi: 20,         // advisory (outer) ring (Lee's 20 mi)
+    lightningAllClearMin: 30,        // resume window after last in-ring strike (30-30 rule)
     forecastAlerts: false,           // scan the hourly forecast for upcoming threshold crossings — Pro
     forecastDays: 1,                 // lookahead horizon: 1, 2 or 3 days — Pro
     // Which hazards to actively monitor. Drives live alerts, the SOS page, the
-    // weekly report and the 24/7 email monitor. All on by default.
-    monitorHazards: { heat: true, cold: true, wind: true, rain: true, thunder: true, solar: true } as Record<string, boolean>,
+    // weekly report and the 24/7 email monitor. All on by default; 'lightning'
+    // (real-time strikes) is Site-only and opt-in.
+    monitorHazards: { heat: true, cold: true, wind: true, rain: true, thunder: true, solar: true, lightning: false } as Record<string, boolean>,
   };
   let settings = { ...DEFAULT_SETTINGS };
 
@@ -1337,8 +1389,11 @@
   async function register24() {
     monitorMsg = '';
     if (!isPro) { monitorMsg = '24/7 email alerts require a Pro or Site license.'; return; }
-    const email = (alertEmail || '').trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { monitorMsg = 'Enter a valid email address.'; return; }
+    const emails = (alertEmail || '').split(',').map(e => e.trim()).filter(Boolean);
+    const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emails.length || !emails.every(e => emailRe.test(e))) { monitorMsg = 'Enter one or more valid emails (comma-separated).'; return; }
+    if (emails.length > 10) { monitorMsg = 'Up to 10 direct recipients — for a bigger team use one distribution address.'; return; }
+    const email = emails.join(',');
     try { localStorage.setItem('fieldguard_alert_email', email); } catch {}
     monitorBusy = true;
     try {
@@ -1350,9 +1405,22 @@
           lat, lon, ppe: settings.ppeProfile,
           // Which hazards to alert on + the user's thresholds, so the server matches the plugin.
           cfg: {
-            hazards: HAZARD_EMERGENCIES.map(h => h.key).filter(k => isMonitored(k)),
+            hazards: [
+              ...HAZARD_EMERGENCIES.map(h => h.key).filter(k => isMonitored(k)),
+              ...(isSite && settings.monitorHazards.lightning ? ['lightning'] : []),
+            ],
             windWarnMs: settings.windWarnMs, windDangerMs: settings.windDangerMs,
             rainWarnMmh: settings.rainWarnMmh, rainDangerMmh: settings.rainDangerMmh,
+            // Real-time lightning strike rings (Site) — read by /api/lightning + the 2-min loop.
+            ...(isSite && settings.monitorHazards.lightning ? {
+              rings: [
+                { mi: settings.lightningStopInnerMi, level: 'red', label: 'Stop work' },
+                { mi: settings.lightningStopMi, level: 'red', label: 'Stop work' },
+                { mi: settings.lightningWarnMi, level: 'warning', label: 'Prepare to suspend' },
+                { mi: settings.lightningAdvisoryMi, level: 'advisory', label: 'Monitor' },
+              ],
+              allClearMinutes: settings.lightningAllClearMin,
+            } : {}),
           },
         }),
       });
