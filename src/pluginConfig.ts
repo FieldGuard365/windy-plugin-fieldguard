@@ -2,11 +2,11 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-fieldguard',
-    version: '3.0.8',
+    version: '3.0.9',
     icon: '🛡️',
     title: 'FieldGuard — HSE Field Safety',
     description:
-        'Real-time HSE safety monitor for field workers. Heat stress (WBGT), cold stress (wind chill), wind, rain and thunderstorm/lightning risk across all Windy models. Metric or imperial units (°C/°F, m/s/mph), worst-case engine, customizable thresholds, and ISO 7933-compliant weekly reports.',
+        'Real-time HSE safety monitor for outdoor crews. Six site hazards on one pin — heat stress (WBGT), cold (wind chill), wind, rain, storm/lightning and solar/UV — across all Windy models, with a worst-case engine, configurable thresholds and 24/7 email alerts (browser closed). Site tier adds real-time lightning strike stop-work rings, Forecast Watch lookahead, and one-click ISO 7933 / FIDIC 8.4 audit reports.',
     author: 'FieldGuard HSE',
     desktopUI: 'rhpane',
     mobileUI: 'fullscreen',

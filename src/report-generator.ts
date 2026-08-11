@@ -251,7 +251,7 @@ ZONE THRESHOLDS (Apparent Temperature, °C):
   ● < 35°C  — GREEN  (Unrestricted): No limits on self-paced work
   ● 35–42°C — AMBER  (Attention):   Shade, no working alone, restricted heavy work
   ● 43–49°C — RED    (Alert):       Strict work/rest, stand-by vehicle, no solo work
-  ● 50–54°C — PURPLE (Extreme):     Business-critical only, continuous monitoring, 30min from medical
+  ● 50–54°C — PURPLE (Extreme):     Business-critical only, continuous monitoring, 30 min from medical
   ● ≥ 55°C  — BLACK  (No Work):    All outdoor work STOPPED — A/C shelter only
   ● "NW"    — NO WORK on Chart B:  Stop work regardless of temperature
 

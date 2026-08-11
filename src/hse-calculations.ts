@@ -21,6 +21,7 @@ export interface WeatherInputs {
     windMs: number;     // m/s
     solarWm2: number;   // W/m²
     rainMmH: number;    // mm/h
+    cloudCoverPct?: number; // % total cloud cover - gates CAPE storm risk (fuel needs a trigger: clouds/rain).
     capeJkg?: number;   // J/kg — Convective Available Potential Energy (thunderstorm/lightning risk). Optional: some models (ECMWF) do not expose it to plugins.
 }
 
@@ -490,7 +491,7 @@ export interface ThunderResult {
     guidance: string[];
 }
 
-export function assessThunderstorm(capeJkg?: number): ThunderResult {
+export function assessThunderstorm(capeJkg?: number, cloudCoverPct?: number, precipMmH?: number): ThunderResult {
     if (capeJkg === undefined || capeJkg === null || Number.isNaN(capeJkg)) {
         return {
             available: false, capeJkg: 0,
@@ -519,6 +520,20 @@ export function assessThunderstorm(capeJkg?: number): ThunderResult {
     } else if (cape >= 300) {
         riskLabel = 'MODERATE'; riskColor = '#f97316';
         instability = 'Marginal instability — isolated storms possible';
+        exceeds = false;
+    }
+
+    // CAPE is only the fuel; a storm also needs a trigger (cloud build-up or
+    // precipitation). High CAPE under clear, dry skies is LATENT instability, not an
+    // active storm, so we do not raise a storm warning on it. Gate only when sky data
+    // is present; with no cloud/precip info, fall back to CAPE alone (never miss).
+    const _cloud = Number.isFinite(cloudCoverPct as number) ? (cloudCoverPct as number) : undefined;
+    const _precip = Number.isFinite(precipMmH as number) ? (precipMmH as number) : 0;
+    const _skyKnown = _cloud !== undefined || _precip > 0;
+    const _hasTrigger = _precip > 0 || (_cloud !== undefined && _cloud >= 40);
+    if (exceeds && _skyKnown && !_hasTrigger) {
+        riskLabel = 'NO STORM'; riskColor = '#16a34a';
+        instability = `Skies clear/dry - no storm developing (unstable air only, CAPE ${cape})`;
         exceeds = false;
     }
 

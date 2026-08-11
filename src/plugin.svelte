@@ -1,4 +1,6 @@
-<section class="plugin__content fieldguard">
+<!-- keydown/keyup stopPropagation: keep typing inside plugin inputs from triggering
+     Windy's global map keyboard shortcuts (fixes the licence-key + lat/lon fields). -->
+<section class="plugin__content fieldguard" on:keydown|stopPropagation={() => {}} on:keyup|stopPropagation={() => {}}>
 
   <!-- HEADER -->
   <div class="fg-header">
@@ -46,7 +48,7 @@
           </button>
         {/if}
       {/each}
-      {#if canAddSite()}
+      {#if canAddMore}
         <input class="fg-site-name" bind:value={newSiteName} placeholder="Name…" />
         <button class="fg-site-add" title="Save current pin as a site" on:click={addCurrentSite}>＋ Save pin</button>
         <input class="fg-site-name" bind:value={coordInput} placeholder="lat, lon" on:keydown={(e) => e.key === 'Enter' && addSiteByCoords()} />
@@ -91,10 +93,10 @@
 
       <!-- 4-HAZARD SELECTOR STRIP -->
       <div class="fg-hazard-strip">
-        <button class="fg-hz {selectedHazard==='heat'?'sel':''}" style="border-color:{heat.zoneInfo.color}" on:click={() => selectedHazard='heat'}>
+        <button class="fg-hz {selectedHazard==='heat'?'sel':''}" style="border-color:{tempStatus?.color || heat.zoneInfo.color}" on:click={() => selectedHazard='heat'}>
           <div class="fg-hz-ic">🌡️</div>
           <div class="fg-hz-val">{fmtTemp(rawData?.tempC ?? 0, units, false)}<span class="fg-hz-u">°</span></div>
-          <div class="fg-hz-st" style="color:{heat.zoneInfo.color}">{heat.zoneInfo.riskLabel}</div>
+          <div class="fg-hz-st" style="color:{tempStatus?.color || heat.zoneInfo.color}">{tempStatus?.label || heat.zoneInfo.riskLabel}</div>
         </button>
         <button class="fg-hz {selectedHazard==='wind'?'sel':''}" style="border-color:{windResult?.riskColor}" on:click={() => selectedHazard='wind'}>
           <div class="fg-hz-ic">💨</div>
@@ -111,6 +113,13 @@
           <div class="fg-hz-val">{rawData?.solarWm2 ?? 0}<span class="fg-hz-u">W</span></div>
           <div class="fg-hz-st" style="color:{solarBand(rawData?.solarWm2 ?? 0, isDay).color}">{solarBand(rawData?.solarWm2 ?? 0, isDay).label}</div>
         </button>
+      </div>
+
+      <!-- Windy overlay hint (text-only; we NEVER switch Windy's overlay — §map-safety).
+           Placed high, right under the hazard squares. -->
+      <div class="fg-overlay-hint">
+        🗺️ See it across the map: open Windy's overlay menu (the layers icon) and pick
+        <b>{selectedHazard === 'wind' ? 'Wind' : selectedHazard === 'rain' ? 'Rain, thunder' : selectedHazard === 'solar' ? 'Clouds' : 'Temperature'}</b>{#if selectedHazard === 'rain'} — or <b>Radar</b> / <b>Satellite</b> for live storm cells{/if}.
       </div>
 
       <!-- FORECAST WATCH (Site tier) — next hour / day / days lookahead -->
@@ -135,7 +144,8 @@
       {/if}
 
       {#if selectedHazard === 'heat'}
-      <!-- MAIN ZONE BANNER -->
+      {#if !coldDominates}
+      <!-- MAIN ZONE BANNER (heat WBGT zone) — hidden when cold is the dominant risk -->
       <div class="fg-zone-banner" style="background:{heat.zoneInfo.bgColor};border-color:{heat.zoneInfo.color}">
         <div class="fg-zone-dot" style="background:{heat.zoneInfo.color}"></div>
         <div class="fg-zone-main">
@@ -145,10 +155,40 @@
         </div>
         <div class="fg-zone-time">{currentTime}</div>
       </div>
+      {/if}
+
+      <!-- COLD STRESS / WIND CHILL CARD — when it's genuinely cold this leads, ABOVE
+           the heat card (a −28 °C WBGT under a "Heat" header reads wrong otherwise). -->
+      {#if showColdCard(coldResult) && coldResult}
+        <div class="fg-card" style="border-color:{coldResult.riskColor}">
+          <div class="fg-card-header">
+            ❄ Cold Stress / Wind Chill
+            <span class="fg-badge" style="background:{coldResult.riskColor}">{coldResult.riskLabel}</span>
+          </div>
+          <div class="fg-metrics-grid">
+            <div class="fg-metric">
+              <div class="fg-metric-val">{fmtTemp(rawData?.tempC ?? 0, units)}</div>
+              <div class="fg-metric-lbl">Air Temp</div>
+            </div>
+            <div class="fg-metric">
+              <div class="fg-metric-val" style="color:{coldResult.riskColor}">{fmtTemp(coldResult.windChillC, units)}</div>
+              <div class="fg-metric-lbl">Wind Chill</div>
+            </div>
+            <div class="fg-metric">
+              <div class="fg-metric-val">{fmtWind(rawData?.windMs ?? 0, units)}</div>
+              <div class="fg-metric-lbl">Wind</div>
+            </div>
+          </div>
+          <div class="fg-threshold-row">🥶 {coldResult.frostbite}</div>
+          {#each coldResult.controls as ctrl}
+            <div class="fg-control-item">▸ {ctrl}</div>
+          {/each}
+        </div>
+      {/if}
 
       <!-- HEAT ANALYSIS CARD -->
       <div class="fg-card" style="border-color:{heat.zoneInfo.color}">
-        <div class="fg-card-header">🌡 Heat Stress{#if isPro} Analysis{/if}</div>
+        <div class="fg-card-header">🌡 Heat Stress {#if isPro}Analysis{/if}</div>
         {#if isPro}
         <div class="fg-metrics-grid">
           <div class="fg-metric">
@@ -206,7 +246,7 @@
           {/if}
         </div>
         {#if isPro}
-          <div class="fg-ppe-row">PPE: {PPE_PROFILES[settings.ppeProfile].label} (+{PPE_PROFILES[settings.ppeProfile].adjustment}°C)</div>
+          <div class="fg-ppe-row">PPE: {PPE_PROFILES[settings.ppeProfile].label} ({fmtAdj(PPE_PROFILES[settings.ppeProfile].adjustment, units)})</div>
           {#if worstCaseMode && worstModelLabel}
             <div class="fg-ppe-row" style="color:#38bdf8">⚡ Worst case: {worstModelLabel}</div>
           {/if}
@@ -332,80 +372,109 @@
       </div>
       {/if}
 
-      <!-- COLD STRESS / WIND CHILL CARD (Pro · winter) — under Heat -->
-      {#if selectedHazard === 'heat' && showColdCard(coldResult) && coldResult}
-        <div class="fg-card" style="border-color:{coldResult.riskColor}">
-          <div class="fg-card-header">
-            ❄ Cold Stress / Wind Chill
-            <span class="fg-badge" style="background:{coldResult.riskColor}">{coldResult.riskLabel}</span>
-          </div>
-          <div class="fg-metrics-grid">
-            <div class="fg-metric">
-              <div class="fg-metric-val">{fmtTemp(rawData?.tempC ?? 0, units)}</div>
-              <div class="fg-metric-lbl">Air Temp</div>
-            </div>
-            <div class="fg-metric">
-              <div class="fg-metric-val" style="color:{coldResult.riskColor}">{fmtTemp(coldResult.windChillC, units)}</div>
-              <div class="fg-metric-lbl">Wind Chill</div>
-            </div>
-            <div class="fg-metric">
-              <div class="fg-metric-val">{fmtWind(rawData?.windMs ?? 0, units)}</div>
-              <div class="fg-metric-lbl">Wind</div>
-            </div>
-          </div>
-          <div class="fg-threshold-row">🥶 {coldResult.frostbite}</div>
-          {#each coldResult.controls as ctrl}
-            <div class="fg-control-item">▸ {ctrl}</div>
-          {/each}
-        </div>
-      {/if}
-
       <!-- THUNDERSTORM / LIGHTNING RISK CARD (Pro) — under Rain -->
       {#if selectedHazard === 'rain' && isPro && thunderResult}
         <div class="fg-card" style="border-color:{thunderResult.riskColor}">
           <div class="fg-card-header">
-            ⛈ Thunderstorm / Lightning Risk
+            ⛈ Storm Outlook
             <span class="fg-badge" style="background:{thunderResult.riskColor}">{thunderResult.riskLabel}</span>
           </div>
+          <div class="fg-metric" style="padding:8px 0">
+            <div class="fg-metric-val" style="font-size:13px;line-height:1.4;color:{thunderResult.riskColor}">{thunderResult.instability}</div>
+          </div>
           {#if thunderResult.available}
-            <div class="fg-metrics-grid">
-              <div class="fg-metric">
-                <div class="fg-metric-val" style="color:{thunderResult.riskColor}">{thunderResult.capeJkg}</div>
-                <div class="fg-metric-lbl">CAPE J/kg</div>
-              </div>
-              <div class="fg-metric" style="grid-column:span 2">
-                <div class="fg-metric-val" style="font-size:11px">{thunderResult.instability}</div>
-                <div class="fg-metric-lbl">Instability</div>
-              </div>
-            </div>
-          {:else}
-            <div class="fg-threshold-row">{thunderResult.instability}</div>
+            <div class="fg-threshold-row" style="opacity:0.65">Forecast storm potential from the models (CAPE {thunderResult.capeJkg} J/kg, gated on cloud &amp; rain) — not live strike detection.{#if !isSite} Site adds real-time lightning strikes.{/if}</div>
           {/if}
-          <div class="fg-threshold-row">⚡ Lightning warning zone: ⌀ {fmtDistance(settings.lightningRadiusKm * 2, units)} diameter ({fmtDistance(settings.lightningRadiusKm, units)} radius)</div>
           {#each thunderResult.guidance as g}
             <div class="fg-control-item">▸ {g}</div>
           {/each}
         </div>
       {/if}
 
-      <!-- MODEL COMPARISON TABLE -->
+      <!-- REAL-TIME LIGHTNING STRIKES CARD (Site) — live Xweather feed, under Storm Outlook -->
+      {#if selectedHazard === 'rain' && isSite && settings.monitorHazards.lightning}
+        <div class="fg-card" style="border-color:{lightningResult ? lightningColor(lightningResult.status) : '#334155'}">
+          <div class="fg-card-header">
+            ⚡ Lightning Strikes <span class="fg-pro-tag">LIVE</span>
+            {#if lightningResult}<span class="fg-badge" style="background:{lightningColor(lightningResult.status)}">{lightningLabel(lightningResult.status)}</span>{/if}
+          </div>
+          {#if !lightningResult}
+            <div class="fg-threshold-row">{lightningBusy ? 'Checking live strikes…' : 'No live strike data yet — refresh the site.'}</div>
+          {:else if lightningResult.status === 'clear'}
+            <div class="fg-metric" style="padding:8px 0"><div class="fg-metric-val" style="font-size:13px;color:#16a34a">No strikes within your rings. Clear to work.</div></div>
+          {:else}
+            <div class="fg-metrics-grid">
+              <div class="fg-metric">
+                <div class="fg-metric-val" style="color:{lightningColor(lightningResult.status)}">{lightningResult.nearestMi ?? '—'}</div>
+                <div class="fg-metric-lbl">nearest {lightningResult.nearestBearing || 'mi'}</div>
+              </div>
+              <div class="fg-metric" style="grid-column:span 2">
+                <div class="fg-metric-val" style="font-size:12px;color:{lightningColor(lightningResult.status)}">{lightningResult.strikeCount} strike(s) in range{lightningResult.resumeAtISO ? ` · all-clear in ${lightningResult.minutesUntilAllClear} min` : ''}</div>
+                <div class="fg-metric-lbl">{lightningResult.status === 'red' ? 'STOP WORK — shelter now' : 'Storm approaching'}</div>
+              </div>
+            </div>
+          {/if}
+          {#if lightningResult && lightningResult.rings}
+            <div class="fg-threshold-row" style="opacity:0.7">{#each lightningResult.rings as r}≤{r.mi}mi: {r.count}&nbsp;&nbsp;{/each}</div>
+          {/if}
+          <div class="fg-control-item">▸ Live strikes emailed to your team the moment lightning enters a stop-work ring; 30-min all-clear after.</div>
+        </div>
+      {/if}
+
+      <!-- MODEL COMPARISON TABLE — columns reflect the selected hazard -->
       {#if worstCaseMode && modelResults.length > 1}
         <div class="fg-card fg-card-flat">
-          <div class="fg-card-header">📊 Model Comparison</div>
+          <div class="fg-card-header">📊 Model Comparison — {selectedHazard === 'wind' ? 'Wind' : selectedHazard === 'rain' ? 'Rain' : selectedHazard === 'solar' ? 'Solar' : 'Heat'}</div>
           <table class="fg-table">
-            <thead><tr><th>Model</th><th>Zone</th><th>App.T</th><th>Wind</th></tr></thead>
-            <tbody>
-              {#each modelResults as mr}
-                <tr class="{mr.isWorst ? 'fg-worst-row' : ''}">
-                  <td>{mr.modelLabel}{mr.isWorst ? ' ⚡' : ''}</td>
-                  <td style="color:{mr.heat.zoneInfo.color}">{mr.heat.zoneInfo.riskLabel}</td>
-                  <td style="color:{mr.heat.zoneInfo.color}">
-                    {mr.heat.apparentTempFinal === 999 ? 'NW' : fmtTemp(mr.heat.apparentTempFinal, units)}
-                  </td>
-                  <td style="color:{mr.wind.riskColor}">{fmtWind(mr.raw.windMs, units)}</td>
-                </tr>
-              {/each}
-            </tbody>
+            {#if selectedHazard === 'wind'}
+              <thead><tr><th>Model</th><th>Speed</th><th>Beaufort</th><th>Risk</th></tr></thead>
+              <tbody>
+                {#each modelResults as mr}
+                  <tr class="{mr.modelKey === cmpWorstKey ? 'fg-worst-row' : ''}">
+                    <td>{mr.modelLabel}{mr.modelKey === cmpWorstKey ? ' ⚡' : ''}</td>
+                    <td>{fmtWind(mr.raw.windMs ?? 0, units)}</td>
+                    <td>Bft {mr.wind.beaufort}</td>
+                    <td style="color:{mr.wind.riskColor}">{mr.wind.riskLabel}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            {:else if selectedHazard === 'rain'}
+              <thead><tr><th>Model</th><th>Rate</th><th>Intensity</th><th>Risk</th></tr></thead>
+              <tbody>
+                {#each modelResults as mr}
+                  <tr class="{mr.modelKey === cmpWorstKey ? 'fg-worst-row' : ''}">
+                    <td>{mr.modelLabel}{mr.modelKey === cmpWorstKey ? ' ⚡' : ''}</td>
+                    <td>{fmtRain(mr.raw.rainMmH ?? 0, units)}</td>
+                    <td>{mr.rain.intensityLabel}</td>
+                    <td style="color:{mr.rain.riskColor}">{mr.rain.riskLabel}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            {:else if selectedHazard === 'solar'}
+              <thead><tr><th>Model</th><th>Irradiance</th><th>Band</th></tr></thead>
+              <tbody>
+                {#each modelResults as mr}
+                  <tr class="{mr.modelKey === cmpWorstKey ? 'fg-worst-row' : ''}">
+                    <td>{mr.modelLabel}{mr.modelKey === cmpWorstKey ? ' ⚡' : ''}</td>
+                    <td>{mr.raw.solarWm2 ?? 0} W/m²</td>
+                    <td style="color:{solarBand(mr.raw.solarWm2 ?? 0, isDay).color}">{solarBand(mr.raw.solarWm2 ?? 0, isDay).label}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            {:else}
+              <thead><tr><th>Model</th><th>Zone</th><th>App.T</th></tr></thead>
+              <tbody>
+                {#each modelResults as mr}
+                  <tr class="{mr.modelKey === cmpWorstKey ? 'fg-worst-row' : ''}">
+                    <td>{mr.modelLabel}{mr.modelKey === cmpWorstKey ? ' ⚡' : ''}</td>
+                    <td style="color:{mr.heat.zoneInfo.color}">{mr.heat.zoneInfo.riskLabel}</td>
+                    <td style="color:{mr.heat.zoneInfo.color}">
+                      {mr.heat.apparentTempFinal === 999 ? 'NW' : fmtTemp(mr.heat.apparentTempFinal, units)}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            {/if}
           </table>
         </div>
       {/if}
@@ -422,6 +491,7 @@
       </div>
     {:else}
     <div class="fg-section-title">🚨 Emergency Response — All Hazards</div>
+    <div class="fg-active-site">📍 <b>{activeSiteLabel}</b>{#if !activeIsSaved} <span class="fg-site-hint">· current map location (not a saved site)</span>{/if}</div>
 
     {#if sosHazards.length === 0}
       <div class="fg-empty" style="padding:16px 12px">No hazards selected to monitor. Enable hazards in <b>Config → Hazards to Monitor</b>.</div>
@@ -491,6 +561,7 @@
     <div class="fg-report-note">
       Aligned to ISO 7933:2004 / ISO 7243:2017 / ACGIH TLV / FIDIC Clause 8.4
     </div>
+    <div class="fg-active-site">📄 Report for: <b>{activeSiteLabel}</b>{#if !activeIsSaved} <span class="fg-site-hint">· current map location — pick a saved site on Live to report on it</span>{/if}</div>
 
     {#if !isPro}
       <div class="fg-upgrade">🔒 ISO 7933 report generation is a <b>Pro</b> feature. Activate a license in <b>Config</b> to produce defensible weekly reports &amp; FIDIC 8.4 evidence.</div>
@@ -498,11 +569,11 @@
     <div class="fg-form">
       <label>Project Name<input bind:value={reportMeta.projectName} placeholder="Site/Project Name" /></label>
       <label>Contract No.<input bind:value={reportMeta.contractNumber} placeholder="CONTRACT-001" /></label>
-      <label>Country / Jurisdiction<input bind:value={reportMeta.country} placeholder="Oman, UAE, Qatar…" /></label>
+      <label>Country / Jurisdiction<input bind:value={reportMeta.country} placeholder="UAE, Qatar, Saudi Arabia…" /></label>
       <label>Client / Employer<input bind:value={reportMeta.clientName} placeholder="Client Name" /></label>
       <label>Main Contractor<input bind:value={reportMeta.contractorName} placeholder="Contractor Name" /></label>
       <label>HSE Manager<input bind:value={reportMeta.hseManagerName} placeholder="Name, Cert. No." /></label>
-      <label>Regulatory Reference<input bind:value={reportMeta.regulatoryRef} placeholder="e.g. Min. Decision 286/2008" /></label>
+      <label>Regulatory Reference<input bind:value={reportMeta.regulatoryRef} placeholder="e.g. local midday-work regulation" /></label>
       <label>Work Ban Start<input bind:value={reportMeta.banStart} placeholder="12:30" /></label>
       <label>Work Ban End<input bind:value={reportMeta.banEnd} placeholder="15:30" /></label>
       <label>Ban Months<input bind:value={reportMeta.banMonths} placeholder="June, July, August" /></label>
@@ -553,6 +624,20 @@
     </div>
 
     <div class="fg-settings-section">
+      <div class="fg-settings-label">🎯 Hazards to Monitor</div>
+      <div class="fg-note">Choose which hazards FieldGuard actively monitors. This drives live alerts, the SOS page, the weekly report and the 24/7 email monitor.</div>
+      {#each HAZARD_EMERGENCIES as hz}
+        <label class="fg-toggle-label">
+          <input type="checkbox" bind:checked={settings.monitorHazards[hz.key]} on:change={saveSettings} />
+          {hz.icon} {hz.title}
+        </label>
+      {/each}
+      {#if !Object.values(settings.monitorHazards).some(Boolean)}
+        <div class="fg-license-msg">⚠ No hazards selected — nothing will be monitored or alerted.</div>
+      {/if}
+    </div>
+
+    <div class="fg-settings-section">
       <div class="fg-settings-label">🌐 Units &amp; Display {#if !isPro}<span class="fg-pro-tag">PRO</span>{/if}</div>
       <label class="fg-radio-label">
         <input type="radio" bind:group={settings.units} value="metric" on:change={saveSettings} disabled={!isPro} />
@@ -570,7 +655,7 @@
       <div class="fg-note">Wind chill (Environment Canada) + ACGIH cold-stress zones &amp; frostbite times.</div>
       <label class="fg-radio-label">
         <input type="radio" bind:group={settings.winterMode} value="auto" on:change={saveSettings} disabled={!isPro} />
-        <span class="fg-radio-text">Auto <span class="fg-adj">show when ≤ 10°C</span></span>
+        <span class="fg-radio-text">Auto <span class="fg-adj">show when ≤ {units === 'imperial' ? '50°F' : '10°C'}</span></span>
       </label>
       <label class="fg-radio-label">
         <input type="radio" bind:group={settings.winterMode} value="on" on:change={saveSettings} disabled={!isPro} />
@@ -587,7 +672,7 @@
       {#each Object.entries(PPE_PROFILES) as [key, prof]}
         <label class="fg-radio-label">
           <input type="radio" bind:group={settings.ppeProfile} value={key} on:change={saveSettings} />
-          <span class="fg-radio-text">{prof.label} <span class="fg-adj">+{prof.adjustment}°C</span></span>
+          <span class="fg-radio-text">{prof.label} <span class="fg-adj">{fmtAdj(prof.adjustment, units)}</span></span>
         </label>
       {/each}
     </div>
@@ -642,39 +727,13 @@
     </div>
 
     <div class="fg-settings-section">
-      <div class="fg-settings-label">⛈ Lightning {#if !isPro}<span class="fg-pro-tag">PRO</span>{/if}</div>
-      <div class="fg-note">Safety radius for the lightning warning zone (10 km ≈ the 30-30 rule). Shown on the Thunderstorm card.</div>
-      <label>Warning radius ({units === 'imperial' ? 'mi' : 'km'})
-        <div class="fg-slider-row">
-          <input type="range" min="5" max="25" step="1" bind:value={settings.lightningRadiusKm} on:change={saveSettings} disabled={!isPro} />
-          <span>{fmtDistance(settings.lightningRadiusKm, units)} · ⌀ {fmtDistance(settings.lightningRadiusKm * 2, units)}</span>
-        </div>
-      </label>
-    </div>
-
-    <div class="fg-settings-section">
-      <div class="fg-settings-label">🎯 Hazards to Monitor</div>
-      <div class="fg-note">Choose which hazards FieldGuard actively monitors. This drives live alerts, the SOS page, the weekly report and the 24/7 email monitor.</div>
-      {#each HAZARD_EMERGENCIES as hz}
-        <label class="fg-toggle-label">
-          <input type="checkbox" bind:checked={settings.monitorHazards[hz.key]} on:change={saveSettings} />
-          {hz.icon} {hz.title}
-        </label>
-      {/each}
-      {#if !Object.values(settings.monitorHazards).some(Boolean)}
-        <div class="fg-license-msg">⚠ No hazards selected — nothing will be monitored or alerted.</div>
-      {/if}
-    </div>
-
-    {#if isSite}
-    <div class="fg-settings-section">
-      <div class="fg-settings-label">⚡ Real-time lightning strikes <span class="fg-pro-tag">SITE</span></div>
+      <div class="fg-settings-label">⚡ Real-time lightning strikes{#if !isSite} <span class="fg-pro-tag">SITE</span>{/if}</div>
       <div class="fg-note">Live strike detection on the FieldGuard backend — separate from the storm-potential (CAPE) card. When on, the 24/7 monitor checks strikes <b>every 2 minutes</b> and emails a stop-work alert the moment lightning enters your stop-work ring, plus a 30-minute all-clear. Re-register the site to apply changes.</div>
       <label class="fg-toggle-label">
-        <input type="checkbox" bind:checked={settings.monitorHazards.lightning} on:change={saveSettings} />
-        Enable real-time lightning stop-work alerts
+        <input type="checkbox" bind:checked={settings.monitorHazards.lightning} on:change={saveSettings} disabled={!isSite} />
+        Enable real-time lightning stop-work alerts{#if !isSite} <span class="fg-pro-tag">SITE</span>{/if}
       </label>
-      {#if settings.monitorHazards.lightning}
+      {#if isSite && settings.monitorHazards.lightning}
         <label>Stop-work ring — inner (RED) — strikes within
           <div class="fg-slider-row">
             <input type="range" min="2" max="10" step="1" bind:value={settings.lightningStopInnerMi} on:change={saveSettings} />
@@ -706,9 +765,10 @@
           </div>
         </label>
         <div class="fg-note">Rings: ≤{settings.lightningStopInnerMi} &amp; ≤{settings.lightningStopMi} mi = stop-work (RED) · ≤{settings.lightningWarnMi} mi = warning · ≤{settings.lightningAdvisoryMi} mi = advisory. Decision-support only — the stop-work call stays with your competent person.</div>
+      {:else if !isSite}
+        <div class="fg-note">Real-time lightning strike alerts (range rings + stop-work + all-clear) are available on the <b>Site</b> licence tier.</div>
       {/if}
     </div>
-    {/if}
 
     <div class="fg-settings-section">
       <div class="fg-settings-label">🔔 Alerts</div>
@@ -806,12 +866,30 @@
   let rainResult: RainResult | null = null;
   let coldResult: ColdResult | null = null;
   let thunderResult: ThunderResult | null = null;
+  let lightningResult: any = null;       // live /api/lightning result (Site + lightning enabled)
+  let lightningBusy = false;
   let selectedHazard = 'heat';   // which of the 4 hazard squares is expanded
   let emgHazard: HazardEmergency['key'] = 'heat';   // which SOS hazard card is open
   let modelResults: any[] = [];
   let forecastList: HazardForecast[] = [];   // upcoming threshold crossings (forecast lookahead)
   let forecastBusy = false;
   let forecastNote = '';                      // status line for the forecast card
+
+  // Model Comparison table reflects the selected hazard; this picks the worst model
+  // for that hazard so the ⚡ marker highlights the right row (per-hazard, not always heat).
+  $: cmpWorstKey = (() => {
+    if (!modelResults || modelResults.length < 2) return '';
+    if (selectedHazard === 'wind')  return modelResults.reduce((b, r) => ((r.raw?.windMs ?? 0)  > (b.raw?.windMs ?? 0)  ? r : b), modelResults[0]).modelKey;
+    if (selectedHazard === 'rain')  return modelResults.reduce((b, r) => ((r.raw?.rainMmH ?? 0) > (b.raw?.rainMmH ?? 0) ? r : b), modelResults[0]).modelKey;
+    if (selectedHazard === 'solar') return modelResults.reduce((b, r) => ((r.raw?.solarWm2 ?? 0) > (b.raw?.solarWm2 ?? 0) ? r : b), modelResults[0]).modelKey;
+    // heat: worst zone, then highest apparent temp (mirrors the worst-case envelope logic)
+    return [...modelResults].sort((a, b) => {
+      const zd = zoneSeverity(b.heat.zone) - zoneSeverity(a.heat.zone);
+      if (zd !== 0) return zd;
+      return (b.heat.apparentTempFinal === 999 ? 99 : b.heat.apparentTempFinal)
+           - (a.heat.apparentTempFinal === 999 ? 99 : a.heat.apparentTempFinal);
+    })[0].modelKey;
+  })();
 
   // ── License / tier ─────────────────────────────────────────
   // Pro features (imperial units, multi-model worst-case, cold-stress/winter,
@@ -862,6 +940,14 @@
     return licenseTier === 'site' ? 10 : 3;
   }
   function canAddSite(): boolean { return savedSites.length < maxSites(); }
+  // Reactive gate for the add-a-site controls: once the licence's site limit is reached
+  // (Site 10 · Individual 3 · Free 1) the whole "add" row disappears. Reactive on
+  // savedSites so it updates the instant the last pin is saved.
+  $: canAddMore = savedSites.length < maxSites();
+  // Which site the SOS + Report tabs are actually reflecting (the active pin). Shown
+  // on those tabs so it's never ambiguous; flags when it's just the map position.
+  $: activeSiteLabel = (savedSites.find(s => s.id === activeSiteId)?.name) || locationName || `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+  $: activeIsSaved = !!activeSiteId && savedSites.some(s => s.id === activeSiteId);
 
   const TABS = [
     { id: 'dashboard',  icon: '🏠', label: 'Live'    },
@@ -913,7 +999,7 @@
   let reportMeta = {
     projectName: '', contractNumber: '', country: '',
     clientName: '', contractorName: '', hseManagerName: '',
-    regulatoryRef: 'Ministerial Decision No. 286/2008',
+    regulatoryRef: '',
     banStart: '12:30', banEnd: '15:30', banMonths: 'June, July, August',
     fidic: 'UNDER REVIEW', delayDays: 0,
   };
@@ -927,7 +1013,7 @@
       const m = MODELS.find(x => x.key === modelKey);
       const om = m ? m.om : 'best_match';
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-        `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` +
+        `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cloud_cover` +
         `&hourly=cape&wind_speed_unit=ms&forecast_days=1&models=${om}`;
       const res = await fetch(url);
       if (!res.ok) return null;
@@ -948,6 +1034,7 @@
         windMs: Math.max(0, Math.round((c.wind_speed_10m ?? 0) * 10) / 10),
         solarWm2: Math.max(0, Math.round(c.shortwave_radiation ?? 0)),   // real shortwave irradiance
         rainMmH: Math.max(0, Math.round((c.precipitation ?? 0) * 10) / 10),
+        cloudCoverPct: c.cloud_cover != null ? Math.min(100, Math.max(0, Math.round(c.cloud_cover))) : undefined,
         capeJkg,
       };
     } catch {
@@ -964,7 +1051,7 @@
       const om = MODELS.find(x => x.key === selectedModel)?.om ?? 'best_match';
       const days = Math.min(3, Math.max(1, settings.forecastDays || 1));
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-        `&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cape` +
+        `&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cape,cloud_cover` +
         `&wind_speed_unit=ms&forecast_days=${days}&models=${om}`;
       const res = await fetch(url);
       if (!res.ok) return null;
@@ -981,6 +1068,7 @@
           windMs: Math.max(0, at(h.wind_speed_10m, i)),
           solarWm2: Math.max(0, at(h.shortwave_radiation, i)),
           rainMmH: Math.max(0, at(h.precipitation, i)),
+          cloudCoverPct: Array.isArray(h.cloud_cover) && h.cloud_cover[i] != null ? Math.min(100, Math.max(0, Math.round(h.cloud_cover[i]))) : undefined,
           capeJkg: Array.isArray(h.cape) && h.cape[i] != null ? Math.max(0, Math.round(h.cape[i])) : undefined,
         });
       }
@@ -1061,6 +1149,33 @@
     return out;
   }
 
+  // ── Live lightning strikes (Site) — /api/lightning, shown on the Live tab ──
+  const LIGHTNING_API = 'https://fieldguard-hse.com/api/lightning';
+  function lightningColor(s: string): string {
+    return s === 'red' ? '#dc2626' : s === 'warning' ? '#f59e0b' : s === 'advisory' ? '#3b82f6' : '#16a34a';
+  }
+  function lightningLabel(s: string): string {
+    return s === 'red' ? 'STOP WORK' : s === 'warning' ? 'WARNING' : s === 'advisory' ? 'ADVISORY' : 'CLEAR';
+  }
+  async function runLightning() {
+    if (!isSite || !settings.monitorHazards.lightning || !licenseKey) { lightningResult = null; return; }
+    lightningBusy = true;
+    try {
+      const body = { key: licenseKey, lat, lon,
+        rings: [
+          { mi: settings.lightningStopInnerMi, level: 'red', label: 'Stop work' },
+          { mi: settings.lightningStopMi, level: 'red', label: 'Stop work' },
+          { mi: settings.lightningWarnMi, level: 'warning', label: 'Prepare to suspend' },
+          { mi: settings.lightningAdvisoryMi, level: 'advisory', label: 'Monitor' },
+        ],
+        allClearMinutes: settings.lightningAllClearMin };
+      const r = await fetch(LIGHTNING_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      lightningResult = j && j.ok ? j : null;
+    } catch { lightningResult = null; }
+    lightningBusy = false;
+  }
+
   async function runForecast() {
     if (!isSite || !settings.forecastAlerts) { forecastList = []; forecastNote = ''; return; }
     forecastBusy = true; forecastNote = '';
@@ -1116,7 +1231,7 @@
       wind: assessWind(inputs.windMs, settings.windWarnMs, settings.windDangerMs),
       rain: assessRain(inputs.rainMmH, settings.rainWarnMmh, settings.rainDangerMmh),
       cold: assessColdStress(inputs.tempC, inputs.windMs),
-      thunder: assessThunderstorm(inputs.capeJkg),
+      thunder: assessThunderstorm(inputs.capeJkg, inputs.cloudCoverPct, inputs.rainMmH),
     };
   }
 
@@ -1140,6 +1255,41 @@
       default:        return null;
     }
   }
+
+  // ── Severity ranking so the temperature square + saved-site dot reflect the WORST
+  // hazard the user actually monitors — not just heat. At −18° cold (red) must beat
+  // heat's "green" (no heat risk ≠ safe). Colours come from the assess functions.
+  const COLOR_SEV: Record<string, number> = {
+    '#16a34a': 0, '#22c55e': 0,               // green / safe / low
+    '#d97706': 1, '#f59e0b': 1,               // amber / caution / cool
+    '#f97316': 2,                             // orange / warning / cold
+    '#dc2626': 3, '#ef4444': 3,               // red / danger / very cold / high
+    '#7c3aed': 4, '#a855f7': 4,               // purple / extreme / severe
+    '#6b7280': 5, '#111827': 5, '#030712': 5, // heat NO-WORK (black zone)
+  };
+  function sev(hex: string): number { return COLOR_SEV[(hex || '').toLowerCase()] ?? 0; }
+  // Worst {label,color} across a key→status list, honouring the monitor set.
+  function worstStatus(items: Array<{ key: string; st: { label: string; color: string } | null }>): { label: string; color: string } | null {
+    let best: { label: string; color: string } | null = null, bestSev = -1;
+    for (const { key, st } of items) {
+      if (!st || !isMonitored(key)) continue;
+      const sv = sev(st.color);
+      if (sv > bestSev) { bestSev = sv; best = st; }
+    }
+    return best;
+  }
+  // The temperature square follows the temperature danger in play: cold when it's cold
+  // (and monitored), heat when hot — never a misleading "green" at −18°.
+  $: tempStatus = (() => {
+    const h = heat ? { label: heat.zoneInfo.riskLabel, color: heat.zoneInfo.color } : null;
+    const c = (coldResult && coldResult.active && isMonitored('cold')) ? { label: coldResult.riskLabel, color: coldResult.riskColor } : null;
+    if (c && (!h || sev(c.color) > sev(h.color))) return c;
+    return h;
+  })();
+  // True when cold outranks heat — used to hide the green "heat zone" banner (a big
+  // GREEN "Unrestricted" under −18° reads wrong; the Cold card carries the status).
+  $: coldDominates = !!(coldResult && coldResult.active && isMonitored('cold')
+    && sev(coldResult.riskColor) > sev(heat?.zoneInfo?.color ?? '#16a34a'));
 
   // Is a hazard in the user's "monitor" set? Defaults to true if unset (older
   // saved settings). Cold additionally respects the winter mode being off.
@@ -1229,15 +1379,19 @@
         rawData = {
           tempC: heatW.raw.tempC, humidity: heatW.raw.humidity,
           windMs: windW.raw.windMs, solarWm2: solarMax,
-          rainMmH: rainW.raw.rainMmH, capeJkg: capeW.raw.capeJkg,
+          rainMmH: rainW.raw.rainMmH, capeJkg: capeW.raw.capeJkg, cloudCoverPct: capeW.raw.cloudCoverPct,
         };
       }
       isStale = false;
       if (rawData) cacheReading(rawData);
-      if (activeSiteId && heat) bgStatus = { ...bgStatus, [activeSiteId]: { color: heat.zoneInfo.color, label: heat.zoneInfo.riskLabel, time: new Date().toLocaleTimeString() } };
+      if (activeSiteId && heat) {
+        const w = worstStatus(['heat','cold','wind','rain','thunder','solar'].map(k => ({ key: k, st: currentHazardStatus(k) }))) || { color: heat.zoneInfo.color, label: heat.zoneInfo.riskLabel };
+        bgStatus = { ...bgStatus, [activeSiteId]: { color: w.color, label: w.label, time: new Date().toLocaleTimeString() } };
+      }
 
       checkAlerts();
       runForecast();
+      runLightning();
     } catch (e) {
       const cached = loadCachedReading();
       if (cached) {
@@ -1524,6 +1678,7 @@
     savedSites = [...savedSites, { id, name, lat: la, lon: lo }];
     activeSiteId = id; newSiteName = ''; coordInput = '';
     lat = la; lon = lo; locationName = name; locked = true; geocodedFor = '';
+    panMap(la, lo);
     persistSites(); refreshData();
   }
   // Rename a saved site (double-click its chip). Fixes "can't edit the name".
@@ -1539,9 +1694,29 @@
     editingSiteId = '';
   }
   function focusInput(node: HTMLInputElement) { node.focus(); node.select(); }
+
+  // Temperature OFFSETS (PPE adjustment, thresholds) are stored in °C. Show them as an
+  // °F delta (×1.8) in imperial mode so nothing reads in Celsius on an imperial panel.
+  // NOTE: takes `u` explicitly so the call site references `units` and stays reactive
+  // to metric/imperial toggles (a bare fmtAdj(c) reading module `units` would freeze
+  // at first render, since Svelte wouldn't see a `units` dependency at the call site).
+  function fmtAdj(c: number, u: UnitSystem): string {
+    if (u === 'imperial') { const f = c * 1.8; return `+${Number.isInteger(f) ? f : f.toFixed(1)}°F`; }
+    return `+${c}°C`;
+  }
+
+  // View-only recentre of Windy's map onto the chosen pin. This is the ONE deliberate
+  // map interaction and it is safe: panTo moves the viewport only — it does NOT call
+  // store.set, change overlays, add Leaflet layers, or touch click handlers (the things
+  // that risked delisting). Reading data still happens over HTTP; the map is never mutated.
+  function panMap(la: number, lo: number) {
+    try { map.panTo([la, lo], { animate: true }); } catch {}
+  }
+
   function selectSite(s: SavedSite) {
     activeSiteId = s.id; locked = true;
     lat = s.lat; lon = s.lon; locationName = s.name; geocodedFor = '';
+    panMap(s.lat, s.lon);
     refreshData();
   }
   function removeSite(s: SavedSite) {
@@ -1590,7 +1765,7 @@
     for (const s of savedSites) {
       try {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}` +
-          `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation` +
+          `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,shortwave_radiation,cloud_cover` +
           `&hourly=cape&wind_speed_unit=ms&forecast_days=1&models=${om}`;
         const res = await fetch(url); if (!res.ok) continue;
         const j = await res.json(); const c = j && j.current; if (!c || c.temperature_2m == null) continue;
@@ -1599,14 +1774,28 @@
         const inputs: WeatherInputs = {
           tempC: c.temperature_2m, humidity: c.relative_humidity_2m ?? 50,
           windMs: Math.max(0, c.wind_speed_10m ?? 0), solarWm2: Math.max(0, c.shortwave_radiation ?? 0),
-          rainMmH: Math.max(0, c.precipitation ?? 0), capeJkg,
+          rainMmH: Math.max(0, c.precipitation ?? 0), capeJkg, cloudCoverPct: c.cloud_cover ?? undefined,
         };
         const now = new Date();
-        const h = assessHeatStress(inputs, settings.ppeProfile, now.getUTCHours() + s.lon / 15, now.getMonth() + 1, null);
-        bgStatus = { ...bgStatus, [s.id]: { color: h.zoneInfo.color, label: h.zoneInfo.riskLabel, time: now.toLocaleTimeString() } };
-        if (settings.soundAlerts && s.id !== activeSiteId && (h.zone === 'red' || h.zone === 'purple' || h.zone === 'black')) {
-          triggerNotification(`⚠ ${s.name} — ${h.zoneInfo.riskLabel}`,
-            `Apparent Temp ${h.apparentTempFinal === 999 ? 'NO WORK' : h.apparentTempFinal + '°C'}`);
+        const localHour = now.getUTCHours() + s.lon / 15, month = now.getMonth() + 1;
+        // Evaluate every hazard so the chip dot reflects the WORST monitored one, not just heat.
+        const h = assessHeatStress(inputs, settings.ppeProfile, localHour, month, null);
+        const wnd = assessWind(inputs.windMs, settings.windWarnMs, settings.windDangerMs);
+        const rn = assessRain(inputs.rainMmH, settings.rainWarnMmh, settings.rainDangerMmh);
+        const cd = assessColdStress(inputs.tempC, inputs.windMs);
+        const th = assessThunderstorm(inputs.capeJkg, inputs.cloudCoverPct, inputs.rainMmH);
+        const sb = solarBand(inputs.solarWm2, isDaytime(s.lat, s.lon, now));
+        const w = worstStatus([
+          { key: 'heat',    st: { label: h.zoneInfo.riskLabel, color: h.zoneInfo.color } },
+          { key: 'cold',    st: cd.active ? { label: cd.riskLabel, color: cd.riskColor } : null },
+          { key: 'wind',    st: { label: wnd.riskLabel, color: wnd.riskColor } },
+          { key: 'rain',    st: { label: rn.riskLabel, color: rn.riskColor } },
+          { key: 'thunder', st: th.available ? { label: th.riskLabel, color: th.riskColor } : null },
+          { key: 'solar',   st: { label: sb.label, color: sb.color } },
+        ]) || { color: h.zoneInfo.color, label: h.zoneInfo.riskLabel };
+        bgStatus = { ...bgStatus, [s.id]: { color: w.color, label: w.label, time: now.toLocaleTimeString() } };
+        if (settings.soundAlerts && s.id !== activeSiteId && sev(w.color) >= 3) {
+          triggerNotification(`⚠ ${s.name} — ${w.label}`, `${s.name}: a monitored hazard is at danger level.`);
         }
       } catch {}
     }
@@ -1686,6 +1875,9 @@
     background:#1e293b; font-size:11px; color:#94a3b8;
   }
   .fg-loc-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .fg-active-site { padding:6px 12px; font-size:12px; color:#cbd5e1; background:#0b1220; border-bottom:1px solid #1e293b; }
+  .fg-active-site b { color:#38bdf8; }
+  .fg-site-hint { color:#f59e0b; font-size:11px; }
   .fg-model-row { display:flex; align-items:center; gap:8px; padding:5px 12px; background:#0f172a; font-size:11px; color:#94a3b8; }
   .fg-model-row select { background:#1e293b; border:1px solid #334155; color:#e2e8f0; padding:3px 6px; border-radius:4px; font-size:11px; }
   .fg-worst-label { display:flex; align-items:center; gap:4px; cursor:pointer; margin-left:auto; }
@@ -1753,6 +1945,8 @@
   .fg-control-item { font-size:11px; color:#94a3b8; padding:3px 0; border-bottom:1px solid #0f172a; }
   .fg-control-item:last-child { border-bottom:none; }
   .fg-threshold-row { font-size:10px; color:#475569; margin-top:4px; }
+  .fg-overlay-hint { font-size:11px; color:#94a3b8; margin-top:10px; padding:8px 10px; background:#0b1220; border:1px solid #1e293b; border-radius:6px; line-height:1.45; }
+  .fg-overlay-hint b { color:#38bdf8; }
   .fg-table { width:100%; border-collapse:collapse; font-size:11px; }
   .fg-table th { color:#64748b; text-align:left; padding:3px 4px; border-bottom:1px solid #334155; }
   .fg-table td { padding:3px 4px; color:#94a3b8; }
