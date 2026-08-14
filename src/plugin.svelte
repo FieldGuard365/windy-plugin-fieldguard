@@ -737,25 +737,25 @@
         <label>Stop-work ring — inner (RED) — strikes within
           <div class="fg-slider-row">
             <input type="range" min="2" max="10" step="1" bind:value={settings.lightningStopInnerMi} on:change={saveSettings} />
-            <span>{settings.lightningStopInnerMi} mi</span>
+            <span>{ringLbl(settings.lightningStopInnerMi, units)}</span>
           </div>
         </label>
         <label>Stop-work ring — outer (RED) — strikes within
           <div class="fg-slider-row">
             <input type="range" min="3" max="15" step="1" bind:value={settings.lightningStopMi} on:change={saveSettings} />
-            <span>{settings.lightningStopMi} mi</span>
+            <span>{ringLbl(settings.lightningStopMi, units)}</span>
           </div>
         </label>
         <label>Warning ring — within
           <div class="fg-slider-row">
             <input type="range" min="5" max="25" step="1" bind:value={settings.lightningWarnMi} on:change={saveSettings} />
-            <span>{settings.lightningWarnMi} mi</span>
+            <span>{ringLbl(settings.lightningWarnMi, units)}</span>
           </div>
         </label>
         <label>Advisory ring — within
           <div class="fg-slider-row">
             <input type="range" min="10" max="30" step="1" bind:value={settings.lightningAdvisoryMi} on:change={saveSettings} />
-            <span>{settings.lightningAdvisoryMi} mi</span>
+            <span>{ringLbl(settings.lightningAdvisoryMi, units)}</span>
           </div>
         </label>
         <label>All-clear wait (30-30 rule)
@@ -764,7 +764,7 @@
             <span>{settings.lightningAllClearMin} min</span>
           </div>
         </label>
-        <div class="fg-note">Rings: ≤{settings.lightningStopInnerMi} &amp; ≤{settings.lightningStopMi} mi = stop-work (RED) · ≤{settings.lightningWarnMi} mi = warning · ≤{settings.lightningAdvisoryMi} mi = advisory. Decision-support only — the stop-work call stays with your competent person.</div>
+        <div class="fg-note">Rings: ≤{ringLbl(settings.lightningStopInnerMi, units)} &amp; ≤{ringLbl(settings.lightningStopMi, units)} = stop-work (RED) · ≤{ringLbl(settings.lightningWarnMi, units)} = warning · ≤{ringLbl(settings.lightningAdvisoryMi, units)} = advisory. Decision-support only — the stop-work call stays with your competent person.</div>
       {:else if !isSite}
         <div class="fg-note">Real-time lightning strike alerts (range rings + stop-work + all-clear) are available on the <b>Site</b> licence tier.</div>
       {/if}
@@ -808,7 +808,7 @@
           <input class="fg-license-input" type="text" placeholder="you@company.com, super@company.com" spellcheck="false" bind:value={alertEmail} />
           <button class="fg-btn-inline" on:click={register24} disabled={monitorBusy}>{monitorBusy ? '…' : '🔔 Monitor'}</button>
         </div>
-        <div class="fg-note">Registers the current pin ({lat.toFixed(3)}, {lon.toFixed(3)}). Up to {maxSites()} site{maxSites() > 1 ? 's' : ''} on your license. Add several recipients for this site, comma-separated — each site can have its own list. For a bigger team (10+), use one internal distribution address instead.</div>
+        <div class="fg-note">Registers the current pin ({lat.toFixed(5)}, {lon.toFixed(5)}). Up to {maxSites()} site{maxSites() > 1 ? 's' : ''} on your license. Add several recipients for this site, comma-separated — each site can have its own list. For a bigger team (10+), use one internal distribution address instead.</div>
         {#if monitoredSites.length > 0}
           <div class="fg-mon-list">
             {#each monitoredSites as m}
@@ -1563,6 +1563,9 @@
               ...HAZARD_EMERGENCIES.map(h => h.key).filter(k => isMonitored(k)),
               ...(isSite && settings.monitorHazards.lightning ? ['lightning'] : []),
             ],
+            // Send the site's display units so the 24/7 email alerts match this panel
+            // (°F/mph when Imperial). Read by the worker's evaluateHazards().
+            units,
             windWarnMs: settings.windWarnMs, windDangerMs: settings.windDangerMs,
             rainWarnMmh: settings.rainWarnMmh, rainDangerMmh: settings.rainDangerMmh,
             // Real-time lightning strike rings (Site) — read by /api/lightning + the 2-min loop.
@@ -1705,12 +1708,25 @@
     return `+${c}°C`;
   }
 
-  // View-only recentre of Windy's map onto the chosen pin. This is the ONE deliberate
-  // map interaction and it is safe: panTo moves the viewport only — it does NOT call
-  // store.set, change overlays, add Leaflet layers, or touch click handlers (the things
+  // Lightning ring labels: stored/sent in miles (the /api/lightning contract + 30-30
+  // convention), but shown in km for metric sites. Display only — the value sent to the
+  // backend never changes. Takes `units` as an arg so Svelte re-renders when it toggles.
+  function ringLbl(mi: number, u: UnitSystem): string {
+    return u === 'imperial' ? `${mi} mi` : `${(mi * 1.60934).toFixed(1)} km`;
+  }
+
+  // View-only recentre + tight zoom onto the chosen pin, and (re)open Windy's OWN picker
+  // there so the site is marked. All three are viewport/native-UI only and SAFE: no
+  // store.set, no overlays, no custom Leaflet layers, no click-handler changes (the things
   // that risked delisting). Reading data still happens over HTTP; the map is never mutated.
   function panMap(la: number, lo: number) {
-    try { map.panTo([la, lo], { animate: true }); } catch {}
+    try {
+      // Zoom IN to at least site level, never out — keep the user's closer zoom if any.
+      let z = 11; try { z = Math.max(map.getZoom(), 11); } catch {}
+      map.setView([la, lo], z, { animate: true });
+    } catch { try { map.panTo([la, lo], { animate: true }); } catch {} }
+    // Reinstate the site marker via Windy's native picker (not a custom layer).
+    try { broadcast.emit('rqstOpen', 'picker', { lat: la, lon: lo }); } catch {}
   }
 
   function selectSite(s: SavedSite) {

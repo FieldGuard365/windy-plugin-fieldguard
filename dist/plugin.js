@@ -1,6 +1,6 @@
 const __pluginConfig =  {
   "name": "windy-plugin-fieldguard",
-  "version": "3.0.9",
+  "version": "3.1.0",
   "icon": "🛡️",
   "title": "FieldGuard — HSE Field Safety",
   "description": "Real-time HSE safety monitor for outdoor crews. Six site hazards on one pin — heat stress (WBGT), cold (wind chill), wind, rain, storm/lightning and solar/UV — across all Windy models, with a worst-case engine, configurable thresholds and 24/7 email alerts (browser closed). Site tier adds real-time lightning strike stop-work rings, Forecast Watch lookahead, and one-click ISO 7933 / FIDIC 8.4 audit reports.",
@@ -10,8 +10,8 @@ const __pluginConfig =  {
   "routerPath": "/fieldguard/:lat?/:lon?",
   "listenToLocationChange": true,
   "hooks": "contextmenu",
-  "built": 1786471050379,
-  "builtReadable": "2026-08-11T17:57:30.379Z",
+  "built": 1786706272427,
+  "builtReadable": "2026-08-14T11:17:52.427Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -6081,64 +6081,60 @@ function create_if_block_66(ctx) {
 	let input0;
 	let t1;
 	let span0;
-	let t2_value = /*settings*/ ctx[12].lightningStopInnerMi + "";
+	let t2_value = ringLbl(/*settings*/ ctx[12].lightningStopInnerMi, /*units*/ ctx[53]) + "";
 	let t2;
 	let t3;
-	let t4;
 	let label1;
-	let t5;
+	let t4;
 	let div1;
 	let input1;
-	let t6;
+	let t5;
 	let span1;
-	let t7_value = /*settings*/ ctx[12].lightningStopMi + "";
+	let t6_value = ringLbl(/*settings*/ ctx[12].lightningStopMi, /*units*/ ctx[53]) + "";
+	let t6;
 	let t7;
-	let t8;
-	let t9;
 	let label2;
-	let t10;
+	let t8;
 	let div2;
 	let input2;
-	let t11;
+	let t9;
 	let span2;
-	let t12_value = /*settings*/ ctx[12].lightningWarnMi + "";
-	let t12;
-	let t13;
-	let t14;
+	let t10_value = ringLbl(/*settings*/ ctx[12].lightningWarnMi, /*units*/ ctx[53]) + "";
+	let t10;
+	let t11;
 	let label3;
-	let t15;
+	let t12;
 	let div3;
 	let input3;
-	let t16;
+	let t13;
 	let span3;
-	let t17_value = /*settings*/ ctx[12].lightningAdvisoryMi + "";
-	let t17;
-	let t18;
-	let t19;
+	let t14_value = ringLbl(/*settings*/ ctx[12].lightningAdvisoryMi, /*units*/ ctx[53]) + "";
+	let t14;
+	let t15;
 	let label4;
-	let t20;
+	let t16;
 	let div4;
 	let input4;
-	let t21;
+	let t17;
 	let span4;
-	let t22_value = /*settings*/ ctx[12].lightningAllClearMin + "";
+	let t18_value = /*settings*/ ctx[12].lightningAllClearMin + "";
+	let t18;
+	let t19;
+	let t20;
+	let div5;
+	let t21;
+	let t22_value = ringLbl(/*settings*/ ctx[12].lightningStopInnerMi, /*units*/ ctx[53]) + "";
 	let t22;
 	let t23;
+	let t24_value = ringLbl(/*settings*/ ctx[12].lightningStopMi, /*units*/ ctx[53]) + "";
 	let t24;
-	let div5;
 	let t25;
-	let t26_value = /*settings*/ ctx[12].lightningStopInnerMi + "";
+	let t26_value = ringLbl(/*settings*/ ctx[12].lightningWarnMi, /*units*/ ctx[53]) + "";
 	let t26;
 	let t27;
-	let t28_value = /*settings*/ ctx[12].lightningStopMi + "";
+	let t28_value = ringLbl(/*settings*/ ctx[12].lightningAdvisoryMi, /*units*/ ctx[53]) + "";
 	let t28;
 	let t29;
-	let t30_value = /*settings*/ ctx[12].lightningWarnMi + "";
-	let t30;
-	let t31;
-	let t32_value = /*settings*/ ctx[12].lightningAdvisoryMi + "";
-	let t32;
-	let t33;
 	let mounted;
 	let dispose;
 
@@ -6151,54 +6147,50 @@ function create_if_block_66(ctx) {
 			t1 = space();
 			span0 = element("span");
 			t2 = text(t2_value);
-			t3 = text(" mi");
-			t4 = space();
+			t3 = space();
 			label1 = element("label");
-			t5 = text("Stop-work ring — outer (RED) — strikes within\r\n          ");
+			t4 = text("Stop-work ring — outer (RED) — strikes within\r\n          ");
 			div1 = element("div");
 			input1 = element("input");
-			t6 = space();
+			t5 = space();
 			span1 = element("span");
-			t7 = text(t7_value);
-			t8 = text(" mi");
-			t9 = space();
+			t6 = text(t6_value);
+			t7 = space();
 			label2 = element("label");
-			t10 = text("Warning ring — within\r\n          ");
+			t8 = text("Warning ring — within\r\n          ");
 			div2 = element("div");
 			input2 = element("input");
-			t11 = space();
+			t9 = space();
 			span2 = element("span");
-			t12 = text(t12_value);
-			t13 = text(" mi");
-			t14 = space();
+			t10 = text(t10_value);
+			t11 = space();
 			label3 = element("label");
-			t15 = text("Advisory ring — within\r\n          ");
+			t12 = text("Advisory ring — within\r\n          ");
 			div3 = element("div");
 			input3 = element("input");
-			t16 = space();
+			t13 = space();
 			span3 = element("span");
-			t17 = text(t17_value);
-			t18 = text(" mi");
-			t19 = space();
+			t14 = text(t14_value);
+			t15 = space();
 			label4 = element("label");
-			t20 = text("All-clear wait (30-30 rule)\r\n          ");
+			t16 = text("All-clear wait (30-30 rule)\r\n          ");
 			div4 = element("div");
 			input4 = element("input");
-			t21 = space();
+			t17 = space();
 			span4 = element("span");
-			t22 = text(t22_value);
-			t23 = text(" min");
-			t24 = space();
+			t18 = text(t18_value);
+			t19 = text(" min");
+			t20 = space();
 			div5 = element("div");
-			t25 = text("Rings: ≤");
+			t21 = text("Rings: ≤");
+			t22 = text(t22_value);
+			t23 = text(" & ≤");
+			t24 = text(t24_value);
+			t25 = text(" = stop-work (RED) · ≤");
 			t26 = text(t26_value);
-			t27 = text(" & ≤");
+			t27 = text(" = warning · ≤");
 			t28 = text(t28_value);
-			t29 = text(" mi = stop-work (RED) · ≤");
-			t30 = text(t30_value);
-			t31 = text(" mi = warning · ≤");
-			t32 = text(t32_value);
-			t33 = text(" mi = advisory. Decision-support only — the stop-work call stays with your competent person.");
+			t29 = text(" = advisory. Decision-support only — the stop-work call stays with your competent person.");
 			attr(input0, "type", "range");
 			attr(input0, "min", "2");
 			attr(input0, "max", "10");
@@ -6250,58 +6242,54 @@ function create_if_block_66(ctx) {
 			append(div0, t1);
 			append(div0, span0);
 			append(span0, t2);
-			append(span0, t3);
-			insert(target, t4, anchor);
+			insert(target, t3, anchor);
 			insert(target, label1, anchor);
-			append(label1, t5);
+			append(label1, t4);
 			append(label1, div1);
 			append(div1, input1);
 			set_input_value(input1, /*settings*/ ctx[12].lightningStopMi);
-			append(div1, t6);
+			append(div1, t5);
 			append(div1, span1);
-			append(span1, t7);
-			append(span1, t8);
-			insert(target, t9, anchor);
+			append(span1, t6);
+			insert(target, t7, anchor);
 			insert(target, label2, anchor);
-			append(label2, t10);
+			append(label2, t8);
 			append(label2, div2);
 			append(div2, input2);
 			set_input_value(input2, /*settings*/ ctx[12].lightningWarnMi);
-			append(div2, t11);
+			append(div2, t9);
 			append(div2, span2);
-			append(span2, t12);
-			append(span2, t13);
-			insert(target, t14, anchor);
+			append(span2, t10);
+			insert(target, t11, anchor);
 			insert(target, label3, anchor);
-			append(label3, t15);
+			append(label3, t12);
 			append(label3, div3);
 			append(div3, input3);
 			set_input_value(input3, /*settings*/ ctx[12].lightningAdvisoryMi);
-			append(div3, t16);
+			append(div3, t13);
 			append(div3, span3);
-			append(span3, t17);
-			append(span3, t18);
-			insert(target, t19, anchor);
+			append(span3, t14);
+			insert(target, t15, anchor);
 			insert(target, label4, anchor);
-			append(label4, t20);
+			append(label4, t16);
 			append(label4, div4);
 			append(div4, input4);
 			set_input_value(input4, /*settings*/ ctx[12].lightningAllClearMin);
-			append(div4, t21);
+			append(div4, t17);
 			append(div4, span4);
-			append(span4, t22);
-			append(span4, t23);
-			insert(target, t24, anchor);
+			append(span4, t18);
+			append(span4, t19);
+			insert(target, t20, anchor);
 			insert(target, div5, anchor);
+			append(div5, t21);
+			append(div5, t22);
+			append(div5, t23);
+			append(div5, t24);
 			append(div5, t25);
 			append(div5, t26);
 			append(div5, t27);
 			append(div5, t28);
 			append(div5, t29);
-			append(div5, t30);
-			append(div5, t31);
-			append(div5, t32);
-			append(div5, t33);
 
 			if (!mounted) {
 				dispose = [
@@ -6330,48 +6318,48 @@ function create_if_block_66(ctx) {
 				set_input_value(input0, /*settings*/ ctx[12].lightningStopInnerMi);
 			}
 
-			if (dirty[0] & /*settings*/ 4096 && t2_value !== (t2_value = /*settings*/ ctx[12].lightningStopInnerMi + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t2_value !== (t2_value = ringLbl(/*settings*/ ctx[12].lightningStopInnerMi, /*units*/ ctx[53]) + "")) set_data(t2, t2_value);
 
 			if (dirty[0] & /*settings*/ 4096) {
 				set_input_value(input1, /*settings*/ ctx[12].lightningStopMi);
 			}
 
-			if (dirty[0] & /*settings*/ 4096 && t7_value !== (t7_value = /*settings*/ ctx[12].lightningStopMi + "")) set_data(t7, t7_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t6_value !== (t6_value = ringLbl(/*settings*/ ctx[12].lightningStopMi, /*units*/ ctx[53]) + "")) set_data(t6, t6_value);
 
 			if (dirty[0] & /*settings*/ 4096) {
 				set_input_value(input2, /*settings*/ ctx[12].lightningWarnMi);
 			}
 
-			if (dirty[0] & /*settings*/ 4096 && t12_value !== (t12_value = /*settings*/ ctx[12].lightningWarnMi + "")) set_data(t12, t12_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t10_value !== (t10_value = ringLbl(/*settings*/ ctx[12].lightningWarnMi, /*units*/ ctx[53]) + "")) set_data(t10, t10_value);
 
 			if (dirty[0] & /*settings*/ 4096) {
 				set_input_value(input3, /*settings*/ ctx[12].lightningAdvisoryMi);
 			}
 
-			if (dirty[0] & /*settings*/ 4096 && t17_value !== (t17_value = /*settings*/ ctx[12].lightningAdvisoryMi + "")) set_data(t17, t17_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t14_value !== (t14_value = ringLbl(/*settings*/ ctx[12].lightningAdvisoryMi, /*units*/ ctx[53]) + "")) set_data(t14, t14_value);
 
 			if (dirty[0] & /*settings*/ 4096) {
 				set_input_value(input4, /*settings*/ ctx[12].lightningAllClearMin);
 			}
 
-			if (dirty[0] & /*settings*/ 4096 && t22_value !== (t22_value = /*settings*/ ctx[12].lightningAllClearMin + "")) set_data(t22, t22_value);
-			if (dirty[0] & /*settings*/ 4096 && t26_value !== (t26_value = /*settings*/ ctx[12].lightningStopInnerMi + "")) set_data(t26, t26_value);
-			if (dirty[0] & /*settings*/ 4096 && t28_value !== (t28_value = /*settings*/ ctx[12].lightningStopMi + "")) set_data(t28, t28_value);
-			if (dirty[0] & /*settings*/ 4096 && t30_value !== (t30_value = /*settings*/ ctx[12].lightningWarnMi + "")) set_data(t30, t30_value);
-			if (dirty[0] & /*settings*/ 4096 && t32_value !== (t32_value = /*settings*/ ctx[12].lightningAdvisoryMi + "")) set_data(t32, t32_value);
+			if (dirty[0] & /*settings*/ 4096 && t18_value !== (t18_value = /*settings*/ ctx[12].lightningAllClearMin + "")) set_data(t18, t18_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t22_value !== (t22_value = ringLbl(/*settings*/ ctx[12].lightningStopInnerMi, /*units*/ ctx[53]) + "")) set_data(t22, t22_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t24_value !== (t24_value = ringLbl(/*settings*/ ctx[12].lightningStopMi, /*units*/ ctx[53]) + "")) set_data(t24, t24_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t26_value !== (t26_value = ringLbl(/*settings*/ ctx[12].lightningWarnMi, /*units*/ ctx[53]) + "")) set_data(t26, t26_value);
+			if (dirty[0] & /*settings*/ 4096 | dirty[1] & /*units*/ 4194304 && t28_value !== (t28_value = ringLbl(/*settings*/ ctx[12].lightningAdvisoryMi, /*units*/ ctx[53]) + "")) set_data(t28, t28_value);
 		},
 		d(detaching) {
 			if (detaching) {
 				detach(label0);
-				detach(t4);
+				detach(t3);
 				detach(label1);
-				detach(t9);
+				detach(t7);
 				detach(label2);
-				detach(t14);
+				detach(t11);
 				detach(label3);
-				detach(t19);
+				detach(t15);
 				detach(label4);
-				detach(t24);
+				detach(t20);
 				detach(div5);
 			}
 
@@ -6582,10 +6570,10 @@ function create_if_block_58(ctx) {
 	let t2;
 	let div1;
 	let t3;
-	let t4_value = /*lat*/ ctx[0].toFixed(3) + "";
+	let t4_value = /*lat*/ ctx[0].toFixed(5) + "";
 	let t4;
 	let t5;
-	let t6_value = /*lon*/ ctx[1].toFixed(3) + "";
+	let t6_value = /*lon*/ ctx[1].toFixed(5) + "";
 	let t6;
 	let t7;
 	let t8_value = /*maxSites*/ ctx[60]() + "";
@@ -6672,8 +6660,8 @@ function create_if_block_58(ctx) {
 				button.disabled = /*monitorBusy*/ ctx[42];
 			}
 
-			if (dirty[0] & /*lat*/ 1 && t4_value !== (t4_value = /*lat*/ ctx[0].toFixed(3) + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*lon*/ 2 && t6_value !== (t6_value = /*lon*/ ctx[1].toFixed(3) + "")) set_data(t6, t6_value);
+			if (dirty[0] & /*lat*/ 1 && t4_value !== (t4_value = /*lat*/ ctx[0].toFixed(5) + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*lon*/ 2 && t6_value !== (t6_value = /*lon*/ ctx[1].toFixed(5) + "")) set_data(t6, t6_value);
 
 			if (/*monitoredSites*/ ctx[43].length > 0) {
 				if (if_block) {
@@ -13220,6 +13208,12 @@ function fmtAdj(c, u) {
 	return `+${c}°C`;
 }
 
+function ringLbl(mi, u) {
+	return u === 'imperial'
+	? `${mi} mi`
+	: `${(mi * 1.60934).toFixed(1)} km`;
+}
+
 const func_1 = h => h.icon;
 
 const keydown_handler_3 = () => {
@@ -14328,6 +14322,7 @@ function instance($$self, $$props, $$invalidate) {
 							? ['lightning']
 							: []
 						],
+						units,
 						windWarnMs: settings.windWarnMs,
 						windDangerMs: settings.windDangerMs,
 						rainWarnMmh: settings.rainWarnMmh,
@@ -14579,7 +14574,25 @@ function instance($$self, $$props, $$invalidate) {
 
 	function panMap(la, lo) {
 		try {
-			map.panTo([la, lo], { animate: true });
+			let z = 11;
+
+			try {
+				z = Math.max(map.getZoom(), 11);
+			} catch {
+				
+			}
+
+			map.setView([la, lo], z, { animate: true });
+		} catch {
+			try {
+				map.panTo([la, lo], { animate: true });
+			} catch {
+				
+			}
+		}
+
+		try {
+			broadcast.emit('rqstOpen', 'picker', { lat: la, lon: lo });
 		} catch {
 			
 		}
